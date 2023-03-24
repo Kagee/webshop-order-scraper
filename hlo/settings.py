@@ -17,7 +17,11 @@ env = environ.FileAwareEnv(
     HLO_USE_I18N=(bool, False),
     HLO_USE_L10N=(bool, False),
     HLO_USE_TZ=(bool, True),
+    # https://docs.djangoproject.com/en/3.2/howto/static-files/
+    HLO_STATIC_URL=(str, "/static/"),
+    HLO_PASSWORD_MIN_LEN=(int, 14),
 )
+
 env.prefix = 'HLO_'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -47,6 +51,9 @@ DATABASES = {
 
 
 ALLOWED_HOSTS: List[str] = env('ALLOWED_HOSTS')
+
+STATIC_URL: str = env('STATIC_URL')
+
 # Application definition
 
 INSTALLED_APPS: List[str] = [
@@ -57,6 +64,8 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
+
+INSTALLED_APPS += env.list('INSTALLED_APPS', default=[])
 
 MIDDLEWARE: List[str] = [
     "django.middleware.security.SecurityMiddleware",
@@ -91,12 +100,15 @@ WSGI_APPLICATION: str = "hlo.wsgi.application"
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS: List[Dict[str, str]] = [
+AUTH_PASSWORD_VALIDATORS: List[Dict[str, Any]] = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        'OPTIONS': {
+            'min_length': env('PASSWORD_MIN_LEN'),
+        }
     },
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
@@ -105,13 +117,6 @@ AUTH_PASSWORD_VALIDATORS: List[Dict[str, str]] = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
-
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.2/howto/static-files/
-
-STATIC_URL: str = "/static/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
