@@ -7,11 +7,18 @@ from pathlib import Path
 from typing import List, Dict, Any
 import environ  # type: ignore
 
-env = environ.Env(
+env = environ.FileAwareEnv(
     # set casting, default value
-    DEBUG=(bool, False)
+    HLO_DEBUG=(bool, False),
+    HLO_ALLOWED_HOSTS=(list, []),
+    # https://docs.djangoproject.com/en/3.2/topics/i18n/
+    HLO_LANGUAGE_CODE=(str, "en-us"),
+    HLO_TIME_ZONE=(str, "UTC"),
+    HLO_USE_I18N=(bool, False),
+    HLO_USE_L10N=(bool, False),
+    HLO_USE_TZ=(bool, True),
 )
-
+env.prefix = 'HLO_'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
@@ -19,8 +26,13 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 # Take environment variables from .env file
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# False if not in os.environ because of casting above
 DEBUG: bool = env('DEBUG')
+
+LANGUAGE_CODE: str = env('LANGUAGE_CODE')
+TIME_ZONE: str = env('TIME_ZONE')
+USE_I18N: bool = env('USE_I18N')
+USE_L10N: bool = env('USE_L10N')
+USE_TZ: bool = env('USE_TZ')
 
 # Raises Django's ImproperlyConfigured
 # exception if SECRET_KEY not in os.environ
@@ -34,9 +46,7 @@ DATABASES = {
 }
 
 
-ALLOWED_HOSTS: List[str] = []
-
-
+ALLOWED_HOSTS: List[str] = env('ALLOWED_HOSTS')
 # Application definition
 
 INSTALLED_APPS: List[str] = [
@@ -96,19 +106,6 @@ AUTH_PASSWORD_VALIDATORS: List[Dict[str, str]] = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/3.2/topics/i18n/
-
-LANGUAGE_CODE: str = "en-us"
-
-TIME_ZONE: str = "UTC"
-
-USE_I18N: bool = True
-
-USE_L10N: bool = True
-
-USE_TZ: bool = True
 
 
 # Static files (CSS, JavaScript, Images)
