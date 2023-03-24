@@ -1,0 +1,16 @@
+[project]
+name = "homelab-organizer"
+version = "0.2022.1"
+description = "Web app for organizing stuff in your homelab"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python",
+  "Environment :: Web Environment",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Framework :: Django :: 3.2"
+]
+[project.urls]
+repository = "https://github.com/Kagee/homelab-organizer.git"

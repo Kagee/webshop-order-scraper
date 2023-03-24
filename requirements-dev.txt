@@ -1,0 +1,2 @@
+-r requirements-prod.txt
+django-stubs[compatible-mypy]>=1.9.0
