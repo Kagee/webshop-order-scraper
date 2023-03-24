@@ -1,3 +1,7 @@
 -r requirements.txt
 django-stubs[compatible-mypy]>=1.9.0
 pylint
+# for https/runserver_plus
+django-extensions
+Werkzeug
+pyOpenSSL
