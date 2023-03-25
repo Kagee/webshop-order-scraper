@@ -20,6 +20,8 @@ env = environ.FileAwareEnv(
     # https://docs.djangoproject.com/en/3.2/howto/static-files/
     HLO_STATIC_URL=(str, "/static/"),
     HLO_PASSWORD_MIN_LEN=(int, 14),
+    HLO_SCRAPER_ALI_USERNAME=(str, None),
+    HLO_SCRAPER_ALI_PASSWORD=(str, None),
 )
 
 env.prefix = 'HLO_'
@@ -54,6 +56,8 @@ ALLOWED_HOSTS: List[str] = env('ALLOWED_HOSTS')
 
 STATIC_URL: str = env('STATIC_URL')
 
+SCRAPER_ALI_USERNAME: str = env('SCRAPER_ALI_USERNAME')
+SCRAPER_ALI_PASSWORD: str = env('SCRAPER_ALI_PASSWORD')
 # Application definition
 
 INSTALLED_APPS: List[str] = [

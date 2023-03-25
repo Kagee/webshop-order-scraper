@@ -21,9 +21,18 @@ plugins = ["mypy_django_plugin.main"]
 
 [tool.django-stubs]
 django_settings_module = "hlo.settings"
+# https://www.codeac.io/documentation/pylint-configuration.html
+[tool.pylint.'MAIN']
+extension-pkg-allow-list = [
+  "lxml",
+]
 
 [tool.pylint.'MESSAGES CONTROL']
+# Please do not use this as an
+# indicator as to my feeling
+# towards documentation...
 disable = [
   "missing-function-docstring",
-  "missing-module-docstring"
+  "missing-module-docstring",
+  "missing-class-docstring",
 ]
