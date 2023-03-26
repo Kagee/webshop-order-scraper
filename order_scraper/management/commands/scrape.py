@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError, no_translations
 from .scrapers.ali import AliScraper
 from .scrapers.amazon import AmazonDeScraper
+import subprocess
 
 class Command(BaseCommand):
     help = 'Scrapes a webshop for orders using Selenium'
@@ -21,11 +22,21 @@ class Command(BaseCommand):
                 help="Use file cache of webshop orders if avaliable (mostly for development)"
                 )
 
+        parser.add_argument(
+                '-i',
+                '--indent',
+                action='store_true',
+                help="Loop and indent cache files (mostly for development)"
+                )
+
     @no_translations
     def handle(self, *args, **options):
         match options['webshop']:
             case "aliexpress":
-                AliScraper(self, options['cache'])
+                if options['indent']:
+                    AliScraper(self, options['cache']).indent()
+                else:
+                    AliScraper(self, options['cache']).scrape()
             case "amazon.de":
                 AmazonDeScraper(self, options['cache'])
             case _:
