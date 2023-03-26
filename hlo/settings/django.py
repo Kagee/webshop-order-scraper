@@ -1,8 +1,8 @@
 """
 Django settings for hlo project.
 """
-
 import os
+import os.path
 from pathlib import Path
 from typing import List, Dict, Any
 import environ  # type: ignore
@@ -20,14 +20,12 @@ env = environ.FileAwareEnv(
     # https://docs.djangoproject.com/en/3.2/howto/static-files/
     HLO_STATIC_URL=(str, "/static/"),
     HLO_PASSWORD_MIN_LEN=(int, 14),
-    HLO_SCRAPER_ALI_USERNAME=(str, None),
-    HLO_SCRAPER_ALI_PASSWORD=(str, None),
 )
 
 env.prefix = 'HLO_'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR: Path = Path(__file__).resolve().parent.parent
+BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
 
 # Take environment variables from .env file
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
@@ -56,9 +54,6 @@ ALLOWED_HOSTS: List[str] = env('ALLOWED_HOSTS')
 
 STATIC_URL: str = env('STATIC_URL')
 
-SCRAPER_ALI_USERNAME: str = env('SCRAPER_ALI_USERNAME')
-SCRAPER_ALI_PASSWORD: str = env('SCRAPER_ALI_PASSWORD')
-# Application definition
 
 INSTALLED_APPS: List[str] = [
     "django.contrib.admin",
@@ -70,6 +65,7 @@ INSTALLED_APPS: List[str] = [
 ]
 
 INSTALLED_APPS += env.list('INSTALLED_APPS', default=[])
+
 
 MIDDLEWARE: List[str] = [
     "django.middleware.security.SecurityMiddleware",
