@@ -9,6 +9,10 @@ from pathlib import Path
 import subprocess
 import json
 import base64
+import tempfile
+
+from webdriver_manager.chrome import ChromeDriverManager # type: ignore
+from selenium.webdriver.chrome.service import Service as ChromeService
 
 # This is used in a Django command
 from django.core.management.base import BaseCommand, CommandError
@@ -42,13 +46,35 @@ class AliScraper():
     username: str
     password: str
     try_file: bool
+    chrome_profile = None
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
         self.command = command
         self.try_file = try_file
+        #self.chrome_profile = tempfile.TemporaryDirectory()
+        #print(self.chrome_profile)
 
+    def send_devtools(self, cmd, params={}):
+        c = self._get_chrome()
+        resource = f"/session/{c.session_id}/chromium/send_command_and_get_result"
+        url = c.command_executor._url + resource
+        body = json.dumps({'cmd': cmd, 'params': params})
+        response = c.command_executor._request('POST', url, body)
+        #print (response)
+        if response.get('value') is not None:
+            return response.get('value')
+        return None
 
-    def _parse_order(self, order, html):
+    def save_as_pdf(self, path, options={}):
+        # https://timvdlippe.github.io/devtools-protocol/tot/Page#method-printToPDF
+        result = self.send_devtools("Page.printToPDF", options)
+        if result is not None:
+            with open(path, 'wb') as file:
+                file.write(base64.b64decode(result['data']))
+            return True
+        return False
+
+    def _parse_order(self, order_inp, html):
         order = {}
         info_rows = html.xpath('//div[contains(@class, "info-row")]')
         for info_row in info_rows:
@@ -60,23 +86,42 @@ class AliScraper():
                 '[not(contains(@class, "order-detail-order-info"))]'
                 )[0]
         order['contact_info'] = list(contact_info_div.itertext())
-        price_items = html.xpath('//div[contains(@class, "order-price-item")]')
         order['price_items'] = {}
-        for price_item in price_items:
-            left = "".join(price_item.xpath('.//span[contains(@class, "left-col")]')[0].itertext()).strip()
-            right = "".join(price_item.xpath('.//span[contains(@class, "right-col")]')[0].itertext()).strip()
-            order['price_items'][left] = right
+        for price_item in html.xpath('//div[contains(@class, "order-price-item")]'):
+            left = "".join(
+                    price_item.xpath('.//span[contains(@class, "left-col")]')[0].itertext()
+                    ).strip()
+            order['price_items'][left] = "".join(
+                    price_item.xpath('.//span[contains(@class, "right-col")]')[0].itertext()
+                    ).strip()
         order['items'] = {}
-        items = html.xpath('//div[contains(@class, "order-detail-item-content-wrap")]')
         counter = 0
-        for item in items:
+        for item in html.xpath('//div[contains(@class, "order-detail-item-content-wrap")]'):
 
-            title = "".join(item.xpath('.//div[contains(@class, "item-title")]')[0].itertext())
-            price_count = "".join(item.xpath('.//div[contains(@class, "item-price")]')[0].itertext())
+            title = "".join(
+                    item.xpath('.//div[contains(@class, "item-title")]')[0].itertext()
+                    )
+            sku_list = item.xpath('.//div[contains(@class, "item-sku-attr")]')
+            if len(sku_list) == 0:
+                sku = ""
+            else:
+                sku = "".join(sku_list[0].itertext())
+            price_count = "".join(
+                    item.xpath('.//div[contains(@class, "item-price")]')[0].itertext()
+                    ).strip()
             (price, count) = price_count.split("x")
             # Remove space .. spacing
             title = re.sub(" +", " ", title)
-            order['items'][counter] = {"title": title.strip(), "price": price.strip(), "count": int(count)}
+            thumb_file = f"{settings.SCRAPER_CACHE}/" \
+                f"cache-scraper-aliexpress-{order_inp['id']}-thumb-{counter:03}.jpg"
+            order['items'][counter] = {
+                    "title": title.strip(),
+                    "sku": sku.strip(),
+                    "price": price.strip(),
+                    "count": int(count),
+                    "thumbnail_cache_file": thumb_file,
+                    }
+            counter += 1
         return order
 
     def scrape(self):
@@ -103,14 +148,99 @@ class AliScraper():
         finally:
             self._safe_quit()
 
+    def _scrape_order_details(self, order):
+        url = self.ORDER_DETAIL_URL.format(order['id'])
+        self._notice(f"Visiting {url}")
+        c = self._get_chrome() #  pylint: disable=invalid-name
+        c.get(url)
+        if urlparse(c.current_url).hostname == "login.aliexpress.com":
+            # We were redirected to the login page
+            self._login(url)
+
+        self._notice("Waiting for page load")
+        time.sleep(3)
+        try:
+            WebDriverWait(c, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//span[contains(@class, 'switch-icon')]")
+                    ),"Timeout waiting for View orders button"
+                )
+            # Expand address and payment info
+            for element in c.find_elements(
+                    By.XPATH,
+                    "//span[contains(@class, 'switch-icon')]"
+                    ):
+                element.click()
+            time.sleep(1)
+        except TimeoutException:
+            pass
+
+        c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        counter = 0
+        for thumb in c.find_elements(
+                By.XPATH,
+                '//a[contains(@class, "order-detail-item-content-img")]'
+                ):
+            order_details_page_handle = c.current_window_handle
+            snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
+            snapshot.click()
+            time.sleep(1)
+            snapshot_window_handle = None
+            for handle in c.window_handles:
+                if handle == order_details_page_handle:
+                    continue
+                c.switch_to.window(handle)
+                if "snapshot" in c.current_url:
+                    snapshot_window_handle = handle
+                    # do snapshot stuff, then close
+                    #c.execute_script('window.print();')
+                    path = f"{settings.SCRAPER_CACHE}/" \
+                        f"cache-scraper-aliexpress-{order['id']}-item.pdf"
+                    self.save_as_pdf(path)
+                    c.print_page()
+                    time.sleep(120)
+                c.close()
+            c.switch_to.window(snapshot_window_handle)
+            time.sleep(120)
+            thumb_file = f"{settings.SCRAPER_CACHE}/" \
+                f"cache-scraper-aliexpress-{order['id']}-thumb-{counter:03}.jpg"
+            # url("...")
+            bimage = thumb.value_of_css_property('background-image')[5:-2]
+            bimage_dataurl = c.execute_script(f"var url = '{bimage}';" + """
+                var resp = await fetch(url);
+                var img = await resp.blob();
+                return await new Promise((resolve) => {
+                        var fr = new FileReader(img);
+                        fr.onload = (e) => resolve(fr.result);
+                        fr.readAsDataURL(img);
+                    });
+            """)
+            (_, b64) = bimage_dataurl.split(",")
+            with open(thumb_file, 'wb') as file:
+                file.write(base64.b64decode(b64))
+            counter += 1
+        with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
+            order_html = fromstring(c.page_source)
+            ali_ordre.write(tostring(order_html).decode("utf-8"))
+        c.get(self.ORDER_TRACKING_URL.format(order['id']))
+        time.sleep(1)
+        c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        self._notice("Waiting 10 seconds for tracking page load")
+        time.sleep(10)
+        with open(order['tracking_cache_file'], "w", encoding="utf-8") as ali_ordre:
+            tracking_html = fromstring(c.page_source)
+            ali_ordre.write(tostring(tracking_html).decode("utf-8"))
+        return order_html, tracking_html
+
+
     def _get_order_details(self):
         for order in self.orders:
             if order['id'] not in [
-                    "8163705209234043", # Very recent
-                    "8162441358464043", # Very large
-                    "8161013285364043", #Cancelled
-                    "87042953904043", # Oldest
-                    "98374329924043", # Very old
+                    #"8163705209234043", # Very recent
+                    #"8162441358464043", # Very large
+                    #"8161013285364043", #Cancelled
+                    #"87042953904043", # Oldest
+                    #"98374329924043", # Very old
                     "8163538028754043"
                     ]:
                 continue
@@ -118,75 +248,17 @@ class AliScraper():
             tracking_html: HtmlElement = HtmlElement()  # type: ignore
             self._out("#"*30)
             self._success(f"Order ID: {order['id']}")
-            order_cache_file = f"{settings.SCRAPER_CACHE}/" \
+            order['cache_file'] = f"{settings.SCRAPER_CACHE}/" \
                 f"cache-scraper-aliexpress-order-{order['id']}.txt"
-            tracking_cache_file = f"{settings.SCRAPER_CACHE}/" \
+            order['tracking_cache_file'] = f"{settings.SCRAPER_CACHE}/" \
                 f"cache-scraper-aliexpress-tracking-{order['id']}.txt"
-            if self.try_file:
-                if os.access(order_cache_file, os.R_OK):
-                    with open(order_cache_file, "r", encoding="utf-8") as ali_ordre:
-                        order_html = fromstring(ali_ordre.read())
-                    with open(tracking_cache_file, "r", encoding="utf-8") as ali_ordre:
-                        tracking_html = fromstring(ali_ordre.read())
-            if order_html.tag != "html":
-                url = self.ORDER_DETAIL_URL.format(order['id'])
-                self._notice(f"Visiting {url}")
-                c = self._get_chrome() #  pylint: disable=invalid-name
-                c.get(url)
-                check_login = urlparse(c.current_url)
-                if check_login.hostname == "login.aliexpress.com":
-                    # We were redirected to the login page
-                    self._login(url)
-                time.sleep(1)
-                self._notice("Waiting 10 seconds for page load")
-                time.sleep(10)
-
-                try:
-                    WebDriverWait(c, 10).until(
-                        EC.presence_of_element_located(
-                            (By.XPATH, "//span[contains(@class, 'switch-icon')]")
-                            ),"Timeout waiting for View orders button"
-                        )
-                    # Expand address and payment info
-                    for element in c.find_elements(By.XPATH, "//span[contains(@class, 'switch-icon')]"):
-                        element.click()
-                    time.sleep(1)
-                except TimeoutException:
-                    pass
-
-                c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-                thumbnails = c.find_elements(By.XPATH, '//a[contains(@class, "order-detail-item-content-img")]')
-                counter = 0
-                for thumb in thumbnails:
-                    thumb_file = f"{settings.SCRAPER_CACHE}/" \
-                        f"cache-scraper-aliexpress-{order['id']}-thumb-{counter:03}.jpg"
-                    bimage = thumb.value_of_css_property('background-image')
-                    # url("...")
-                    bimage = bimage[5:-2]
-                    bimage_dataurl = c.execute_script(f"var url = '{bimage}';" + """
-                        var resp = await fetch(url);
-                        var img = await resp.blob();
-                        return await new Promise((resolve) => {
-                                var fr = new FileReader(img);
-                                fr.onload = (e) => resolve(fr.result);
-                                fr.readAsDataURL(img);
-                            });
-                    """)
-                    (_, b64) = bimage_dataurl.split(",")
-                    with open(thumb_file, 'wb') as file:
-                        file.write(base64.b64decode(b64))
-                    counter += 1
-                with open(order_cache_file, "w", encoding="utf-8") as ali_ordre:
-                    order_html = fromstring(c.page_source)
-                    ali_ordre.write(tostring(order_html).decode("utf-8"))
-                c.get(self.ORDER_TRACKING_URL.format(order['id']))
-                time.sleep(1)
-                c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-                self._notice("Waiting 10 seconds for tracking page load")
-                time.sleep(10)
-                with open(tracking_cache_file, "w", encoding="utf-8") as ali_ordre:
-                    tracking_html = fromstring(c.page_source)
-                    ali_ordre.write(tostring(tracking_html).decode("utf-8"))
+            if self.try_file and os.access(order['cache_file'], os.R_OK):
+                with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    order_html = fromstring(ali_ordre.read())
+                with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    tracking_html = fromstring(ali_ordre.read())
+            else:
+                order_html, tracking_html = self._scrape_order_details(order)
             order_data = self._parse_order(order, order_html)
             order.update(order_data)
             tracking = self._parse_tracking(order, tracking_html)
@@ -198,8 +270,12 @@ class AliScraper():
         if len(html.xpath('.//div[@class="tracking-module"]')) == 0:
             self._notice(f"Order #{order['id']} has no tracking")
             return {}
-        tracking_url = html.xpath('//a[contains(@href, "global.cainiao.com/detail.htm")]/@href')[0]
-        info = re.match(r'.+mailNoList=([A-Za-z0-9,]+)',tracking_url)
+        info = re.match(
+                r'.+mailNoList=([A-Za-z0-9,]+)',
+                html.xpath(
+                    '//a[contains(@href, "global.cainiao.com/detail.htm")]/@href'
+                    )[0]
+                )
         if info:
             tracking['numbers'] = info.group(1).split(',')
         service_upgraded = html.xpath('.//div[@class="service-upgraded"]')
@@ -210,15 +286,13 @@ class AliScraper():
                     )[0]
         tracking['shipper'] = html.xpath('//span[contains(@class, "title-eclp")]/text()')[0]
         tracking['status'] = html.xpath('//div[contains(@class, "status-title-text")]/text()')[0]
-        addr_ps = html.xpath('//div[contains(@class, "address-detail")]/p')
         addr = []
-        for p_element in addr_ps:
+        for p_element in html.xpath('//div[contains(@class, "address-detail")]/p'):
             # Join and remove double spaces
             addr.append(" ".join("".join(p_element.itertext()).split()))
         tracking['addr'] = addr
-        shipping_steps = html.xpath('//ul[contains(@class, "ship-steps")]/li')
         tracking['shipping'] = []
-        for step in shipping_steps:
+        for step in html.xpath('//ul[contains(@class, "ship-steps")]/li'):
             ship_time = step.xpath('.//p[contains(@class, "time")]')[0].text
             timezone = step.xpath('.//p[contains(@class, "timezone")]')[0].text
             try:
@@ -238,9 +312,31 @@ class AliScraper():
 
     def _get_chrome(self):
         if not hasattr(self, 'chrome'):
+            service = ChromeService(executable_path=ChromeDriverManager().install())
             self._notice("Creating Chrome")
+            chrome_settings = {
+                    "recentDestinations": [{
+                        "id": "Lagre som PDF",
+                        "origin": "local",
+                    }],
+                    "isCssBackgroundEnabled": True,
+                    "version": 2
+            }
+            #print(json.dumps(json.dumps(chrome_settings))[1:-1])
+            prefs = {
+                    'printing.print_preview_sticky_settings.appState': json.dumps(chrome_settings),
+                    "savefile.default_directory": '/home/hildenae/src/homelab-organizer/scraper-cache/pdf-temp/'
+                    }
+            #print(prefs)
+            #time.sleep(1000)
             options = Options()
-            self.chrome = webdriver.Chrome(chrome_options=options)
+            #options.add_argument(f"user-data-dir={self.chrome_profile}/")
+            #options.add_argument(r'profile-directory=ProfileAAAA')
+            #options.add_experimental_option('prefs', prefs)
+            #options.add_argument('--kiosk-printing')
+            self.chrome = webdriver.Chrome(chrome_options=options, service=service)
+            print(dir(self.chrome))
+
             self.username = input("Enter Aliexpress username: ") \
                     if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
             self.password = getpass("Enter Aliexpress password: ") \
@@ -283,7 +379,7 @@ class AliScraper():
                         EC.alert_is_present(),
                         "Please close altert an continue login!"
                         )
-                self._notice(f"Waiting 120 seconds for {url} - is there already: {c.current_url==url}")
+                self._notice(f"Waiting up to 120 seconds for {url}")
                 WebDriverWait(c, 120).until(EC.url_matches(url))
         except TimeoutException:
             try:
