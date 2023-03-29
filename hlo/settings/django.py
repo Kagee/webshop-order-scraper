@@ -50,7 +50,7 @@ DATABASES = {
 }
 
 
-ALLOWED_HOSTS: List[str] = env('ALLOWED_HOSTS')
+ALLOWED_HOSTS: List[str] = env.list('ALLOWED_HOSTS')
 
 STATIC_URL: str = env('STATIC_URL')
 

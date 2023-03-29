@@ -1,6 +1,10 @@
 # homelab-organizer
 Web app for organizing stuff in your homelab.
 
+## Requirements
+Python 3.10 or later.
+Yes really. It is avaliable in 
+
 ## Scraping of webshops
 This requires Firefox. Firefox installed as a snap on Ubuntu is not supported. To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubuntu.co.uk/2022/04/how-to-install-firefox-deb-apt-ubuntu-22-04) article for omg!ubuntu.
 ### Aliexpress

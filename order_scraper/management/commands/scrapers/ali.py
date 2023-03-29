@@ -28,7 +28,8 @@ from selenium.common.exceptions import \
         NoSuchWindowException, \
         NoAlertPresentException, \
         StaleElementReferenceException, \
-        WebDriverException
+        WebDriverException, \
+        ElementClickInterceptedException
 from selenium.webdriver.support import expected_conditions as EC
 
 from lxml.html.soupparser import fromstring
@@ -46,12 +47,25 @@ class AliScraper():
     username: str
     password: str
     try_file: bool
-
+    cache: Dict[str, Path]
+    pdf_temp_file: Path
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
         self.command = command
         self.try_file = try_file
-
+        self.cache = {
+            "BASE": (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress')).resolve(),
+            "TRACKING":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('tracking')).resolve(),
+            "ORDERS":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('orders')).resolve(),
+            "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('items')).resolve(),
+            }
+        try:
+            for key in self.cache:
+                os.makedirs(self.cache[key])
+        except FileExistsError:
+            pass
+        self.order_list_cache = self.cache['BASE'] / Path('order-list.txt')
+        self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
 
     def _parse_order(self, order_inp, html):
         order = {}
@@ -76,9 +90,17 @@ class AliScraper():
         order['items'] = {}
         counter = 0
         for item in html.xpath('//div[contains(@class, "order-detail-item-content-wrap")]'):
-
+            title_item = item.xpath('.//div[contains(@class, "item-title")]')[0]
+            info = re.match(
+                r'.+mailNoList=([A-Za-z0-9,]+)',
+                title_item.xpath(
+                    './a/@href'
+                    )[0]
+                )
+            print(info.group(1))
+            item_id = info.group(1)
             title = "".join(
-                    item.xpath('.//div[contains(@class, "item-title")]')[0].itertext()
+                    [0].itertext()
                     )
             sku_list = item.xpath('.//div[contains(@class, "item-sku-attr")]')
             if len(sku_list) == 0:
@@ -93,7 +115,7 @@ class AliScraper():
             title = re.sub(" +", " ", title)
             thumb_file = f"{settings.SCRAPER_CACHE}/" \
                 f"cache-scraper-aliexpress-{order_inp['id']}-thumb-{counter:03}.jpg"
-            order['items'][counter] = {
+            order['items'][item_id.strip()] = {
                     "title": title.strip(),
                     "sku": sku.strip(),
                     "price": price.strip(),
@@ -105,9 +127,9 @@ class AliScraper():
 
     def scrape(self):
         if self.try_file:
-            if os.access(f"{settings.SCRAPER_CACHE}/cache-scraper-aliexpress.txt", os.R_OK):
+            if os.access(self.order_list_cache, os.R_OK):
                 with open(
-                        f"{settings.SCRAPER_CACHE}/cache-scraper-aliexpress.txt",
+                        self.order_list_cache,
                         "r",
                         encoding="utf-8") as ali:
                     self.order_list_html = ali.read()
@@ -155,16 +177,27 @@ class AliScraper():
             pass
 
         c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        # Save item thumbnails and PDf snapshots
         counter = 0
-        for thumb in c.find_elements(
+        for item_content in c.find_elements(
                 By.XPATH,
-                '//a[contains(@class, "order-detail-item-content-img")]'
+                '//div[contains(@class, "order-detail-item-content")]'
                 ):
+            thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')
+            
+            title_item = item_content.find_elements(By.XPATH,'.//div[contains(@class, "item-title")]')[0]
+            info = re.match(
+                r'.+mailNoList=([A-Za-z0-9,]+)',
+                title_item.find_elements(By.XPATH,
+                    './a/@href'
+                    )[0]
+                )
+            print(info.group(1))
+            item_id = info.group(1)
             order_details_page_handle = c.current_window_handle
             snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
             snapshot.click()
             time.sleep(1)
-            snapshot_window_handle = None
             for handle in c.window_handles:
 
                 self._out("Looking for snapshot tab")
@@ -172,23 +205,33 @@ class AliScraper():
                     continue
                 c.switch_to.window(handle)
                 if "snapshot" in c.current_url:
+                    if os.access(self.pdf_temp_file, os.R_OK):
+                        os.remove(self.pdf_temp_file)
                     self._notice("Found snapshot tab")
                     snapshot_window_handle = handle
-                    # do snapshot stuff, then close
-                    #c.execute_script('window.print();')
-                    path = f"{settings.SCRAPER_CACHE}/" \
-                        f"cache-scraper-aliexpress-{order['id']}-item.pdf"
                     self._out("Trying to print")
-                    #self.save_as_pdf(path)
-                    #c.print_page()
-                    c.execute_script("window.print();")
-
-                    time.sleep(120)
-                c.close()
-            c.switch_to.window(snapshot_window_handle)
-            time.sleep(120)
-            thumb_file = f"{settings.SCRAPER_CACHE}/" \
-                f"cache-scraper-aliexpress-{order['id']}-thumb-{counter:03}.jpg"
+                    c.execute_script('window.print();')
+                    # Do some read- and size change tests
+                    # to try to detect when printing is complete
+                    while not os.access(self.pdf_temp_file, os.R_OK):
+                        self._out("PDF file does not exsist yet")
+                        time.sleep(1)   
+                    pdf_size_stable = False
+                    while not pdf_size_stable:
+                        sz1 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz2 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz3 = os.stat(self.pdf_temp_file).st_size
+                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+                        self._out(f"Watching file for changes and >0 size: {sz1} {sz2} {sz3}")
+                    # We assume file has stabilized/print is complete
+                    os.rename(self.pdf_temp_file, self.cache['ITEMS'] / Path(f"snapshot-{order['id']}-{item_id}.pdf"))
+                    c.close()
+            c.switch_to.window(order_details_page_handle)
+            thumb_file = self.cache['ITEMS'] / Path(f"snapshot-{order['id']}-{item_id}.pdf")
+            thumb_file = self.cache['ITEMS'] / Path(f"thumb-{order['id']}-{item_id}.jpg")
+                
             # url("...")
             bimage = thumb.value_of_css_property('background-image')[5:-2]
             bimage_dataurl = c.execute_script(f"var url = '{bimage}';" + """
@@ -220,23 +263,15 @@ class AliScraper():
 
     def _get_order_details(self):
         for order in self.orders:
-            if order['id'] not in [
-                    #"8163705209234043", # Very recent
-                    #"8162441358464043", # Very large
-                    #"8161013285364043", #Cancelled
-                    #"87042953904043", # Oldest
-                    #"98374329924043", # Very old
-                    "8163538028754043"
-                    ]:
-                continue
+            if len(settings.SCRAPER_ALI_ORDERS):
+                if order['id'] not in settings.SCRAPER_ALI_ORDERS:
+                    continue
             order_html: HtmlElement = HtmlElement()  # type: ignore
             tracking_html: HtmlElement = HtmlElement()  # type: ignore
             self._out("#"*30)
             self._success(f"Order ID: {order['id']}")
-            order['cache_file'] = f"{settings.SCRAPER_CACHE}/" \
-                f"cache-scraper-aliexpress-order-{order['id']}.txt"
-            order['tracking_cache_file'] = f"{settings.SCRAPER_CACHE}/" \
-                f"cache-scraper-aliexpress-tracking-{order['id']}.txt"
+            order['cache_file'] = (self.cache['ORDERS'] / Path(f"order-{order['id']}.txt")).resolve()
+            order['tracking_cache_file'] = (self.cache['TRACKING'] / Path(f"tracking-{order['id']}.txt")).resolve()
             if self.try_file and os.access(order['cache_file'], os.R_OK):
                 with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
                     order_html = fromstring(ali_ordre.read())
@@ -299,22 +334,23 @@ class AliScraper():
         if not hasattr(self, 'browser'):
             service = FirefoxService(executable_path=FirefoxDriverManager().install())
             self._notice("Creating browser")
-            scraper_cache = Path(settings.SCRAPER_CACHE)
-            print(scraper_cache.resolve())
             options = Options()
-            options.set_preference("print.always_print_silent", True)
-            options.set_preference("print.printer_Mozilla_Save_to_PDF.print_to_file", True)
-            options.set_preference("print_printer", "Mozilla Save to PDF")
-            options.set_preference('print.printer_Mozilla_Save_to_PDF.print_to_filename', str(scraper_cache.resolve() / Path('pdf-temp/out.pdf')));
-            options.set_preference('print.printer_Mozilla_Save_to_PDF.show_print_progress', True);
+
+            # Configure printing
+            options.set_preference('print.always_print_silent', True)
+            options.set_preference('print_printer', settings.SCRAPER_PDF_PRINTER)
+            printer_name = settings.SCRAPER_PDF_PRINTER.replace(" ","_")
+            options.set_preference(f'print.printer_{ printer_name }.print_to_file', True)
+            options.set_preference(f'print.printer_{ printer_name }.print_to_filename', str(self.pdf_temp_file));
+            options.set_preference(f'print.printer_{ printer_name }.show_print_progress', True);
+
             self.browser = webdriver.Firefox(options=options, service=service)
-            print(dir(self.browser))
 
             self.username = input("Enter Aliexpress username: ") \
                     if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
             self.password = getpass("Enter Aliexpress password: ") \
                     if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
-        self._notice("Returning Chrome")
+        self._notice("Returning browser")
         return self.browser
 
     def _login(self, url):
@@ -434,12 +470,22 @@ class AliScraper():
             # We were redirected to the login page
             self._login(self.ORDER_URL)
         # Find and click the tab for completed orders
-        wait.until(
+        try:
+            wait.until(
                     EC.element_to_be_clickable(
                         (By.XPATH, "//div[@class='comet-tabs-nav-item']"
                             "[contains(text(), 'Completed')]")
                         )
                     ).click()
+        except ElementClickInterceptedException:
+            # Apparently så var ikke sjekken over atomisk, så 
+            # vi venter litt til før vi klikker
+            wait.until(
+                EC.element_to_be_clickable(
+                    (By.XPATH, "//div[@class='comet-tabs-nav-item']"
+                        "[contains(text(), 'Completed')]")
+                    )
+                ).click()
         # Wait until the tab for completed orders are complete
         WebDriverWait(c, 10).until(
                                 EC.presence_of_element_located(
@@ -472,7 +518,7 @@ class AliScraper():
         c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self._notice("All completed orders loaded (hopefully)")
         with open(
-                f"{settings.SCRAPER_CACHE}/cache-scraper-aliexpress.txt",
+                self.order_list_cache,
                 "w",
                 encoding="utf-8") as ali:
             html = fromstring(c.page_source)
