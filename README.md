@@ -27,7 +27,8 @@ python3.10 -m venv ./venv
 venv\Scripts\activate
 python -m pip install -U pip
 pip install -r requirements-dev.txt
-cp dev.env .env # Edit .env to your liking
+cp dev.env .env
+notepad .env # Edit .env to your liking
 python manage.py migrate
 python manage.py scrape aliexpress --cache
 ````
