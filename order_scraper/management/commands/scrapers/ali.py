@@ -11,8 +11,8 @@ import json
 import base64
 import tempfile
 
-from webdriver_manager.chrome import ChromeDriverManager # type: ignore
-from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager # type: ignore
+from selenium.webdriver.firefox.service import Service as FirefoxService
 
 # This is used in a Django command
 from django.core.management.base import BaseCommand, CommandError
@@ -20,7 +20,7 @@ from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.common.exceptions import \
@@ -39,7 +39,7 @@ class AliScraper():
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
-    chrome: webdriver.Chrome
+    chrome: webdriver.Firefox
     previous_orders: List
     order_list_html: str
     orders: list
@@ -54,25 +54,6 @@ class AliScraper():
         #self.chrome_profile = tempfile.TemporaryDirectory()
         #print(self.chrome_profile)
 
-    def send_devtools(self, cmd, params={}):
-        c = self._get_chrome()
-        resource = f"/session/{c.session_id}/chromium/send_command_and_get_result"
-        url = c.command_executor._url + resource
-        body = json.dumps({'cmd': cmd, 'params': params})
-        response = c.command_executor._request('POST', url, body)
-        #print (response)
-        if response.get('value') is not None:
-            return response.get('value')
-        return None
-
-    def save_as_pdf(self, path, options={}):
-        # https://timvdlippe.github.io/devtools-protocol/tot/Page#method-printToPDF
-        result = self.send_devtools("Page.printToPDF", options)
-        if result is not None:
-            with open(path, 'wb') as file:
-                file.write(base64.b64decode(result['data']))
-            return True
-        return False
 
     def _parse_order(self, order_inp, html):
         order = {}
@@ -187,17 +168,23 @@ class AliScraper():
             time.sleep(1)
             snapshot_window_handle = None
             for handle in c.window_handles:
+
+                self._out("Looking for snapshot tab")
                 if handle == order_details_page_handle:
                     continue
                 c.switch_to.window(handle)
                 if "snapshot" in c.current_url:
+                    self._notice("Found snapshot tab")
                     snapshot_window_handle = handle
                     # do snapshot stuff, then close
                     #c.execute_script('window.print();')
                     path = f"{settings.SCRAPER_CACHE}/" \
                         f"cache-scraper-aliexpress-{order['id']}-item.pdf"
-                    self.save_as_pdf(path)
-                    c.print_page()
+                    self._out("Trying to print")
+                    #self.save_as_pdf(path)
+                    #c.print_page()
+                    c.execute_script("window.print();")
+
                     time.sleep(120)
                 c.close()
             c.switch_to.window(snapshot_window_handle)
@@ -312,7 +299,7 @@ class AliScraper():
 
     def _get_chrome(self):
         if not hasattr(self, 'chrome'):
-            service = ChromeService(executable_path=ChromeDriverManager().install())
+            service = FirefoxService(executable_path=FirefoxDriverManager().install())
             self._notice("Creating Chrome")
             chrome_settings = {
                     "recentDestinations": [{
@@ -334,7 +321,12 @@ class AliScraper():
             #options.add_argument(r'profile-directory=ProfileAAAA')
             #options.add_experimental_option('prefs', prefs)
             #options.add_argument('--kiosk-printing')
-            self.chrome = webdriver.Chrome(chrome_options=options, service=service)
+            options.set_preference("print.always_print_silent", True)
+            options.set_preference("print.printer_Mozilla_Save_to_PDF.print_to_file", True)
+            options.set_preference("print_printer", "Mozilla Save to PDF")
+            options.set_preference('print.printer_Mozilla_Save_to_PDF.print_to_filename', '/home/hildenae/src/homelab-organizer/scraper-cache/pdf-temp/out.pdf');
+            options.set_preference('print.printer_Mozilla_Save_to_PDF.show_print_progress', True);
+            self.chrome = webdriver.Firefox(options=options, service=service)
             print(dir(self.chrome))
 
             self.username = input("Enter Aliexpress username: ") \
