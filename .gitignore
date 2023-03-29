@@ -6,3 +6,4 @@ chromedriver
 *.sqlite3
 tls/*
 *cache*/
+geckodriver.log

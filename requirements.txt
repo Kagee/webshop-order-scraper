@@ -3,3 +3,4 @@ django-environ>=0.10
 selenium>=4.8
 beautifulsoup4>=4.12
 lxml>=4.9
+webdriver_manager
