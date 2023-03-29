@@ -39,20 +39,18 @@ class AliScraper():
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
-    chrome: webdriver.Firefox
+    browser: webdriver.Firefox
     previous_orders: List
     order_list_html: str
     orders: list
     username: str
     password: str
     try_file: bool
-    chrome_profile = None
+
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
         self.command = command
         self.try_file = try_file
-        #self.chrome_profile = tempfile.TemporaryDirectory()
-        #print(self.chrome_profile)
 
 
     def _parse_order(self, order_inp, html):
@@ -132,7 +130,7 @@ class AliScraper():
     def _scrape_order_details(self, order):
         url = self.ORDER_DETAIL_URL.format(order['id'])
         self._notice(f"Visiting {url}")
-        c = self._get_chrome() #  pylint: disable=invalid-name
+        c = self._get_browser() #  pylint: disable=invalid-name
         c.get(url)
         if urlparse(c.current_url).hostname == "login.aliexpress.com":
             # We were redirected to the login page
@@ -297,49 +295,32 @@ class AliScraper():
         return tracking
 
 
-    def _get_chrome(self):
-        if not hasattr(self, 'chrome'):
+    def _get_browser(self):
+        if not hasattr(self, 'browser'):
             service = FirefoxService(executable_path=FirefoxDriverManager().install())
-            self._notice("Creating Chrome")
-            chrome_settings = {
-                    "recentDestinations": [{
-                        "id": "Lagre som PDF",
-                        "origin": "local",
-                    }],
-                    "isCssBackgroundEnabled": True,
-                    "version": 2
-            }
-            #print(json.dumps(json.dumps(chrome_settings))[1:-1])
-            prefs = {
-                    'printing.print_preview_sticky_settings.appState': json.dumps(chrome_settings),
-                    "savefile.default_directory": '/home/hildenae/src/homelab-organizer/scraper-cache/pdf-temp/'
-                    }
-            #print(prefs)
-            #time.sleep(1000)
+            self._notice("Creating browser")
+            scraper_cache = Path(settings.SCRAPER_CACHE)
+            print(scraper_cache.resolve())
             options = Options()
-            #options.add_argument(f"user-data-dir={self.chrome_profile}/")
-            #options.add_argument(r'profile-directory=ProfileAAAA')
-            #options.add_experimental_option('prefs', prefs)
-            #options.add_argument('--kiosk-printing')
             options.set_preference("print.always_print_silent", True)
             options.set_preference("print.printer_Mozilla_Save_to_PDF.print_to_file", True)
             options.set_preference("print_printer", "Mozilla Save to PDF")
-            options.set_preference('print.printer_Mozilla_Save_to_PDF.print_to_filename', '/home/hildenae/src/homelab-organizer/scraper-cache/pdf-temp/out.pdf');
+            options.set_preference('print.printer_Mozilla_Save_to_PDF.print_to_filename', str(scraper_cache.resolve() / Path('pdf-temp/out.pdf')));
             options.set_preference('print.printer_Mozilla_Save_to_PDF.show_print_progress', True);
-            self.chrome = webdriver.Firefox(options=options, service=service)
-            print(dir(self.chrome))
+            self.browser = webdriver.Firefox(options=options, service=service)
+            print(dir(self.browser))
 
             self.username = input("Enter Aliexpress username: ") \
                     if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
             self.password = getpass("Enter Aliexpress password: ") \
                     if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
         self._notice("Returning Chrome")
-        return self.chrome
+        return self.browser
 
     def _login(self, url):
         url = re.escape(url)
         self._notice("We ned to log in")
-        c = self._get_chrome() #  pylint: disable=invalid-name
+        c = self._get_browser() #  pylint: disable=invalid-name
         wait = WebDriverWait(c, 10)
         try:
             username = wait.until(
@@ -428,7 +409,7 @@ class AliScraper():
     def _safe_quit(self):
         try:
             if hasattr(self, 'chrome'):
-                self.chrome.quit()
+                self.browser.quit()
         except WebDriverException:
             pass
 
@@ -445,7 +426,7 @@ class AliScraper():
         self.command.stdout.write(self.command.style.NOTICE(msg))
 
     def _get_order_list_html(self):
-        c = self._get_chrome() #  pylint: disable=invalid-name
+        c = self._get_browser() #  pylint: disable=invalid-name
         c.get(self.ORDER_URL)
         check_login = urlparse(c.current_url)
         wait = WebDriverWait(c, 10)
