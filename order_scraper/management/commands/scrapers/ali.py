@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import json
 import base64
-import tempfile
+from urllib.parse import urlparse
 
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager # type: ignore
 from selenium.webdriver.firefox.service import Service as FirefoxService
@@ -64,6 +64,11 @@ class AliScraper():
                 os.makedirs(self.cache[key])
         except FileExistsError:
             pass
+        self.snapshot_template = str(self.cache['ITEMS'] / Path("snapshot-{order_id}-{item_id}.pdf"))
+        self.thumb_template = str(self.cache['ITEMS'] / Path("thumb-{order_id}-{item_id}.png"))
+        self.cache_file_template = str(self.cache['ORDERS'] / Path("order-{order_id}.txt"))
+        self.cache_tracking_file_template = str(self.cache['TRACKING'] / Path("tracking-{order_id}.txt"))
+
         self.order_list_cache = self.cache['BASE'] / Path('order-list.txt')
         self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
 
@@ -94,13 +99,13 @@ class AliScraper():
             info = re.match(
                 r'.+mailNoList=([A-Za-z0-9,]+)',
                 title_item.xpath(
-                    './a/@href'
+                    './/a'
                     )[0]
                 )
             print(info.group(1))
             item_id = info.group(1)
             title = "".join(
-                    [0].itertext()
+                    title_item[0].itertext()
                     )
             sku_list = item.xpath('.//div[contains(@class, "item-sku-attr")]')
             if len(sku_list) == 0:
@@ -113,14 +118,11 @@ class AliScraper():
             (price, count) = price_count.split("x")
             # Remove space .. spacing
             title = re.sub(" +", " ", title)
-            thumb_file = f"{settings.SCRAPER_CACHE}/" \
-                f"cache-scraper-aliexpress-{order_inp['id']}-thumb-{counter:03}.jpg"
             order['items'][item_id.strip()] = {
                     "title": title.strip(),
                     "sku": sku.strip(),
                     "price": price.strip(),
-                    "count": int(count),
-                    "thumbnail_cache_file": thumb_file,
+                    "count": int(count)
                     }
             counter += 1
         return order
@@ -177,44 +179,47 @@ class AliScraper():
             pass
 
         c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-        # Save item thumbnails and PDf snapshots
-        counter = 0
+        # Save item IDs, thumbnails and PDf snapshots
+        if not 'items' in order:
+            order['items'] = {}
         for item_content in c.find_elements(
                 By.XPATH,
-                '//div[contains(@class, "order-detail-item-content")]'
+                '//div[contains(@class, "order-detail-item-content-wrap")]'
                 ):
-            thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')
-            
-            title_item = item_content.find_elements(By.XPATH,'.//div[contains(@class, "item-title")]')[0]
+            # Retrieve item ID from URL
+            thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
             info = re.match(
-                r'.+mailNoList=([A-Za-z0-9,]+)',
-                title_item.find_elements(By.XPATH,
-                    './a/@href'
-                    )[0]
+                # https://www.aliexpress.com/item/32824370509.html
+                r'.+item/([0-9]+)\.html',
+                thumb.get_attribute("href")
                 )
-            print(info.group(1))
             item_id = info.group(1)
+            self._out(f"Curren item id is {item_id}")
+            if not item_id in order['items']:
+                order['items'][item_id] = {}
+            # Get snapshot of order page from Ali's archives
             order_details_page_handle = c.current_window_handle
+            self._out(f"Order details page handle is {order_details_page_handle}")
             snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
             snapshot.click()
             time.sleep(1)
+            self._out(f"Window handles: {c.window_handles}")
             for handle in c.window_handles:
-
-                self._out("Looking for snapshot tab")
+                self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
                 if handle == order_details_page_handle:
+                    self._out(f"Found orde details, skipping: {handle}")
                     continue
                 c.switch_to.window(handle)
                 if "snapshot" in c.current_url:
                     if os.access(self.pdf_temp_file, os.R_OK):
                         os.remove(self.pdf_temp_file)
                     self._notice("Found snapshot tab")
-                    snapshot_window_handle = handle
                     self._out("Trying to print")
                     c.execute_script('window.print();')
                     # Do some read- and size change tests
                     # to try to detect when printing is complete
                     while not os.access(self.pdf_temp_file, os.R_OK):
-                        self._out("PDF file does not exsist yet")
+                        self._out("PDF file does not exist yet")
                         time.sleep(1)   
                     pdf_size_stable = False
                     while not pdf_size_stable:
@@ -224,29 +229,71 @@ class AliScraper():
                         time.sleep(2)
                         sz3 = os.stat(self.pdf_temp_file).st_size
                         pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                        self._out(f"Watching file for changes and >0 size: {sz1} {sz2} {sz3}")
+                        self._out(f"Watching for stabale file side >0: {sz1} {sz2} {sz3}")
                     # We assume file has stabilized/print is complete
-                    os.rename(self.pdf_temp_file, self.cache['ITEMS'] / Path(f"snapshot-{order['id']}-{item_id}.pdf"))
-                    c.close()
+                    order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
+                    try:
+                        os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
+                    except FileExistsError:
+                        self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
+                else:
+                    self._out(f"Found random page, closnig: {handle}")
+                c.close()
+            self._out("Switching to order details page")
             c.switch_to.window(order_details_page_handle)
-            thumb_file = self.cache['ITEMS'] / Path(f"snapshot-{order['id']}-{item_id}.pdf")
-            thumb_file = self.cache['ITEMS'] / Path(f"thumb-{order['id']}-{item_id}.jpg")
-                
-            # url("...")
-            bimage = thumb.value_of_css_property('background-image')[5:-2]
-            bimage_dataurl = c.execute_script(f"var url = '{bimage}';" + """
-                var resp = await fetch(url);
-                var img = await resp.blob();
-                return await new Promise((resolve) => {
-                        var fr = new FileReader(img);
-                        fr.onload = (e) => resolve(fr.result);
-                        fr.readAsDataURL(img);
-                    });
-            """)
-            (_, b64) = bimage_dataurl.split(",")
-            with open(thumb_file, 'wb') as file:
-                file.write(base64.b64decode(b64))
-            counter += 1
+            s = thumb.find_element(By.XPATH, './/div[@class="order-detail-item-snapshot"]')
+            c.execute_script("arguments[0].setAttribute('style', 'display: none;')", snapshot_parent);
+            # Save copy of item thumbnail (without snapshot that would appear if we screnshot the elemtns)
+            #thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
+            thumb_data = thumb.screenshot_as_base64
+            order['items'][item_id]['thumbnail'] = self.thumb_template.format(order_id=order['id'], item_id=item_id)
+            with open(order['items'][item_id]['thumbnail'], 'wb') as file:
+                file.write(base64.b64decode(thumb_data))
+            
+            order_details_page_handle = c.current_window_handle
+            self._out(f"Order details page handle is {order_details_page_handle}")
+            snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
+            snapshot.click()
+            time.sleep(1)
+            self._out(f"Window handles: {c.window_handles}")
+            for handle in c.window_handles:
+                self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
+                if handle == order_details_page_handle:
+                    self._out(f"Found orde details, skipping: {handle}")
+                    continue
+                c.switch_to.window(handle)
+                if "snapshot" in c.current_url:
+                    if os.access(self.pdf_temp_file, os.R_OK):
+                        os.remove(self.pdf_temp_file)
+                    self._notice("Found snapshot tab")
+                    self._out("Trying to print")
+                    c.execute_script('window.print();')
+                    # Do some read- and size change tests
+                    # to try to detect when printing is complete
+                    while not os.access(self.pdf_temp_file, os.R_OK):
+                        self._out("PDF file does not exist yet")
+                        time.sleep(1)   
+                    pdf_size_stable = False
+                    while not pdf_size_stable:
+                        sz1 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz2 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz3 = os.stat(self.pdf_temp_file).st_size
+                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+                        self._out(f"Watching for stabale file side >0: {sz1} {sz2} {sz3}")
+                    # We assume file has stabilized/print is complete
+                    order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
+                    try:
+                        os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
+                    except FileExistsError:
+                        self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
+                else:
+                    self._out(f"Found random page, closnig: {handle}")
+                c.close()
+            self._out("Switching to order details page")
+            c.switch_to.window(order_details_page_handle)
+        self._out("Writing order details page to cache")
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
             order_html = fromstring(c.page_source)
             ali_ordre.write(tostring(order_html).decode("utf-8"))
@@ -270,8 +317,8 @@ class AliScraper():
             tracking_html: HtmlElement = HtmlElement()  # type: ignore
             self._out("#"*30)
             self._success(f"Order ID: {order['id']}")
-            order['cache_file'] = (self.cache['ORDERS'] / Path(f"order-{order['id']}.txt")).resolve()
-            order['tracking_cache_file'] = (self.cache['TRACKING'] / Path(f"tracking-{order['id']}.txt")).resolve()
+            order['cache_file'] = self.cache_file_template.format(order_id=order['id'])
+            order['tracking_cache_file'] = self.cache_tracking_file_template.format(order_id=order['id'])
             if self.try_file and os.access(order['cache_file'], os.R_OK):
                 with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
                     order_html = fromstring(ali_ordre.read())
@@ -350,7 +397,7 @@ class AliScraper():
                     if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
             self.password = getpass("Enter Aliexpress password: ") \
                     if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
-        self._notice("Returning browser")
+            self._notice("Returning browser")
         return self.browser
 
     def _login(self, url):
@@ -532,7 +579,7 @@ class AliScraper():
             in_file = path
             out_file = path.with_name(path.stem + ".xml")
             if os.access(out_file, os.R_OK):
-                self._success(f"File exsists, skipping: {out_file}")
+                self._success(f"File exists, skipping: {out_file}")
                 continue
             command = (f"sed 's/esi:include/include/g' '{in_file}' "
                     f"| xmllint --format - > '{out_file}'")
