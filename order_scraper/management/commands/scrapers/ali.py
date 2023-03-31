@@ -39,63 +39,10 @@ class AliScraper(BaseScraper):
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
-    previous_orders: List
-    #order_list_html: str
     log = logging.getLogger(__name__)
 
-    def __init__(self, command: BaseCommand, try_file: bool = False):
-        super().__init__(command, try_file)
 
-        self.command = command
-        self.cache = {
-            "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
-                     Path('aliexpress')).resolve(),
-            "TRACKING":  (Path(settings.SCRAPER_CACHE_BASE) / 
-                          Path('aliexpress') / Path('tracking')).resolve(),
-            "ORDERS":  (Path(settings.SCRAPER_CACHE_BASE) / 
-                        Path('aliexpress') / Path('orders')).resolve(),
-            "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
-                       Path('aliexpress') / Path('items')).resolve(),
-            }
-
-        for key in self.cache:  # pylint: disable=consider-using-dict-items
-            self.log.debug("Cache folder %s: %s", key, self.cache[key])
-            try:
-                os.makedirs(self.cache[key])
-            except FileExistsError:
-                pass
-
-        self.snapshot_template = str(self.cache['ITEMS'] /
-                                      Path("snapshot-{order_id}-{item_id}.pdf"))
-        self.thumb_template = str(self.cache['ITEMS'] /
-                                  Path("thumb-{order_id}-{item_id}.png"))
-        self.cache_file_template = str(self.cache['ORDERS'] /
-                                       Path("order-{order_id}.txt"))
-        self.cache_tracking_file_template = str(self.cache['TRACKING'] /
-                                                Path("tracking-{order_id}.txt"))
-
-        self.order_list_cache_file = self.cache['BASE'] / Path('order-list.txt')
-        self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
-
-    def scrape(self):
-        '''
-        Scrapes your AliExpress orders, logging you in using
-        a automated browser if required.
-        '''
-        try:
-            order_list_html = self.load_order_list_html()
-            orders = self.lxml_parse_orderlist_html(order_list_html)
-            self.get_individual_order_details(orders)
-        except NoSuchWindowException:
-            self._safe_quit()
-            self.command.stdout.write(self.command.style.ERROR(
-                'Login to Aliexpress was not successful. '
-                'Please do not close the browser window.'))
-            return
-        finally:
-            self._safe_quit()
-
-    def _parse_order(self, order_inp, html):
+    def _parse_order(self, html):  # order_inp,
         order = {}
         info_rows = html.xpath('//div[contains(@class, "info-row")]')
         for info_row in info_rows:
@@ -150,22 +97,176 @@ class AliScraper(BaseScraper):
             counter += 1
         return order
 
-    def visit_page(self, url):
+    def get_individual_order_details(self, orders):
         '''
-        Instructs the browser to visit url. 
+        ...
+        '''
+        if len(settings.SCRAPER_ALI_ORDERS):
+            self.log.info(
+                "Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", 
+                settings.SCRAPER_ALI_ORDERS)
+        else:
+            self.log.info("Scraping all order IDs")
+        for order in orders:
+            if len(settings.SCRAPER_ALI_ORDERS):
+                if order['id'] not in settings.SCRAPER_ALI_ORDERS:
+                    continue
 
-        If there is no browser instance, creates one.
-        If login is required, does that.
+            self.log.info("#"*30)
+            self.log.info("Scraping order ID %s", order['id'])
+            order_html: HtmlElement = HtmlElement()  # type: ignore
+            tracking_html: HtmlElement = HtmlElement()  # type: ignore
+
+            order['cache_file'] = self.cache_file_template.format(order_id=order['id'])
+            order['tracking_cache_file'] = \
+                self.cache_tracking_file_template.format(order_id=order['id'])
+
+            if self.try_file and os.access(order['cache_file'], os.R_OK):
+                with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    self.log.debug(
+                        "Loading individual order data from cache: %s", 
+                        order['cache_file'])
+                    order_html = fromstring(ali_ordre.read())
+            else:
+                order_html = self.browser_scrape_order_details(order)
+            if self.try_file and os.access(order['tracking_cache_file'], os.R_OK):
+                with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    self.log.debug(
+                        "Loading individual order tracking data cache: %s", 
+                        order['tracking_cache_file'])
+                    tracking_html = fromstring(ali_ordre.read())
+            else:
+                tracking_html = self.browser_scrape_tracking_page_html(order)
+
+            order_data = self._parse_order(order, order_html)
+            order.update(order_data)
+            tracking = self.lxml_parse_tracking_html(order, tracking_html)
+            order.update(tracking)
+            print(json.dumps(order, indent=4, cls=DjangoJSONEncoder))
+
+    def load_order_list_html(self):
+        '''
+        Returns the order list html, eithter from disk
+        cache or using Selenium to visit the url.
 
             Returns:
-                browser: (WebDriver) the browser instance
+                order_list_html (str): The HTML from the order list page
         '''
-        self.browser = self.get_browser_instance()
-        self.browser.get(url)
-        if urlparse(self.browser.current_url).hostname == "login.aliexpress.com":
-            # We were redirected to the login page
-            self.browser_login(url)
-        return self.browser
+        if self.try_file:
+            if os.access(self.order_list_cache_file, os.R_OK):
+                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
+                with open(
+                        self.order_list_cache_file,
+                        "r",
+                        encoding="utf-8") as ali:
+                    return ali.read()
+            self.log.info("Tried to use order list cache, but found none")
+        else:
+            self.log.info("Not using order list cache")
+        return self.browser_scrape_order_list_html()
+
+# Methods that use LXML to extract info from HTML
+
+    def lxml_parse_tracking_html(self, order: Dict, html: HtmlElement) -> Dict[str, Any]:
+        '''
+        Uses LXML to extract useful info from the HTML this order's tracking page
+
+            Returns:
+                tracking (Dict[str, Any]): Dict with tracking info
+        '''
+        tracking = {}
+        if len(html.xpath('.//div[@class="tracking-module"]')) == 0:
+            self.log.info("Order #%s has no tracking", order['id'])
+            return {}
+        info = re.match(
+                r'.+mailNoList=([A-Za-z0-9,]+)',
+                html.xpath(
+                    '//a[contains(@href, "global.cainiao.com/detail.htm")]/@href'
+                    )[0]
+                )
+        if info:
+            tracking['numbers'] = info.group(1).split(',')
+        service_upgraded = html.xpath('.//div[@class="service-upgraded"]')
+        tracking['upgrade'] = None
+        if len(service_upgraded):
+            tracking['upgrade'] = service_upgraded[0].xpath(
+                    './/div[@class="service-item-flex"]/span/text()'
+                    )[0]
+        tracking['shipper'] = html.xpath('//span[contains(@class, "title-eclp")]/text()')[0]
+        tracking['status'] = html.xpath('//div[contains(@class, "status-title-text")]/text()')[0]
+        addr = []
+        for p_element in html.xpath('//div[contains(@class, "address-detail")]/p'):
+            # Join and remove double spaces
+            addr.append(" ".join("".join(p_element.itertext()).split()))
+        tracking['addr'] = addr
+        tracking['shipping'] = []
+        for step in html.xpath('//ul[contains(@class, "ship-steps")]/li'):
+            ship_time = step.xpath('.//p[contains(@class, "time")]')[0].text
+            timezone = step.xpath('.//p[contains(@class, "timezone")]')[0].text
+            try:
+                head = step.xpath('.//p[contains(@class, "head")]')[0].text
+            except IndexError:
+                head = ""
+            text = ("".join(step.xpath('.//p[contains(@class, "text")]')[0].itertext()))
+            tracking['shipping'].append(
+                    {
+                        "time": ship_time,
+                        "timezone": timezone,
+                        "head": head,
+                        "text": text
+                        }) # type: ignore
+        return tracking
+
+    def lxml_parse_orderlist_html(self, order_list_html) -> List[Dict]:
+        '''
+        Uses LXML to extract useful info from the HTML of the order list page
+
+            Returns:
+                orders (List[Dict]): List or order Dicts
+        '''
+        root = fromstring(order_list_html)
+        order_items = root.xpath('//div[@class="order-item"]')
+        orders = []
+        for order in order_items:
+            (order_status,) = order.xpath('.//span[@class="order-item-header-status-text"]')
+            order_status = order_status.text.lower()
+            right_info = order.xpath('.//div[@class="order-item-header-right-info"]/div')
+            order_date = None
+            order_id = None
+            for div in right_info:
+                info = re.match(
+                        r'^Order (?:date: (?P<order_date>.+)|ID: (?P<order_id>\d+))',
+                        div.text)
+                if info:
+                    if info.group('order_date'):
+                        order_date = datetime.strptime(info.group('order_date'), '%b %d, %Y')
+                    else:
+                        order_id = info.group('order_id')
+            if not all([order_date, order_id]):
+                self.log.error("Unexpected data from order, failed to parse "
+                        "order_id %s or order_date (%s)", order_id, order_date)
+            (order_total,) = order.xpath('.//span[@class="order-item-content-opt-price-total"]')
+            info = re.match(r'.+\$(?P<dollas>\d+\.\d+)', order_total.text)
+            if info:
+                order_total = float(info.group("dollas"))
+            else:
+                order_total = float("0.00")
+            (order_store_id,) = order.xpath('.//span[@class="order-item-store-name"]/a')
+            info = re.match(r'.+/store/(?P<order_store_id>\d+)', order_store_id.get('href'))
+            order_store_id = info.group("order_store_id") if info else "0"
+            (order_store_name,) = order.xpath('.//span[@class="order-item-store-name"]/a/span')
+            order_store_name = order_store_name.text
+            orders.append({
+                    "id": order_id,
+                    "status": order_status,
+                    "date": order_date,
+                    "total": order_total,
+                    "store_id": order_store_id,
+                    "store_name": order_store_name,
+                })
+        return orders
+
+# Methods that use Selenium to scrape webpages in a browser
 
     def browser_scrape_order_details(self, order: Dict):
         '''
@@ -180,18 +281,18 @@ class AliScraper(BaseScraper):
         '''
         url = self.ORDER_DETAIL_URL.format(order['id'])
         self.log.info("Visiting %s", url)
-        c = self.visit_page(url)
+        brws = self.browser_visit_page(url)
 
         self.log.info("Waiting for page load")
         time.sleep(3)
         try:
-            WebDriverWait(c, 10).until(
+            WebDriverWait(brws, 10).until(
                 EC.presence_of_element_located(
                     (By.XPATH, "//span[contains(@class, 'switch-icon')]")
                     ),"Timeout waiting for View orders button"
                 )
             # Expand address and payment info
-            for element in c.find_elements(
+            for element in brws.find_elements(
                     By.XPATH,
                     "//span[contains(@class, 'switch-icon')]"
                     ):
@@ -200,11 +301,11 @@ class AliScraper(BaseScraper):
         except TimeoutException:
             pass
 
-        c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         # Save item IDs, thumbnails and PDf snapshots
         if not 'items' in order:
             order['items'] = {}
-        for item_content in c.find_elements(
+        for item_content in brws.find_elements(
                 By.XPATH,
                 '//div[contains(@class, "order-detail-item-content-wrap")]'
                 ):
@@ -225,11 +326,11 @@ class AliScraper(BaseScraper):
 
             self.browser_save_item_thumbnail(order, thumb, item_id)
             # Get snapshot of order page from Ali's archives
-            self.browser_save_item_sku_snapshot_to_pdf(order, thumb, item_id)
+            self.browser_save_item_sku_snapshot_to_pdf(order, thumb, item_id, item_sku)
 
         self.log.info("Writing order details page to cache")
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
-            order_html = fromstring(c.page_source)
+            order_html = fromstring(brws.page_source)
             ali_ordre.write(tostring(order_html).decode("utf-8"))
 
         return order_html
@@ -316,140 +417,6 @@ class AliScraper(BaseScraper):
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
 
-    def get_individual_order_details(self, orders):
-        '''
-        ...
-        '''
-        if len(settings.SCRAPER_ALI_ORDERS):
-            self.log.info("Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", settings.SCRAPER_ALI_ORDERS)
-        else:
-            self.log.info("Scraping all order IDs")
-        for order in orders:
-            if len(settings.SCRAPER_ALI_ORDERS):
-                if order['id'] not in settings.SCRAPER_ALI_ORDERS:
-                    continue
-            
-            self.log.info("#"*30)
-            self.log.info("Scraping order ID %s", order['id'])
-            order_html: HtmlElement = HtmlElement()  # type: ignore
-            tracking_html: HtmlElement = HtmlElement()  # type: ignore
-
-            order['cache_file'] = self.cache_file_template.format(order_id=order['id'])
-            order['tracking_cache_file'] = \
-                self.cache_tracking_file_template.format(order_id=order['id'])
-
-            if self.try_file and os.access(order['cache_file'], os.R_OK):
-                with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
-                    self.log.debug("Loading individual order data from cache: %s", order['cache_file'])
-                    order_html = fromstring(ali_ordre.read())
-            else:
-                order_html = self.browser_scrape_order_details(order)
-            if self.try_file and os.access(order['tracking_cache_file'], os.R_OK):
-                with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
-                    self.log.debug("Loading individual order tracking data cache: %s", order['tracking_cache_file'])
-                    tracking_html = fromstring(ali_ordre.read())
-            else:
-                tracking_html = self.browser_scrape_tracking_page_html(order)
-
-            order_data = self._parse_order(order, order_html)
-            order.update(order_data)
-            tracking = self._parse_tracking(order, tracking_html)
-            order.update(tracking)
-            print(json.dumps(order, indent=4, cls=DjangoJSONEncoder))
-
-    def _parse_tracking(self, order: Dict, html: HtmlElement) -> Dict[str, Any]:
-        tracking = {}
-        if len(html.xpath('.//div[@class="tracking-module"]')) == 0:
-            self.log.info("Order #%s has no tracking", order['id'])
-            return {}
-        info = re.match(
-                r'.+mailNoList=([A-Za-z0-9,]+)',
-                html.xpath(
-                    '//a[contains(@href, "global.cainiao.com/detail.htm")]/@href'
-                    )[0]
-                )
-        if info:
-            tracking['numbers'] = info.group(1).split(',')
-        service_upgraded = html.xpath('.//div[@class="service-upgraded"]')
-        tracking['upgrade'] = None
-        if len(service_upgraded):
-            tracking['upgrade'] = service_upgraded[0].xpath(
-                    './/div[@class="service-item-flex"]/span/text()'
-                    )[0]
-        tracking['shipper'] = html.xpath('//span[contains(@class, "title-eclp")]/text()')[0]
-        tracking['status'] = html.xpath('//div[contains(@class, "status-title-text")]/text()')[0]
-        addr = []
-        for p_element in html.xpath('//div[contains(@class, "address-detail")]/p'):
-            # Join and remove double spaces
-            addr.append(" ".join("".join(p_element.itertext()).split()))
-        tracking['addr'] = addr
-        tracking['shipping'] = []
-        for step in html.xpath('//ul[contains(@class, "ship-steps")]/li'):
-            ship_time = step.xpath('.//p[contains(@class, "time")]')[0].text
-            timezone = step.xpath('.//p[contains(@class, "timezone")]')[0].text
-            try:
-                head = step.xpath('.//p[contains(@class, "head")]')[0].text
-            except IndexError:
-                head = ""
-            text = ("".join(step.xpath('.//p[contains(@class, "text")]')[0].itertext()))
-            tracking['shipping'].append(
-                    {
-                        "time": ship_time,
-                        "timezone": timezone,
-                        "head": head,
-                        "text": text
-                        }) # type: ignore
-        return tracking
-
-    def lxml_parse_orderlist_html(self, order_list_html):
-        '''
-        Uses LXML to extract useful info from the HTML of the order list page
-
-            Returns:
-                orders (List[Dict]): List or order Dicts
-        '''
-        root = fromstring(order_list_html)
-        order_items = root.xpath('//div[@class="order-item"]')
-        orders = []
-        for order in order_items:
-            (order_status,) = order.xpath('.//span[@class="order-item-header-status-text"]')
-            order_status = order_status.text.lower()
-            right_info = order.xpath('.//div[@class="order-item-header-right-info"]/div')
-            order_date = None
-            order_id = None
-            for div in right_info:
-                info = re.match(
-                        r'^Order (?:date: (?P<order_date>.+)|ID: (?P<order_id>\d+))',
-                        div.text)
-                if info:
-                    if info.group('order_date'):
-                        order_date = datetime.strptime(info.group('order_date'), '%b %d, %Y')
-                    else:
-                        order_id = info.group('order_id')
-            if not all([order_date, order_id]):
-                self.log.error("Unexpected data from order, failed to parse "
-                        "order_id %s or order_date (%s)", order_id, order_date)
-            (order_total,) = order.xpath('.//span[@class="order-item-content-opt-price-total"]')
-            info = re.match(r'.+\$(?P<dollas>\d+\.\d+)', order_total.text)
-            if info:
-                order_total = float(info.group("dollas"))
-            else:
-                order_total = float("0.00")
-            (order_store_id,) = order.xpath('.//span[@class="order-item-store-name"]/a')
-            info = re.match(r'.+/store/(?P<order_store_id>\d+)', order_store_id.get('href'))
-            order_store_id = info.group("order_store_id") if info else "0"
-            (order_store_name,) = order.xpath('.//span[@class="order-item-store-name"]/a/span')
-            order_store_name = order_store_name.text
-            orders.append({
-                    "id": order_id,
-                    "status": order_status,
-                    "date": order_date,
-                    "total": order_total,
-                    "store_id": order_store_id,
-                    "store_name": order_store_name,
-                })
-        return orders
-
     def browser_scrape_tracking_page_html(self, order: Dict):
         '''
         Uses Selenium to visit, load and then save
@@ -458,7 +425,7 @@ class AliScraper(BaseScraper):
             Returns:
                 tracking_html (HtmlElement): The HTML from this order['id'] tracking page
         '''
-        self.visit_page(self.ORDER_TRACKING_URL.format(order['id']))
+        self.browser_visit_page(self.ORDER_TRACKING_URL.format(order['id']))
         time.sleep(1)
         self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.debug("Waiting 10 seconds for tracking page load")
@@ -476,7 +443,7 @@ class AliScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         '''
-        brws = self.visit_page(self.ORDER_URL)
+        brws = self.browser_visit_page(self.ORDER_URL)
         wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
         try:
@@ -536,29 +503,26 @@ class AliScraper(BaseScraper):
             ali.write(tostring(html).decode("utf-8"))
         return brws.page_source
 
-    def indent(self):
-        '''
-        Uses Linux commands to create indented versions of
-        all cached HTML files in cache["BASE"]
-        
-        Errors out on Windows.
-        '''
-        if os.name == "nt":
-            self.log.error("Indentation only works on Linux")
-            return
-        cache = self.cache["BASE"].resolve()
-        for path in cache.glob('*.txt'):
-            path = path.resolve()
-            in_file = path
-            out_file = path.with_name(path.stem + ".xml")
-            if os.access(out_file, os.R_OK):
-                self.log.debug("File exists, skipping: %s", out_file)
-                continue
-            command = (f"sed 's/esi:include/include/g' '{in_file}' "
-                    f"| xmllint --format - > '{out_file}'")
-            subprocess.call(command, shell=True)
+# Browser util methods
 
-    def get_browser_instance(self):
+    def browser_visit_page(self, url):
+        '''
+        Instructs the browser to visit url. 
+
+        If there is no browser instance, creates one.
+        If login is required, does that.
+
+            Returns:
+                browser: (WebDriver) the browser instance
+        '''
+        self.browser = self.browser_get_instance()
+        self.browser.get(url)
+        if urlparse(self.browser.current_url).hostname == "login.aliexpress.com":
+            # We were redirected to the login page
+            self.browser_login(url)
+        return self.browser
+
+    def browser_get_instance(self):
         '''
         Initializing and configures a browser (Firefox)
         using Selenium.
@@ -603,7 +567,7 @@ class AliScraper(BaseScraper):
         '''
         url = re.escape(url)
         self.log.info("We need to log in to Aliexpress")
-        c = self.get_browser_instance() #  pylint: disable=invalid-name
+        c = self.browser_get_instance() #  pylint: disable=invalid-name
         wait = WebDriverWait(c, 10)
         try:
             username = wait.until(
@@ -645,11 +609,11 @@ class AliScraper(BaseScraper):
                 c.switch_to.alert.accept()
             except NoAlertPresentException:
                 pass
-            self._safe_quit()
+            self.browser_safe_quit()
             # pylint: disable=raise-missing-from
             raise CommandError('Login to Aliexpress was not successful.')
 
-    def _safe_quit(self):
+    def browser_safe_quit(self):
         '''
         Safely closed the browser instance. (without exceptions)
         '''
@@ -660,26 +624,80 @@ class AliScraper(BaseScraper):
         except WebDriverException:
             pass
 
-    def load_order_list_html(self):
-        '''
-        Returns the order list html, eithter from disk
-        cache or using Selenium to visit the url.
+# Command functions, used in scrape.py
 
-            Returns:
-                order_list_html (str): The HTML from the order list page
+    def command_scrape(self):
         '''
-        if self.try_file:
-            if os.access(self.order_list_cache_file, os.R_OK):
-                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
-                with open(
-                        self.order_list_cache_file,
-                        "r",
-                        encoding="utf-8") as ali:
-                    return ali.read()
-            else:
-                self.log.info("Tried to use order list cache, but found none")
-        else:
-            self.log.info("Not using order list cache")
-            if not hasattr(self, 'order_list_html'):
-                self.log.debug("Order list html not cached, retrieving")
-                return self.browser_scrape_order_list_html()
+        Scrapes your AliExpress orders, logging you in using
+        a automated browser if required.
+        '''
+        try:
+            order_list_html = self.load_order_list_html()
+            orders = self.lxml_parse_orderlist_html(order_list_html)
+            self.get_individual_order_details(orders)
+        except NoSuchWindowException:
+            self.browser_safe_quit()
+            self.command.stdout.write(self.command.style.ERROR(
+                'Login to Aliexpress was not successful. '
+                'Please do not close the browser window.'))
+            return
+        finally:
+            self.browser_safe_quit()
+
+    def command_indent(self):
+        '''
+        Uses Linux commands to create indented versions of
+        all cached HTML files in cache["BASE"]
+        
+        Errors out on Windows.
+        '''
+        if os.name == "nt":
+            self.log.error("Indentation only works on Linux")
+            return
+        cache = self.cache["BASE"].resolve()
+        for path in cache.glob('*.txt'):
+            path = path.resolve()
+            in_file = path
+            out_file = path.with_name(path.stem + ".xml")
+            if os.access(out_file, os.R_OK):
+                self.log.debug("File exists, skipping: %s", out_file)
+                continue
+            command = (f"sed 's/esi:include/include/g' '{in_file}' "
+                    f"| xmllint --format - > '{out_file}'")
+            subprocess.call(command, shell=True)
+
+# Class init
+
+    def __init__(self, command: BaseCommand, try_file: bool = False):
+        super().__init__(command, try_file)
+
+        self.command = command
+        self.cache = {
+            "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
+                     Path('aliexpress')).resolve(),
+            "TRACKING":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                          Path('aliexpress') / Path('tracking')).resolve(),
+            "ORDERS":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                        Path('aliexpress') / Path('orders')).resolve(),
+            "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                       Path('aliexpress') / Path('items')).resolve(),
+            }
+
+        for key in self.cache:  # pylint: disable=consider-using-dict-items
+            self.log.debug("Cache folder %s: %s", key, self.cache[key])
+            try:
+                os.makedirs(self.cache[key])
+            except FileExistsError:
+                pass
+
+        self.snapshot_template = str(self.cache['ITEMS'] /
+                                      Path("snapshot-{order_id}-{item_id}.pdf"))
+        self.thumb_template = str(self.cache['ITEMS'] /
+                                  Path("thumb-{order_id}-{item_id}.png"))
+        self.cache_file_template = str(self.cache['ORDERS'] /
+                                       Path("order-{order_id}.txt"))
+        self.cache_tracking_file_template = str(self.cache['TRACKING'] /
+                                                Path("tracking-{order_id}.txt"))
+
+        self.order_list_cache_file = self.cache['BASE'] / Path('order-list.txt')
+        self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')

@@ -28,6 +28,9 @@ extension-pkg-allow-list = [
   "lxml",
 ]
 
+[tool.pyright]
+pythonPlatform = ""
+
 [tool.pylint.'MESSAGES CONTROL']
 # Please do not use this as an
 # indicator as to my feeling

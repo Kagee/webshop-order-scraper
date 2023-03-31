@@ -32,9 +32,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options['webshop'] == "aliexpress":
             if options['indent']:
-                AliScraper(self, options['cache']).indent()
+                AliScraper(self, options['cache']).command_indent()
             else:
-                AliScraper(self, options['cache']).scrape()
+                AliScraper(self, options['cache']).command_scrape()
         elif options['webshop'] == "amazon.de":
             AmazonDeScraper(self, options['cache'])
         else:
