@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import re
 import subprocess
@@ -30,17 +31,20 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.firefox import \
     GeckoDriverManager as FirefoxDriverManager  # type: ignore
+
 from .base import BaseScraper
+
 
 class AliScraper(BaseScraper):
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
     previous_orders: List
-    order_list_html: str
+    #order_list_html: str
+    log = logging.getLogger(__name__)
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
-        super().__init__(try_file)
+        super().__init__(command, try_file)
 
         self.command = command
         self.cache = {
@@ -53,20 +57,56 @@ class AliScraper(BaseScraper):
             "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
                        Path('aliexpress') / Path('items')).resolve(),
             }
-        try:
-            for key in self.cache:  # pylint: disable=consider-using-dict-items
-                self.log.debug("Cache folder %s: %s", key, self.cache[key])
+
+        for key in self.cache:  # pylint: disable=consider-using-dict-items
+            self.log.debug("Cache folder %s: %s", key, self.cache[key])
+            try:
                 os.makedirs(self.cache[key])
-        except FileExistsError:
-            pass
+            except FileExistsError:
+                pass
 
-        self.snapshot_template = str(self.cache['ITEMS'] / Path("snapshot-{order_id}-{item_id}.pdf"))
-        self.thumb_template = str(self.cache['ITEMS'] / Path("thumb-{order_id}-{item_id}.png"))
-        self.cache_file_template = str(self.cache['ORDERS'] / Path("order-{order_id}.txt"))
-        self.cache_tracking_file_template = str(self.cache['TRACKING'] / Path("tracking-{order_id}.txt"))
+        self.snapshot_template = str(self.cache['ITEMS'] /
+                                      Path("snapshot-{order_id}-{item_id}.pdf"))
+        self.thumb_template = str(self.cache['ITEMS'] /
+                                  Path("thumb-{order_id}-{item_id}.png"))
+        self.cache_file_template = str(self.cache['ORDERS'] /
+                                       Path("order-{order_id}.txt"))
+        self.cache_tracking_file_template = str(self.cache['TRACKING'] /
+                                                Path("tracking-{order_id}.txt"))
 
-        self.order_list_cache = self.cache['BASE'] / Path('order-list.txt')
+        self.order_list_cache_file = self.cache['BASE'] / Path('order-list.txt')
         self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
+
+    def scrape(self):
+        try:
+            order_list_html = self.load_order_list_html()
+            orders = self.lxml_parse_orderlist_html(order_list_html)
+            self.get_individual_order_details(orders)
+        except NoSuchWindowException:
+            self._safe_quit()
+            self.command.stdout.write(self.command.style.ERROR(
+                'Login to Aliexpress was not successful. '
+                'Please do not close the browser window.'))
+            return
+        finally:
+            self._safe_quit()
+
+    def load_order_list_html(self):
+        if self.try_file:
+            if os.access(self.order_list_cache_file, os.R_OK):
+                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
+                with open(
+                        self.order_list_cache_file,
+                        "r",
+                        encoding="utf-8") as ali:
+                    return ali.read()
+            else:
+                self.log.info("Tried to use order list cache, but found none")
+        else:
+            self.log.info("Not using order list cache")
+            if not hasattr(self, 'order_list_html'):
+                self.log.debug("Order list html not cached, retrieving")
+                return self.browser_scrape_order_list_html()
 
     def _parse_order(self, order_inp, html):
         order = {}
@@ -123,38 +163,18 @@ class AliScraper(BaseScraper):
             counter += 1
         return order
 
-    def scrape(self):
-        if self.try_file:
-            if os.access(self.order_list_cache, os.R_OK):
-                with open(
-                        self.order_list_cache,
-                        "r",
-                        encoding="utf-8") as ali:
-                    self.order_list_html = ali.read()
-            else:
-                self._notice("Tried to use cache, but found none")
-        try:
-            if not hasattr(self, 'order_list_html'):
-                self.order_list_html = self._get_order_list_html()
-            self.orders = self._parse_orderlist_html()
-            self._get_order_details()
-        except NoSuchWindowException:
-            self._safe_quit()
-            self.command.stdout.write(self.command.style.ERROR(
-                'Login to Aliexpress was not successful. '
-                'Please do not close the browser window.'))
-            return
-        finally:
-            self._safe_quit()
+    def visit_page(self, url):
+        self.browser = self.get_browser_instance()
+        self.browser.get(url)
+        if urlparse(self.browser.current_url).hostname == "login.aliexpress.com":
+            # We were redirected to the login page
+            self.browser_login(url)
+        return self.browser
 
-    def _scrape_order_details(self, order):
+    def browser_scrape_order_details(self, order):
         url = self.ORDER_DETAIL_URL.format(order['id'])
         self.log.info("Visiting %s", url)
-        c = self._get_browser() #  pylint: disable=invalid-name
-        c.get(url)
-        if urlparse(c.current_url).hostname == "login.aliexpress.com":
-            # We were redirected to the login page
-            self._login(url)
+        c = self.visit_page(url)
 
         self.log.info("Waiting for page load")
         time.sleep(3)
@@ -183,17 +203,20 @@ class AliScraper(BaseScraper):
                 '//div[contains(@class, "order-detail-item-content-wrap")]'
                 ):
             # Retrieve item ID from URL
-            thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
+            thumb = item_content.find_elements(
+                By.XPATH,
+                './/a[contains(@class, "order-detail-item-content-img")]'
+                )[0]
             info = re.match(
                 # https://www.aliexpress.com/item/32824370509.html
                 r'.+item/([0-9]+)\.html',
                 thumb.get_attribute("href")
                 )
             item_id = info.group(1)
-            self.debug("Curren item id is %s", item_id)
+            self.log.debug("Curren item id is %s", item_id)
             if not item_id in order['items']:
                 order['items'][item_id] = {}
-            
+
             self.browser_save_item_thumbnail(order, thumb, item_id)
             # Get snapshot of order page from Ali's archives
             self.browser_save_snapshot_to_pdf(order, thumb, item_id)
@@ -202,50 +225,59 @@ class AliScraper(BaseScraper):
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
             order_html = fromstring(c.page_source)
             ali_ordre.write(tostring(order_html).decode("utf-8"))
-        c.get(self.ORDER_TRACKING_URL.format(order['id']))
-        time.sleep(1)
-        c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-        self._notice("Waiting 10 seconds for tracking page load")
-        time.sleep(10)
-        with open(order['tracking_cache_file'], "w", encoding="utf-8") as ali_ordre:
-            tracking_html = fromstring(c.page_source)
-            ali_ordre.write(tostring(tracking_html).decode("utf-8"))
-        return order_html, tracking_html
+
+        return order_html
+
+
 
     def browser_save_item_thumbnail(self, order, thumb, item_id):
-        s = thumb.find_element(By.XPATH, './/div[@class="order-detail-item-snapshot"]')
-        self.browser.execute_script("arguments[0].setAttribute('style', 'display: none;')", snapshot_parent);
-            # Save copy of item thumbnail (without snapshot that would appear if we screnshot the elemtns)
-            #thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
+        snapshot_parent = thumb.find_element(
+            By.XPATH,
+            './/div[@class="order-detail-item-snapshot"]')
+        # Hide the snapshot "camera" graphic that
+        # overlays the thumbnail
+        self.browser.execute_script(
+            "arguments[0].setAttribute('style', 'display: none;')", 
+            snapshot_parent
+            )
+        # Save copy of item thumbnail (without snapshot that
+        # would appear if we screnshot the elemtns)
         thumb_data = thumb.screenshot_as_base64
-        order['items'][item_id]['thumbnail'] = self.thumb_template.format(order_id=order['id'], item_id=item_id)
+        order['items'][item_id]['thumbnail'] = \
+            self.thumb_template.format(
+            order_id=order['id'],
+            item_id=item_id
+            )
         with open(order['items'][item_id]['thumbnail'], 'wb') as file:
             file.write(base64.b64decode(thumb_data))
 
     def browser_save_snapshot_to_pdf(self, order, thumb, item_id):
-        order_details_page_handle = c.current_window_handle
-        self._out(f"Order details page handle is {order_details_page_handle}")
-        snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
+        order_details_page_handle = self.browser.current_window_handle
+        self.log.debug("Order details page handle is %s", order_details_page_handle)
+        snapshot = thumb.find_element(
+            By.XPATH,
+            './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]'
+            )
         snapshot.click()
         time.sleep(1)
-        self._out(f"Window handles: {self.browser.window_handles}")
+        self.log.debug("Window handles: %s" , self.browser.window_handles)
         for handle in self.browser.window_handles:
-            self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
+            self.log.debug("Looking for snapshot tab of %s, current handle: %s", item_id, handle)
             if handle == order_details_page_handle:
-                self._out(f"Found orde details, skipping: {handle}")
+                self.log.debug("Found order details page, skipping: %s", handle)
                 continue
             self.browser.switch_to.window(handle)
-            if "snapshot" in c.current_url:
+            if "snapshot" in self.browser.current_url:
                 if os.access(self.pdf_temp_file, os.R_OK):
                     os.remove(self.pdf_temp_file)
-                self._notice("Found snapshot tab")
-                self._out("Trying to print")
+                self.log.debug("Found snapshot tab")
+                self.log.debug("Trying to print to PDF")
                 self.browser.execute_script('window.print();')
                     # Do some read- and size change tests
                     # to try to detect when printing is complete
                 while not os.access(self.pdf_temp_file, os.R_OK):
-                    self._out("PDF file does not exist yet")
-                    time.sleep(1)   
+                    self.log.debug("PDF file does not exist yet")
+                    time.sleep(1)
                 pdf_size_stable = False
                 while not pdf_size_stable:
                     sz1 = os.stat(self.pdf_temp_file).st_size
@@ -254,38 +286,61 @@ class AliScraper(BaseScraper):
                     time.sleep(2)
                     sz3 = os.stat(self.pdf_temp_file).st_size
                     pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                    self._out(f"Watching for stable file size larger than 0 bytes: {sz1} {sz2} {sz3}")
+                    self.log.debug(
+                        "Watching for stable file size larger than 0 bytes: %s %s %s",
+                          sz1, sz2, sz3)
                     # We assume file has stabilized/print is complete
-                order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
+                order['items'][item_id]['snapshot'] = \
+                    self.snapshot_template.format(
+                    order_id=order['id'],
+                    item_id=item_id
+                    )
                 try:
                     os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
                 except FileExistsError:
-                    self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
+                    self.log.info(
+                        "Not overriding existing file: %s", 
+                        order['items'][item_id]['snapshot']
+                        )
             else:
-                self._out(f"Found random page, closnig: {handle}")
+                self.log.debug("Found random page, closing: %s", handle)
             self.browser.close()
-        self._out("Switching to order details page")
+        self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
 
 
-    def _get_order_details(self):
-        for order in self.orders:
+    def get_individual_order_details(self, orders):
+        if len(settings.SCRAPER_ALI_ORDERS):
+            self.log.info("Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", settings.SCRAPER_ALI_ORDERS)
+        else:
+            self.log.info("Scraping all order IDs")
+        for order in orders:
             if len(settings.SCRAPER_ALI_ORDERS):
                 if order['id'] not in settings.SCRAPER_ALI_ORDERS:
                     continue
+            
+            self.log.info("#"*30)
+            self.log.info("Scraping order ID %s", order['id'])
             order_html: HtmlElement = HtmlElement()  # type: ignore
             tracking_html: HtmlElement = HtmlElement()  # type: ignore
-            self._out("#"*30)
-            self._success(f"Order ID: {order['id']}")
+
             order['cache_file'] = self.cache_file_template.format(order_id=order['id'])
-            order['tracking_cache_file'] = self.cache_tracking_file_template.format(order_id=order['id'])
+            order['tracking_cache_file'] = \
+                self.cache_tracking_file_template.format(order_id=order['id'])
+
             if self.try_file and os.access(order['cache_file'], os.R_OK):
                 with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    self.log.debug("Loading individual order data from cache: %s", order['cache_file'])
                     order_html = fromstring(ali_ordre.read())
+            else:
+                order_html = self.browser_scrape_order_details(order)
+            if self.try_file and os.access(order['tracking_cache_file'], os.R_OK):
                 with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
+                    self.log.debug("Loading individual order tracking data cache: %s", order['tracking_cache_file'])
                     tracking_html = fromstring(ali_ordre.read())
             else:
-                order_html, tracking_html = self._scrape_order_details(order)
+                tracking_html = self.browser_scrape_tracking_page_html(order)
+
             order_data = self._parse_order(order, order_html)
             order.update(order_data)
             tracking = self._parse_tracking(order, tracking_html)
@@ -295,7 +350,7 @@ class AliScraper(BaseScraper):
     def _parse_tracking(self, order: Dict, html: HtmlElement) -> Dict[str, Any]:
         tracking = {}
         if len(html.xpath('.//div[@class="tracking-module"]')) == 0:
-            self._notice(f"Order #{order['id']} has no tracking")
+            self.log.info("Order #%s has no tracking", order['id'])
             return {}
         info = re.match(
                 r'.+mailNoList=([A-Za-z0-9,]+)',
@@ -336,78 +391,14 @@ class AliScraper(BaseScraper):
                         }) # type: ignore
         return tracking
 
+    def lxml_parse_orderlist_html(self, order_list_html):
+        '''
+        Uses LXML to extract useful info from the HTML of the order list page
 
-    def _get_browser(self):
-        if not hasattr(self, 'browser'):
-            service = FirefoxService(executable_path=FirefoxDriverManager().install())
-            self._notice("Creating browser")
-            options = Options()
-
-            # Configure printing
-            options.set_preference('print.always_print_silent', True)
-            options.set_preference('print_printer', settings.SCRAPER_PDF_PRINTER)
-            printer_name = settings.SCRAPER_PDF_PRINTER.replace(" ","_")
-            options.set_preference(f'print.printer_{ printer_name }.print_to_file', True)
-            options.set_preference(f'print.printer_{ printer_name }.print_to_filename', str(self.pdf_temp_file));
-            options.set_preference(f'print.printer_{ printer_name }.show_print_progress', True);
-
-            self.browser = webdriver.Firefox(options=options, service=service)
-
-            self.username = input("Enter Aliexpress username: ") \
-                    if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
-            self.password = getpass("Enter Aliexpress password: ") \
-                    if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
-            self._notice("Returning browser")
-        return self.browser
-
-    def _login(self, url):
-        url = re.escape(url)
-        self._notice("We ned to log in")
-        c = self._get_browser() #  pylint: disable=invalid-name
-        wait = WebDriverWait(c, 10)
-        try:
-            username = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-id"))
-                    )
-            password = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-password"))
-                    )
-            username.send_keys(self.username)
-            password.send_keys(self.password)
-            wait.until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, "//button[@type='submit'][not(@disabled)]")
-                        )
-                    ).click()
-            order_page = False
-            try:
-                self._notice(f"Current url: {c.current_url} correct url: {c.current_url==url}")
-                WebDriverWait(c, 5).until(EC.url_matches(url))
-                order_page = True
-            except TimeoutException:
-                pass
-            if not order_page:
-                c.execute_script(
-                    "alert('Please complete login (CAPTCHA etc.). You have two minutes.');"
-                    )
-                self._notice('Please complete log in to Aliexpress in the browser window..')
-                WebDriverWait(c, 30).until_not(
-                        EC.alert_is_present(),
-                        "Please close altert an continue login!"
-                        )
-                self._notice(f"Waiting up to 120 seconds for {url}")
-                WebDriverWait(c, 120).until(EC.url_matches(url))
-        except TimeoutException:
-            try:
-                c.switch_to.alert.accept()
-            except NoAlertPresentException:
-                pass
-            self._safe_quit()
-            # pylint: disable=raise-missing-from
-            raise CommandError('Login to Aliexpress was not successful.')
-
-    def _parse_orderlist_html(self):
-        root = fromstring(self.order_list_html)
+            Returns:
+                orders (List[Dict]): List or order Dicts
+        '''
+        root = fromstring(order_list_html)
         order_items = root.xpath('//div[@class="order-item"]')
         orders = []
         for order in order_items:
@@ -426,8 +417,8 @@ class AliScraper(BaseScraper):
                     else:
                         order_id = info.group('order_id')
             if not all([order_date, order_id]):
-                self._error(f"Unexpected data from order, failed to parse "
-                        f"order_id {order_id} or order_date ({order_date})")
+                self.log.error("Unexpected data from order, failed to parse "
+                        "order_id %s or order_date (%s)", order_id, order_date)
             (order_total,) = order.xpath('.//span[@class="order-item-content-opt-price-total"]')
             info = re.match(r'.+\$(?P<dollas>\d+\.\d+)', order_total.text)
             if info:
@@ -449,54 +440,69 @@ class AliScraper(BaseScraper):
                 })
         return orders
 
-    def _safe_quit(self):
-        try:
-            if hasattr(self, 'chrome'):
-                self.browser.quit()
-        except WebDriverException:
-            pass
+    def browser_scrape_tracking_page_html(self, order):
+        '''
+        Uses Selenium to visit, load and then save
+        the HTML from the tracking page of an individual order
 
-    def _get_order_list_html(self):
-        c = self._get_browser() #  pylint: disable=invalid-name
-        c.get(self.ORDER_URL)
-        check_login = urlparse(c.current_url)
-        wait = WebDriverWait(c, 10)
-        if check_login.hostname == "login.aliexpress.com":
-            # We were redirected to the login page
-            self._login(self.ORDER_URL)
+            Returns:
+                tracking_html (str): The HTML from this order['id'] tracking page
+        '''
+        self.visit_page(self.ORDER_TRACKING_URL.format(order['id']))
+        time.sleep(1)
+        self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        self.log.debug("Waiting 10 seconds for tracking page load")
+        time.sleep(10)
+        with open(order['tracking_cache_file'], "w", encoding="utf-8") as ali_ordre:
+            tracking_html = fromstring(self.browser.page_source)
+            ali_ordre.write(tostring(tracking_html).decode("utf-8"))
+        return tracking_html
+
+    def browser_scrape_order_list_html(self):
+        '''
+        Uses Selenium to visit, load, save and then
+        return the HTML from the order list page
+
+            Returns:
+                order_list_html (str): The HTML from the order list page
+        '''
+        brws = self.visit_page(self.ORDER_URL)
+        wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
         try:
-            wait.until(
+            wait10.until(
                     EC.element_to_be_clickable(
                         (By.XPATH, "//div[@class='comet-tabs-nav-item']"
                             "[contains(text(), 'Completed')]")
                         )
                     ).click()
         except ElementClickInterceptedException:
-            # Apparently så var ikke sjekken over atomisk, så 
+            # Apparently så var ikke sjekken over atomisk, så
             # vi venter litt til før vi klikker
-            wait.until(
+            time.sleep(5)
+            wait10.until(
                 EC.element_to_be_clickable(
                     (By.XPATH, "//div[@class='comet-tabs-nav-item']"
                         "[contains(text(), 'Completed')]")
                     )
                 ).click()
+
         # Wait until the tab for completed orders are complete
-        WebDriverWait(c, 10).until(
-                                EC.presence_of_element_located(
-                                    (
-                                        By.XPATH,
-                                        ("//div[contains(@class, 'comet-tabs-nav-item') and "
-                                        "contains(@class, 'comet-tabs-nav-item-active')]"
-                                        "[contains(text(), 'Completed')]")))
-                                    )
+        wait10.until(
+                    EC.presence_of_element_located(
+                        (
+                            By.XPATH,
+                            ("//div[contains(@class, 'comet-tabs-nav-item') and "
+                            "contains(@class, 'comet-tabs-nav-item-active')]"
+                            "[contains(text(), 'Completed')]")))
+                        )
         time.sleep(5)
-        self._notice("Loading order page")
+        self.log.debug("Loading order page")
         while True:
-            c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(3)
             try:
-                element = wait.until(
+                element = wait10.until(
                     EC.presence_of_element_located(
                         (By.XPATH, "//button[contains(@class, 'comet-btn')]"
                             "/span[contains(text(), 'View orders')]"
@@ -505,30 +511,116 @@ class AliScraper(BaseScraper):
                     )
                 element.click()
             except StaleElementReferenceException:
-                c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+                brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
                 time.sleep(3)
                 continue
             except TimeoutException:
                 break
-        c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.info("All completed orders loaded (hopefully)")
         with open(
-                self.order_list_cache,
+                self.order_list_cache_file,
                 "w",
                 encoding="utf-8") as ali:
-            html = fromstring(c.page_source)
+            html = fromstring(brws.page_source)
             ali.write(tostring(html).decode("utf-8"))
-        return c.page_source
+        return brws.page_source
 
     def indent(self):
-        cache = Path(settings.SCRAPER_CACHE).resolve()
-        for path in cache.glob('*aliexpress*.txt'):
+        if os.name == "nt":
+            self.log.error("Indentation only works on Linux")
+            return
+        cache = self.cache["BASE"].resolve()
+        for path in cache.glob('*.txt'):
             path = path.resolve()
             in_file = path
             out_file = path.with_name(path.stem + ".xml")
             if os.access(out_file, os.R_OK):
-                self._success(f"File exists, skipping: {out_file}")
+                self.log.debug("File exists, skipping: %s", out_file)
                 continue
             command = (f"sed 's/esi:include/include/g' '{in_file}' "
                     f"| xmllint --format - > '{out_file}'")
             subprocess.call(command, shell=True)
+
+    def get_browser_instance(self):
+        if not hasattr(self, 'browser'):
+            service = FirefoxService(executable_path=FirefoxDriverManager().install())
+            self.log.debug("Initializing browser")
+            options = Options()
+
+            # Configure printing
+            options.set_preference('print.always_print_silent', True)
+            options.set_preference('print_printer', settings.SCRAPER_PDF_PRINTER)
+            self.log.debug("Printer set to %s", settings.SCRAPER_PDF_PRINTER)
+            printer_name = settings.SCRAPER_PDF_PRINTER.replace(" ","_")
+            options.set_preference(f'print.printer_{ printer_name }.print_to_file', True)
+            options.set_preference(
+                f'print.printer_{ printer_name }.print_to_filename', str(self.pdf_temp_file))
+            options.set_preference(
+                f'print.printer_{ printer_name }.show_print_progress', True)
+
+            self.browser = webdriver.Firefox(options=options, service=service)
+
+            self.username = input("Enter Aliexpress username: ") \
+                    if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
+            self.password = getpass("Enter Aliexpress password: ") \
+                    if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
+            self.log.debug("Returning browser")
+        return self.browser
+
+    def browser_login(self, url):
+        url = re.escape(url)
+        self.log.info("We need to log in to Aliexpress")
+        c = self.get_browser_instance() #  pylint: disable=invalid-name
+        wait = WebDriverWait(c, 10)
+        try:
+            username = wait.until(
+                    EC.presence_of_element_located((By.ID, "fm-login-id"))
+                    )
+            password = wait.until(
+                    EC.presence_of_element_located((By.ID, "fm-login-password"))
+                    )
+            username.send_keys(self.username)
+            password.send_keys(self.password)
+            wait.until(
+                    EC.element_to_be_clickable(
+                        (By.XPATH, "//button[@type='submit'][not(@disabled)]")
+                        )
+                    ).click()
+            order_page = False
+            try:
+                self.log.debug(
+                    "Current url: %s correct url: %s", 
+                    c.current_url,
+                    c.current_url==url)
+                WebDriverWait(c, 5).until(EC.url_matches(url))
+                order_page = True
+            except TimeoutException:
+                pass
+            if not order_page:
+                c.execute_script(
+                    "alert('Please complete login (CAPTCHA etc.). You have two minutes.');"
+                    )
+                self.log.warning('Please complete log in to Aliexpress in the browser window..')
+                WebDriverWait(c, 30).until_not(
+                        EC.alert_is_present(),
+                        "Please close altert an continue login!"
+                        )
+                self.log.info("Waiting up to 120 seconds for %s", url)
+                WebDriverWait(c, 120).until(EC.url_matches(url))
+        except TimeoutException:
+            try:
+                c.switch_to.alert.accept()
+            except NoAlertPresentException:
+                pass
+            self._safe_quit()
+            # pylint: disable=raise-missing-from
+            raise CommandError('Login to Aliexpress was not successful.')
+
+    def _safe_quit(self):
+        self.log.info("Safely closing browser")
+        try:
+            if hasattr(self, 'chrome'):
+                self.browser.quit()
+        except WebDriverException:
+            pass

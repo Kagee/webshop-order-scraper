@@ -4,8 +4,9 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Python: Django Scrape Ali",
+            "name": "Scrape Ali",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}\\manage.py",
@@ -13,6 +14,19 @@
                 "scrape",
                 "aliexpress",
                 "--cache"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Indent Ali",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\manage.py",
+            "args": [
+                "scrape",
+                "aliexpress",
+                "--indent"
             ],
             "django": true,
             "justMyCode": true

@@ -68,9 +68,15 @@ LOGGING = {
             'formatter': 'verbose-cli'
         },
     },
-    'order_scraper.management.commands.scrapers.ali': {
-        'handlers': ['console'],
-        'level': 'DEBUG',
+    'root': {
+        'handlers': [],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'order_scraper.management.commands.scrapers.ali': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
     },
 }
 
