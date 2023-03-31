@@ -91,23 +91,6 @@ class AliScraper(BaseScraper):
         finally:
             self._safe_quit()
 
-    def load_order_list_html(self):
-        if self.try_file:
-            if os.access(self.order_list_cache_file, os.R_OK):
-                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
-                with open(
-                        self.order_list_cache_file,
-                        "r",
-                        encoding="utf-8") as ali:
-                    return ali.read()
-            else:
-                self.log.info("Tried to use order list cache, but found none")
-        else:
-            self.log.info("Not using order list cache")
-            if not hasattr(self, 'order_list_html'):
-                self.log.debug("Order list html not cached, retrieving")
-                return self.browser_scrape_order_list_html()
-
     def _parse_order(self, order_inp, html):
         order = {}
         info_rows = html.xpath('//div[contains(@class, "info-row")]')
@@ -238,7 +221,7 @@ class AliScraper(BaseScraper):
 
             self.browser_save_item_thumbnail(order, thumb, item_id)
             # Get snapshot of order page from Ali's archives
-            self.browser_save_snapshot_to_pdf(order, thumb, item_id)
+            self.browser_save_item_sku_snapshot_to_pdf(order, thumb, item_id)
 
         self.log.info("Writing order details page to cache")
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
@@ -268,7 +251,11 @@ class AliScraper(BaseScraper):
         with open(order['items'][item_id]['thumbnail'], 'wb') as file:
             file.write(base64.b64decode(thumb_data))
 
-    def browser_save_snapshot_to_pdf(self, order, thumb, item_id):
+    def browser_save_item_sku_snapshot_to_pdf(self, order, thumb, item_id, item_sku):
+        '''
+        Uses Selenium to save the AliExpress snapshot of the 
+        current item id+item sku to PDF.
+        '''
         order_details_page_handle = self.browser.current_window_handle
         self.log.debug("Order details page handle is %s", order_details_page_handle)
         snapshot = thumb.find_element(
@@ -325,8 +312,10 @@ class AliScraper(BaseScraper):
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
 
-
     def get_individual_order_details(self, orders):
+        '''
+        ...
+        '''
         if len(settings.SCRAPER_ALI_ORDERS):
             self.log.info("Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", settings.SCRAPER_ALI_ORDERS)
         else:
@@ -544,6 +533,12 @@ class AliScraper(BaseScraper):
         return brws.page_source
 
     def indent(self):
+        '''
+        Uses Linux commands to create indented versions of
+        all cached HTML files in cache["BASE"]
+        
+        Errors out on Windows.
+        '''
         if os.name == "nt":
             self.log.error("Indentation only works on Linux")
             return
@@ -560,6 +555,15 @@ class AliScraper(BaseScraper):
             subprocess.call(command, shell=True)
 
     def get_browser_instance(self):
+        '''
+        Initializing and configures a browser (Firefox)
+        using Selenium.
+        
+        Returns a exsisting object if avaliable.
+
+            Returns:
+                browser (WebDriver): the configured and initialized browser
+        '''
         if not hasattr(self, 'browser'):
             service = FirefoxService(executable_path=FirefoxDriverManager().install())
             self.log.debug("Initializing browser")
@@ -586,6 +590,13 @@ class AliScraper(BaseScraper):
         return self.browser
 
     def browser_login(self, url):
+        '''
+        Uses Selenium to log in AliExpress.
+        Returns when the browser is at url, after login.
+
+        Raises and alert in the browser if user action
+        is required. 
+        '''
         url = re.escape(url)
         self.log.info("We need to log in to Aliexpress")
         c = self.get_browser_instance() #  pylint: disable=invalid-name
@@ -635,9 +646,36 @@ class AliScraper(BaseScraper):
             raise CommandError('Login to Aliexpress was not successful.')
 
     def _safe_quit(self):
+        '''
+        Safely closed the browser instance. (without exceptions)
+        '''
         self.log.info("Safely closing browser")
         try:
             if hasattr(self, 'chrome'):
                 self.browser.quit()
         except WebDriverException:
             pass
+
+    def load_order_list_html(self):
+        '''
+        Returns the order list html, eithter from disk
+        cache or using Selenium to visit the url.
+
+            Returns:
+                order_list_html (str): The HTML from the order list page
+        '''
+        if self.try_file:
+            if os.access(self.order_list_cache_file, os.R_OK):
+                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
+                with open(
+                        self.order_list_cache_file,
+                        "r",
+                        encoding="utf-8") as ali:
+                    return ali.read()
+            else:
+                self.log.info("Tried to use order list cache, but found none")
+        else:
+            self.log.info("Not using order list cache")
+            if not hasattr(self, 'order_list_html'):
+                self.log.debug("Order list html not cached, retrieving")
+                return self.browser_scrape_order_list_html()
