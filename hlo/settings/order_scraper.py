@@ -1,7 +1,9 @@
 import os
 import os.path
-from django.core.exceptions import ImproperlyConfigured
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
 from .django import env
 
 SCRAPER_ALI_USERNAME: str = env('SCRAPER_ALI_USERNAME', default=None)
@@ -14,8 +16,8 @@ if not os.access(_testPath, os.W_OK):
 
 SCRAPER_CACHE_BASE: str = _testPath
 
-_default_printer = "Microsoft Print to PDF" if os.name == "nt" else "Mozilla Save to PDF"
-SCRAPER_PDF_PRINTER: str = env('SCRAPER_PDF_PRINTER', default=_default_printer)
+_DEFAULT_PRINTER = "Microsoft Print to PDF" if os.name == "nt" else "Mozilla Save to PDF"
+SCRAPER_PDF_PRINTER: str = env('SCRAPER_PDF_PRINTER', default=_DEFAULT_PRINTER)
 
 SCRAPER_ALI_PASSWORD: str = env('SCRAPER_ALI_PASSWORD', default=None)
 SCRAPER_ALI_ORDERS = env.list('SCRAPER_ALI_ORDERS', default=[])

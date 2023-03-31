@@ -78,6 +78,10 @@ class AliScraper(BaseScraper):
         self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
 
     def scrape(self):
+        '''
+        Scrapes your AliExpress orders, logging you in using
+        a automated browser if required.
+        '''
         try:
             order_list_html = self.load_order_list_html()
             orders = self.lxml_parse_orderlist_html(order_list_html)
