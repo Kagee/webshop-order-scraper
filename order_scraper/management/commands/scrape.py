@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError, no_translations
 from .scrapers.ali import AliScraper
 from .scrapers.amazon import AmazonDeScraper
-import subprocess
 
 class Command(BaseCommand):
     help = 'Scrapes a webshop for orders using Selenium'
@@ -31,13 +30,12 @@ class Command(BaseCommand):
 
     @no_translations
     def handle(self, *args, **options):
-        match options['webshop']:
-            case "aliexpress":
-                if options['indent']:
-                    AliScraper(self, options['cache']).indent()
-                else:
-                    AliScraper(self, options['cache']).scrape()
-            case "amazon.de":
-                AmazonDeScraper(self, options['cache'])
-            case _:
-                raise CommandError("Unknown webshop: {options['webshop']}")
+        if options['webshop'] == "aliexpress":
+            if options['indent']:
+                AliScraper(self, options['cache']).indent()
+            else:
+                AliScraper(self, options['cache']).scrape()
+        elif options['webshop'] == "amazon.de":
+            AmazonDeScraper(self, options['cache'])
+        else:
+            raise CommandError("Unknown webshop: {options['webshop']}")

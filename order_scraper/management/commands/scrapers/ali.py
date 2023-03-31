@@ -1,6 +1,5 @@
 import base64
 import json
-import logging
 import os
 import re
 import subprocess
@@ -31,26 +30,19 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.firefox import \
     GeckoDriverManager as FirefoxDriverManager  # type: ignore
+from .base import BaseScraper
 
-
-class AliScraper():
+class AliScraper(BaseScraper):
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
-    browser: webdriver.Firefox
     previous_orders: List
     order_list_html: str
-    orders: list
-    username: str
-    password: str
-    try_file: bool
-    cache: Dict[str, Path]
-    pdf_temp_file: Path
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
-        self.log = logging.getLogger(__name__)
+        super().__init__(try_file)
+
         self.command = command
-        self.try_file = try_file
         self.cache = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
                      Path('aliexpress')).resolve(),
@@ -63,7 +55,7 @@ class AliScraper():
             }
         try:
             for key in self.cache:  # pylint: disable=consider-using-dict-items
-                self.log.debug(self.command.style.SUCCESS("Cache folder %s: %s"), key, self.cache[key])
+                self.log.debug("Cache folder %s: %s", key, self.cache[key])
                 os.makedirs(self.cache[key])
         except FileExistsError:
             pass

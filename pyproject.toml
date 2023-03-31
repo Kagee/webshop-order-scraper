@@ -3,12 +3,13 @@ name = "homelab-organizer"
 version = "0.2022.1"
 description = "Web app for organizing stuff in your homelab"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = {file = "LICENSE"}
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Programming Language :: Python",
   "Environment :: Web Environment",
+  "Environment :: Console",
   "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Framework :: Django :: 3.2"
 ]

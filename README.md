@@ -27,7 +27,7 @@ CMD:
 cd /some/folder
 git clone https://github.com/Kagee/homelab-organizer.git # or Github Desktop
 cd homelab-organizer
-python3.10 -m venv ./venv
+python3.9 -m venv ./venv
 venv\Scripts\activate
 python -m pip install -U pip
 pip install -r requirements-dev.txt
