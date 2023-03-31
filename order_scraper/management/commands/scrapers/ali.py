@@ -10,6 +10,7 @@ import subprocess
 import json
 import base64
 from urllib.parse import urlparse
+import logging
 
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager # type: ignore
 from selenium.webdriver.firefox.service import Service as FirefoxService
@@ -51,6 +52,7 @@ class AliScraper():
     pdf_temp_file: Path
 
     def __init__(self, command: BaseCommand, try_file: bool = False):
+        self.log = logging.getLogger(__name__)
         self.command = command
         self.try_file = try_file
         self.cache = {
@@ -61,9 +63,11 @@ class AliScraper():
             }
         try:
             for key in self.cache:
+                self.log.debug(self.command.style.SUCCESS("Cache folder %s: %s"), key, self.cache[key])
                 os.makedirs(self.cache[key])
         except FileExistsError:
             pass
+        import sys
         self.snapshot_template = str(self.cache['ITEMS'] / Path("snapshot-{order_id}-{item_id}.pdf"))
         self.thumb_template = str(self.cache['ITEMS'] / Path("thumb-{order_id}-{item_id}.png"))
         self.cache_file_template = str(self.cache['ORDERS'] / Path("order-{order_id}.txt"))
@@ -197,102 +201,11 @@ class AliScraper():
             self._out(f"Curren item id is {item_id}")
             if not item_id in order['items']:
                 order['items'][item_id] = {}
-            # Get snapshot of order page from Ali's archives
-            order_details_page_handle = c.current_window_handle
-            self._out(f"Order details page handle is {order_details_page_handle}")
-            snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
-            snapshot.click()
-            time.sleep(1)
-            self._out(f"Window handles: {c.window_handles}")
-            for handle in c.window_handles:
-                self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
-                if handle == order_details_page_handle:
-                    self._out(f"Found orde details, skipping: {handle}")
-                    continue
-                c.switch_to.window(handle)
-                if "snapshot" in c.current_url:
-                    if os.access(self.pdf_temp_file, os.R_OK):
-                        os.remove(self.pdf_temp_file)
-                    self._notice("Found snapshot tab")
-                    self._out("Trying to print")
-                    c.execute_script('window.print();')
-                    # Do some read- and size change tests
-                    # to try to detect when printing is complete
-                    while not os.access(self.pdf_temp_file, os.R_OK):
-                        self._out("PDF file does not exist yet")
-                        time.sleep(1)   
-                    pdf_size_stable = False
-                    while not pdf_size_stable:
-                        sz1 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz2 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz3 = os.stat(self.pdf_temp_file).st_size
-                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                        self._out(f"Watching for stabale file side >0: {sz1} {sz2} {sz3}")
-                    # We assume file has stabilized/print is complete
-                    order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
-                    try:
-                        os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
-                    except FileExistsError:
-                        self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
-                else:
-                    self._out(f"Found random page, closnig: {handle}")
-                c.close()
-            self._out("Switching to order details page")
-            c.switch_to.window(order_details_page_handle)
-            s = thumb.find_element(By.XPATH, './/div[@class="order-detail-item-snapshot"]')
-            c.execute_script("arguments[0].setAttribute('style', 'display: none;')", snapshot_parent);
-            # Save copy of item thumbnail (without snapshot that would appear if we screnshot the elemtns)
-            #thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
-            thumb_data = thumb.screenshot_as_base64
-            order['items'][item_id]['thumbnail'] = self.thumb_template.format(order_id=order['id'], item_id=item_id)
-            with open(order['items'][item_id]['thumbnail'], 'wb') as file:
-                file.write(base64.b64decode(thumb_data))
             
-            order_details_page_handle = c.current_window_handle
-            self._out(f"Order details page handle is {order_details_page_handle}")
-            snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
-            snapshot.click()
-            time.sleep(1)
-            self._out(f"Window handles: {c.window_handles}")
-            for handle in c.window_handles:
-                self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
-                if handle == order_details_page_handle:
-                    self._out(f"Found orde details, skipping: {handle}")
-                    continue
-                c.switch_to.window(handle)
-                if "snapshot" in c.current_url:
-                    if os.access(self.pdf_temp_file, os.R_OK):
-                        os.remove(self.pdf_temp_file)
-                    self._notice("Found snapshot tab")
-                    self._out("Trying to print")
-                    c.execute_script('window.print();')
-                    # Do some read- and size change tests
-                    # to try to detect when printing is complete
-                    while not os.access(self.pdf_temp_file, os.R_OK):
-                        self._out("PDF file does not exist yet")
-                        time.sleep(1)   
-                    pdf_size_stable = False
-                    while not pdf_size_stable:
-                        sz1 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz2 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz3 = os.stat(self.pdf_temp_file).st_size
-                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                        self._out(f"Watching for stabale file side >0: {sz1} {sz2} {sz3}")
-                    # We assume file has stabilized/print is complete
-                    order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
-                    try:
-                        os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
-                    except FileExistsError:
-                        self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
-                else:
-                    self._out(f"Found random page, closnig: {handle}")
-                c.close()
-            self._out("Switching to order details page")
-            c.switch_to.window(order_details_page_handle)
+            self.browser_save_item_thumbnail(order, thumb, item_id)
+            # Get snapshot of order page from Ali's archives
+            self.browser_save_snapshot_to_pdf(order, thumb, item_id)
+
         self._out("Writing order details page to cache")
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
             order_html = fromstring(c.page_source)
@@ -306,6 +219,61 @@ class AliScraper():
             tracking_html = fromstring(c.page_source)
             ali_ordre.write(tostring(tracking_html).decode("utf-8"))
         return order_html, tracking_html
+
+    def browser_save_item_thumbnail(self, order, thumb, item_id):
+        s = thumb.find_element(By.XPATH, './/div[@class="order-detail-item-snapshot"]')
+        self.browser.execute_script("arguments[0].setAttribute('style', 'display: none;')", snapshot_parent);
+            # Save copy of item thumbnail (without snapshot that would appear if we screnshot the elemtns)
+            #thumb = item_content.find_elements(By.XPATH, './/a[contains(@class, "order-detail-item-content-img")]')[0]
+        thumb_data = thumb.screenshot_as_base64
+        order['items'][item_id]['thumbnail'] = self.thumb_template.format(order_id=order['id'], item_id=item_id)
+        with open(order['items'][item_id]['thumbnail'], 'wb') as file:
+            file.write(base64.b64decode(thumb_data))
+
+    def browser_save_snapshot_to_pdf(self, order, thumb, item_id):
+        order_details_page_handle = c.current_window_handle
+        self._out(f"Order details page handle is {order_details_page_handle}")
+        snapshot = thumb.find_element(By.XPATH, './/div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]')
+        snapshot.click()
+        time.sleep(1)
+        self._out(f"Window handles: {self.browser.window_handles}")
+        for handle in self.browser.window_handles:
+            self._out(f"Looking for snapshot tab of {item_id}, current handle: {handle}")
+            if handle == order_details_page_handle:
+                self._out(f"Found orde details, skipping: {handle}")
+                continue
+            self.browser.switch_to.window(handle)
+            if "snapshot" in c.current_url:
+                if os.access(self.pdf_temp_file, os.R_OK):
+                    os.remove(self.pdf_temp_file)
+                self._notice("Found snapshot tab")
+                self._out("Trying to print")
+                self.browser.execute_script('window.print();')
+                    # Do some read- and size change tests
+                    # to try to detect when printing is complete
+                while not os.access(self.pdf_temp_file, os.R_OK):
+                    self._out("PDF file does not exist yet")
+                    time.sleep(1)   
+                pdf_size_stable = False
+                while not pdf_size_stable:
+                    sz1 = os.stat(self.pdf_temp_file).st_size
+                    time.sleep(2)
+                    sz2 = os.stat(self.pdf_temp_file).st_size
+                    time.sleep(2)
+                    sz3 = os.stat(self.pdf_temp_file).st_size
+                    pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+                    self._out(f"Watching for stable file size larger than 0 bytes: {sz1} {sz2} {sz3}")
+                    # We assume file has stabilized/print is complete
+                order['items'][item_id]['snapshot'] = self.snapshot_template.format(order_id=order['id'], item_id=item_id)
+                try:
+                    os.rename(self.pdf_temp_file, order['items'][item_id]['snapshot'])
+                except FileExistsError:
+                    self._notice(f"Not overriding existing file: {order['items'][item_id]['snapshot']}")
+            else:
+                self._out(f"Found random page, closnig: {handle}")
+            self.browser.close()
+        self._out("Switching to order details page")
+        self.browser.switch_to.window(order_details_page_handle)
 
 
     def _get_order_details(self):
@@ -496,18 +464,6 @@ class AliScraper():
         except WebDriverException:
             pass
 
-    def _out(self, msg):
-        self.command.stdout.write(msg)
-
-    def _error(self, msg):
-        self.command.stdout.write(self.command.style.ERROR(msg))
-
-    def _success(self, msg):
-        self.command.stdout.write(self.command.style.SUCCESS(msg))
-
-    def _notice(self, msg):
-        self.command.stdout.write(self.command.style.NOTICE(msg))
-
     def _get_order_list_html(self):
         c = self._get_browser() #  pylint: disable=invalid-name
         c.get(self.ORDER_URL)
@@ -563,7 +519,7 @@ class AliScraper():
             except TimeoutException:
                 break
         c.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-        self._notice("All completed orders loaded (hopefully)")
+        self.log.info("All completed orders loaded (hopefully)")
         with open(
                 self.order_list_cache,
                 "w",

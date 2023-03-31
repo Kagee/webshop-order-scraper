@@ -49,6 +49,31 @@ DATABASES = {
     'default': env.db(),
 }
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose-cli': {
+            'format': '{asctime} [{levelname}] {module}: {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose-cli'
+        },
+    },
+    'order_scraper.management.commands.scrapers.ali': {
+        'handlers': ['console'],
+        'level': 'DEBUG',
+    },
+}
+
 
 ALLOWED_HOSTS: List[str] = env.list('ALLOWED_HOSTS')
 
