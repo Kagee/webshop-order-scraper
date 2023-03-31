@@ -164,6 +164,15 @@ class AliScraper(BaseScraper):
         return order
 
     def visit_page(self, url):
+        '''
+        Instructs the browser to visit url. 
+
+        If there is no browser instance, creates one.
+        If login is required, does that.
+
+            Returns:
+                browser: (WebDriver) the browser instance
+        '''
         self.browser = self.get_browser_instance()
         self.browser.get(url)
         if urlparse(self.browser.current_url).hostname == "login.aliexpress.com":
@@ -171,7 +180,17 @@ class AliScraper(BaseScraper):
             self.browser_login(url)
         return self.browser
 
-    def browser_scrape_order_details(self, order):
+    def browser_scrape_order_details(self, order: Dict):
+        '''
+        Uses Selenium to visit, load and then save
+        the HTML from the order details page of an individual order
+
+        Will also save a copy of item thumbnails and a PDF copy
+        of the item's snapshots, since this must be done live.
+
+            Returns:
+                order_html (HtmlElement): The HTML from this order['id'] details page
+        '''
         url = self.ORDER_DETAIL_URL.format(order['id'])
         self.log.info("Visiting %s", url)
         c = self.visit_page(url)
@@ -227,8 +246,6 @@ class AliScraper(BaseScraper):
             ali_ordre.write(tostring(order_html).decode("utf-8"))
 
         return order_html
-
-
 
     def browser_save_item_thumbnail(self, order, thumb, item_id):
         snapshot_parent = thumb.find_element(
@@ -440,13 +457,13 @@ class AliScraper(BaseScraper):
                 })
         return orders
 
-    def browser_scrape_tracking_page_html(self, order):
+    def browser_scrape_tracking_page_html(self, order: Dict):
         '''
         Uses Selenium to visit, load and then save
         the HTML from the tracking page of an individual order
 
             Returns:
-                tracking_html (str): The HTML from this order['id'] tracking page
+                tracking_html (HtmlElement): The HTML from this order['id'] tracking page
         '''
         self.visit_page(self.ORDER_TRACKING_URL.format(order['id']))
         time.sleep(1)
