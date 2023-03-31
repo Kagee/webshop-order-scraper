@@ -1,41 +1,37 @@
-import re
-import os
-import time
-from urllib.parse import urlparse
-from typing import List, Final, Dict, Any
-from getpass import getpass
-from datetime import datetime
-from pathlib import Path
-import subprocess
-import json
 import base64
-from urllib.parse import urlparse
+import json
 import logging
+import os
+import re
+import subprocess
+import time
+from datetime import datetime
+from getpass import getpass
+from pathlib import Path
+from typing import Any, Dict, Final, List
+from urllib.parse import urlparse
 
-from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager # type: ignore
-from selenium.webdriver.firefox.service import Service as FirefoxService
-
+from django.conf import settings
 # This is used in a Django command
 from django.core.management.base import BaseCommand, CommandError
-from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
-
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.common.exceptions import \
-        TimeoutException, \
-        NoSuchWindowException, \
-        NoAlertPresentException, \
-        StaleElementReferenceException, \
-        WebDriverException, \
-        ElementClickInterceptedException
-from selenium.webdriver.support import expected_conditions as EC
-
-from lxml.html.soupparser import fromstring
 from lxml.etree import tostring
 from lxml.html import HtmlElement
+from lxml.html.soupparser import fromstring
+from selenium import webdriver
+from selenium.common.exceptions import (ElementClickInterceptedException,
+                                        NoAlertPresentException,
+                                        NoSuchWindowException,
+                                        StaleElementReferenceException,
+                                        TimeoutException, WebDriverException)
+from selenium.webdriver.common.by import By
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from webdriver_manager.firefox import \
+    GeckoDriverManager as FirefoxDriverManager  # type: ignore
+
 
 class AliScraper():
     ORDER_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
@@ -56,18 +52,22 @@ class AliScraper():
         self.command = command
         self.try_file = try_file
         self.cache = {
-            "BASE": (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress')).resolve(),
-            "TRACKING":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('tracking')).resolve(),
-            "ORDERS":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('orders')).resolve(),
-            "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / Path('aliexpress') / Path('items')).resolve(),
+            "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
+                     Path('aliexpress')).resolve(),
+            "TRACKING":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                          Path('aliexpress') / Path('tracking')).resolve(),
+            "ORDERS":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                        Path('aliexpress') / Path('orders')).resolve(),
+            "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
+                       Path('aliexpress') / Path('items')).resolve(),
             }
         try:
-            for key in self.cache:
+            for key in self.cache:  # pylint: disable=consider-using-dict-items
                 self.log.debug(self.command.style.SUCCESS("Cache folder %s: %s"), key, self.cache[key])
                 os.makedirs(self.cache[key])
         except FileExistsError:
             pass
-        import sys
+
         self.snapshot_template = str(self.cache['ITEMS'] / Path("snapshot-{order_id}-{item_id}.pdf"))
         self.thumb_template = str(self.cache['ITEMS'] / Path("thumb-{order_id}-{item_id}.png"))
         self.cache_file_template = str(self.cache['ORDERS'] / Path("order-{order_id}.txt"))
@@ -157,14 +157,14 @@ class AliScraper():
 
     def _scrape_order_details(self, order):
         url = self.ORDER_DETAIL_URL.format(order['id'])
-        self._notice(f"Visiting {url}")
+        self.log.info("Visiting %s", url)
         c = self._get_browser() #  pylint: disable=invalid-name
         c.get(url)
         if urlparse(c.current_url).hostname == "login.aliexpress.com":
             # We were redirected to the login page
             self._login(url)
 
-        self._notice("Waiting for page load")
+        self.log.info("Waiting for page load")
         time.sleep(3)
         try:
             WebDriverWait(c, 10).until(
@@ -198,7 +198,7 @@ class AliScraper():
                 thumb.get_attribute("href")
                 )
             item_id = info.group(1)
-            self._out(f"Curren item id is {item_id}")
+            self.debug("Curren item id is %s", item_id)
             if not item_id in order['items']:
                 order['items'][item_id] = {}
             
@@ -206,7 +206,7 @@ class AliScraper():
             # Get snapshot of order page from Ali's archives
             self.browser_save_snapshot_to_pdf(order, thumb, item_id)
 
-        self._out("Writing order details page to cache")
+        self.log.info("Writing order details page to cache")
         with open(order['cache_file'], "w", encoding="utf-8") as ali_ordre:
             order_html = fromstring(c.page_source)
             ali_ordre.write(tostring(order_html).decode("utf-8"))
