@@ -4,7 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
             "name": "Scrape Ali",
             "type": "python",
@@ -26,6 +25,31 @@
             "args": [
                 "scrape",
                 "aliexpress",
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.de",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.de",
+                "--cache-orderlist"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amacon.de (nocache)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.de",
             ],
             "django": true,
             "justMyCode": true
