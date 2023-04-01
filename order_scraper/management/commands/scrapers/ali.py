@@ -23,7 +23,7 @@ from selenium.common.exceptions import (ElementClickInterceptedException,
                                         NoAlertPresentException,
                                         NoSuchWindowException,
                                         StaleElementReferenceException,
-                                        TimeoutException, WebDriverException)
+                                        TimeoutException, WebDriverException, NoSuchElementException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -156,8 +156,9 @@ class AliScraper(BaseScraper):
                 if counter > settings.SCRAPER_ALI_ORDERS_MAX:
                     self.log.info("Scraped %s order, breaking", settings.SCRAPER_ALI_ORDERS_MAX)
                     break
-            if order['id'] not in settings.SCRAPER_ALI_ORDERS or \
-               order['id'] in settings.SCRAPER_ALI_ORDERS_SKIP:
+            if (len(settings.SCRAPER_ALI_ORDERS) and \
+                order['id'] not in settings.SCRAPER_ALI_ORDERS) or \
+                    order['id'] in settings.SCRAPER_ALI_ORDERS_SKIP:
                 self.log.info("Skipping order ID %s", order['id'])
                 continue
 
@@ -348,12 +349,25 @@ class AliScraper(BaseScraper):
         self.log.info("Waiting for page load")
         time.sleep(3)
         wait10 = WebDriverWait(brws, 10)
+
         try:
             wait10.until(
                 EC.element_to_be_clickable(
                     (By.XPATH, "//span[contains(@class, 'switch-icon')]")
                     ),"Timeout waiting for switch buttons"
                 )
+            try:
+                # Hide the good damn robot
+                god_damn_robot = brws.find_element(
+                    By.XPATH,
+                    "//div[contains(@class, 'J_xiaomi_dialog']")
+                brws.execute_script(
+                    "arguments[0].setAttribute('style', 'display: none;')", 
+                    god_damn_robot
+                    )
+            except NoSuchElementException:
+                self.log.debug("Fant ingen robot å skjule")
+                pass
             # Expand address and payment info
             for element in brws.find_elements(
                     By.XPATH,
@@ -445,7 +459,7 @@ class AliScraper(BaseScraper):
         # move the "mouse" off the element so we do not get
         # a floating text box
         ActionChains(self.browser).\
-            move_to_element_with_offset(thumb, -100, -100).\
+            move_to_element_with_offset(thumb, 121, 121).\
                 perform()
 
         # Save copy of item thumbnail (without snapshot that
