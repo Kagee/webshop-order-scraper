@@ -7,6 +7,7 @@ from selenium import webdriver
 
 class BaseScraper(object):
     browser: webdriver.Firefox
+    browser_status: str = "no-created"
     orders: list
     username: str
     password: str

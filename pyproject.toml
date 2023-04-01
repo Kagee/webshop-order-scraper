@@ -22,6 +22,7 @@ plugins = ["mypy_django_plugin.main"]
 
 [tool.django-stubs]
 django_settings_module = "hlo.settings"
+
 # https://www.codeac.io/documentation/pylint-configuration.html
 [tool.pylint.'MAIN']
 extension-pkg-allow-list = [
@@ -29,6 +30,8 @@ extension-pkg-allow-list = [
 ]
 
 [tool.pyright]
+# This makes pyright not mark code behind thinks like
+# os.name != "nt" as unreacable.
 pythonPlatform = ""
 
 [tool.pylint.'MESSAGES CONTROL']
