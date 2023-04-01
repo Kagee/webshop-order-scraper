@@ -347,13 +347,16 @@ class AliScraper(BaseScraper):
             wait10.until(
                 EC.element_to_be_clickable(
                     (By.XPATH, "//span[contains(@class, 'switch-icon')]")
-                    ),"Timeout waiting for View orders button"
+                    ),"Timeout waiting for switch buttons"
                 )
             # Expand address and payment info
             for element in brws.find_elements(
                     By.XPATH,
                     "//span[contains(@class, 'switch-icon')]"
                     ):
+                time.sleep(1)
+                WebDriverWait(brws, 30).until_not(EC.presence_of_element_located(
+                        (By.XPATH,"//div[contains(@class, 'comet-loading-wrap')]")))
                 # selenium.common.exceptions.ElementClickInterceptedException:
                 # Message: Element
                 # <span class="comet-icon comet-icon-arrowdown switch-icon">
@@ -362,6 +365,7 @@ class AliScraper(BaseScraper):
                 wait10.until(
                     EC.element_to_be_clickable(element)
                     ).click()
+                time.sleep(1)
             time.sleep(1)
         except TimeoutException:
             pass
