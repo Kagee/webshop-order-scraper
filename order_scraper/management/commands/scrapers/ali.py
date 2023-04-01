@@ -136,6 +136,10 @@ class AliScraper(BaseScraper):
             self.log.info(
                 "Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", 
                 settings.SCRAPER_ALI_ORDERS)
+        if len(settings.SCRAPER_ALI_ORDERS_SKIP):
+            self.log.info(
+                "Skipping orders IDs in SCRAPER_ALI_ORDERS_SKIP: %s", 
+                settings.SCRAPER_ALI_ORDERS_SKIP)
 
         if settings.SCRAPER_ALI_ORDERS_MAX > 0:
             self.log.info(
@@ -152,10 +156,11 @@ class AliScraper(BaseScraper):
                 if counter > settings.SCRAPER_ALI_ORDERS_MAX:
                     self.log.info("Scraped %s order, breaking", settings.SCRAPER_ALI_ORDERS_MAX)
                     break
-            if len(settings.SCRAPER_ALI_ORDERS):
-                if order['id'] not in settings.SCRAPER_ALI_ORDERS:
-                    self.log.info("Skipping order ID %s", order['id'])
-                    continue
+            if order['id'] not in settings.SCRAPER_ALI_ORDERS or \
+               order['id'] in settings.SCRAPER_ALI_ORDERS_SKIP:
+                self.log.info("Skipping order ID %s", order['id'])
+                continue
+
             json_file = self.cache_file_template.format(order_id=order['id'], ext="json")
             if os.access(Path(json_file), os.R_OK):
                 self.log.info("Json for order %s found, skipping", order['id'])
@@ -482,44 +487,51 @@ class AliScraper(BaseScraper):
                 continue
             self.browser.switch_to.window(handle)
             if "snapshot" in self.browser.current_url:
-                if os.access(self.pdf_temp_file, os.R_OK):
-                    os.remove(self.pdf_temp_file)
-                self.log.debug("Found snapshot tab")
-                self.log.debug("Trying to print to PDF")
-                self.browser.execute_script('window.print();')
-                    # Do some read- and size change tests
-                    # to try to detect when printing is complete
-                while not os.access(self.pdf_temp_file, os.R_OK):
-                    self.log.debug("PDF file does not exist yet")
-                    time.sleep(1)
-                pdf_size_stable = False
-                while not pdf_size_stable:
-                    sz1 = os.stat(self.pdf_temp_file).st_size
-                    time.sleep(2)
-                    sz2 = os.stat(self.pdf_temp_file).st_size
-                    time.sleep(2)
-                    sz3 = os.stat(self.pdf_temp_file).st_size
-                    pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                    self.log.debug(
-                        "Watching for stable file size larger than 0 bytes: %s %s %s",
-                          sz1, sz2, sz3)
-                    # We assume file has stabilized/print is complete
                 order['items'][item_sku_id]['snapshot'] = \
                     self.snapshot_template.format(
                     order_id=order['id'],
                     item_id=item_sku_id
                     )
-                try:
-                    try:
-                        os.makedirs(Path(order['items'][item_sku_id]['snapshot']).parent)
-                    except FileExistsError:
-                        pass
-                    os.rename(self.pdf_temp_file, order['items'][item_sku_id]['snapshot'])
-                except FileExistsError:
+                if os.access(order['items'][item_sku_id]['snapshot'], os.R_OK):
                     self.log.info(
                         "Not overriding existing file: %s", 
                         order['items'][item_sku_id]['snapshot']
                         )
+                else:
+                    if os.access(self.pdf_temp_file, os.R_OK):
+                        os.remove(self.pdf_temp_file)
+                    self.log.debug("Found snapshot tab")
+                    self.log.debug("Trying to print to PDF")
+                    self.browser.execute_script('window.print();')
+                        # Do some read- and size change tests
+                        # to try to detect when printing is complete
+                    while not os.access(self.pdf_temp_file, os.R_OK):
+                        self.log.debug("PDF file does not exist yet")
+                        time.sleep(1)
+                    pdf_size_stable = False
+                    while not pdf_size_stable:
+                        sz1 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz2 = os.stat(self.pdf_temp_file).st_size
+                        time.sleep(2)
+                        sz3 = os.stat(self.pdf_temp_file).st_size
+                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+                        self.log.debug(
+                            "Watching for stable file size larger than 0 bytes: %s %s %s",
+                            sz1, sz2, sz3)
+                        # We assume file has stabilized/print is complete
+
+                    try:
+                        try:
+                            os.makedirs(Path(order['items'][item_sku_id]['snapshot']).parent)
+                        except FileExistsError:
+                            pass
+                        os.rename(self.pdf_temp_file, order['items'][item_sku_id]['snapshot'])
+                    except FileExistsError:
+                        self.log.info(
+                            "Not overriding existing file: %s", 
+                            order['items'][item_sku_id]['snapshot']
+                            )
                 debug_found_snapshot = True
             else:
                 self.log.debug("Found random page, closing: %s", handle)
