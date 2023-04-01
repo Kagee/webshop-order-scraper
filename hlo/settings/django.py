@@ -58,7 +58,7 @@ except ImportError:
         'version': 1,
         'disable_existing_loggers': False,
         'formatters': {
-            'verbose-cli': {
+            'verbose': {
                 'format': '{asctime} [{levelname}] {module}: {message}',
                 'style': '{',
             },
@@ -70,8 +70,13 @@ except ImportError:
         'handlers': {
             'console': {
                 'class': 'logging.StreamHandler',
-                'formatter': 'verbose-cli'
+                'formatter': 'verbose',
             },
+            'file': {
+                'class' : 'logging.FileHandler',
+                'filename': 'scraper.log',
+                'formatter': 'verbose'
+            }
         },
         'root': {
             'handlers': [],
@@ -79,7 +84,7 @@ except ImportError:
         },
         'loggers': {
             'order_scraper.management.commands.scrapers.ali': {
-                'handlers': ['console'],
+                'handlers': ['console', 'file'],
                 'level': 'DEBUG',
             },
         },
