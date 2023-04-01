@@ -582,7 +582,7 @@ class AliScraper(BaseScraper):
             self.browser.find_element(
                 By.XPATH,
                 "//div[contains(@class, 'benifit-cancel')]").click()
-            self.log.debuf("Hiding message about shipping benefits")
+            self.log.debug("Hiding message about shipping benefits")
         except NoSuchElementException:
             pass
 
