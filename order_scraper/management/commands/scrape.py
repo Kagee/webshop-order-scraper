@@ -14,28 +14,11 @@ class Command(BaseCommand):
                 help="The online webshop to scrape orders from"
                 )
 
-        parser.add_argument(
-                '-c',
-                '--cache',
-                action='store_true',
-                help="Use file cache of webshop orders if avaliable (mostly for development)"
-                )
-
-        parser.add_argument(
-                '-i',
-                '--indent',
-                action='store_true',
-                help="Loop and indent cache files (mostly for development)"
-                )
-
     @no_translations
     def handle(self, *args, **options):
         if options['webshop'] == "aliexpress":
-            if options['indent']:
-                AliScraper(self, options['cache']).command_indent()
-            else:
-                AliScraper(self, options['cache']).command_scrape()
+            AliScraper(self).command_scrape()
         elif options['webshop'] == "amazon.de":
-            AmazonDeScraper(self, options['cache'])
+            AmazonDeScraper(self)
         else:
             raise CommandError("Unknown webshop: {options['webshop']}")

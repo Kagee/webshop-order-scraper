@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
 
-class AmazonDeScraper():
-    def __init__(self, command: BaseCommand, try_file: bool = False):
-        self.command = command
+from .base import BaseScraper
+
+class AmazonDeScraper(BaseScraper):
+    def __init__(self, command: BaseCommand):
+        super().__init__(command)
         raise CommandError('Scraping of Amazon (DE) not yet implemented')

@@ -11,13 +11,11 @@ class BaseScraper(object):
     orders: list
     username: str
     password: str
-    try_file: bool
     cache: Dict[str, Path]
     pdf_temp_file: Path
     log = None
     command: BaseCommand
     log = None
 
-    def __init__(self, command: BaseCommand, try_file: bool = False):
-        self.try_file = try_file
+    def __init__(self, command: BaseCommand):
         self.command = command

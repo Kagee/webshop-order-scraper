@@ -7,3 +7,4 @@ chromedriver
 tls/*
 *cache*/
 geckodriver.log
+hlo/settings/logging.py

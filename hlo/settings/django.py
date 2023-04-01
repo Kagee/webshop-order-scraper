@@ -49,36 +49,42 @@ DATABASES = {
     'default': env.db(),
 }
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose-cli': {
-            'format': '{asctime} [{levelname}] {module}: {message}',
-            'style': '{',
+
+try:
+    # Define you own logging in LOGGING here
+    from .logging import *  # type: ignore  # pylint: disable=wildcard-import
+except ImportError:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose-cli': {
+                'format': '{asctime} [{levelname}] {module}: {message}',
+                'style': '{',
+            },
+            'simple': {
+                'format': '{levelname} {message}',
+                'style': '{',
+            },
         },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'verbose-cli'
+            },
         },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose-cli'
+        'root': {
+            'handlers': [],
+            'level': 'WARNING',
         },
-    },
-    'root': {
-        'handlers': [],
-        'level': 'WARNING',
-    },
-    'loggers': {
-        'order_scraper.management.commands.scrapers.ali': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+        'loggers': {
+            'order_scraper.management.commands.scrapers.ali': {
+                'handlers': ['console'],
+                'level': 'DEBUG',
+            },
         },
-    },
-}
+    }
+
 
 
 ALLOWED_HOSTS: List[str] = env.list('ALLOWED_HOSTS')

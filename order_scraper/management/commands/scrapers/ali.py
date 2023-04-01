@@ -136,9 +136,22 @@ class AliScraper(BaseScraper):
             self.log.info(
                 "Scraping only order IDs from SCRAPER_ALI_ORDERS: %s", 
                 settings.SCRAPER_ALI_ORDERS)
-        else:
+
+        if settings.SCRAPER_ALI_ORDERS_MAX > 0:
+            self.log.info(
+                "Scraping only a total of %s orders because of SCRAPER_ALI_ORDERS_MAX", 
+                settings.SCRAPER_ALI_ORDERS_MAX)
+
+        if settings.SCRAPER_ALI_ORDERS_MAX == -1 and len(settings.SCRAPER_ALI_ORDERS) == 0:
             self.log.info("Scraping all order IDs")
+
+        counter = 0
         for order in orders:
+            counter += 1
+            if settings.SCRAPER_ALI_ORDERS_MAX > 0:
+                if counter > settings.SCRAPER_ALI_ORDERS_MAX:
+                    self.log.info("Scraped %s order, breaking", settings.SCRAPER_ALI_ORDERS_MAX)
+                    break
             if len(settings.SCRAPER_ALI_ORDERS):
                 if order['id'] not in settings.SCRAPER_ALI_ORDERS:
                     self.log.info("Skipping order ID %s", order['id'])
@@ -152,7 +165,7 @@ class AliScraper(BaseScraper):
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
             order['cache_file'] = self.cache_file_template.format(order_id=order['id'], ext="html")
-            if self.try_file and os.access(order['cache_file'], os.R_OK):
+            if os.access(order['cache_file'], os.R_OK):
                 with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
                     self.log.debug(
                         "Loading individual order data from cache: %s", 
@@ -198,17 +211,14 @@ class AliScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         '''
-        if self.try_file:
-            if os.access(self.order_list_cache_file, os.R_OK):
-                self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
-                with open(
-                        self.order_list_cache_file,
-                        "r",
-                        encoding="utf-8") as ali:
-                    return ali.read()
-            self.log.info("Tried to use order list cache, but found none")
-        else:
-            self.log.info("Not using order list cache")
+        if os.access(self.order_list_cache_file, os.R_OK):
+            self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
+            with open(
+                    self.order_list_cache_file,
+                    "r",
+                    encoding="utf-8") as ali:
+                return ali.read()
+        self.log.info("Tried to use order list cache, but found none")
         return self.browser_scrape_order_list_html()
 
 # Methods that use LXML to extract info from HTML
@@ -529,7 +539,7 @@ class AliScraper(BaseScraper):
         '''
         order['tracking_cache_file'] = \
                 self.cache_tracking_file_template.format(order_id=order['id'])
-        if self.try_file and os.access(order['tracking_cache_file'], os.R_OK):
+        if os.access(order['tracking_cache_file'], os.R_OK):
             with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
                 self.log.debug(
                     "Loading individual order tracking data cache: %s", 
@@ -791,8 +801,8 @@ class AliScraper(BaseScraper):
 
 # Class init
 
-    def __init__(self, command: BaseCommand, try_file: bool = False):
-        super().__init__(command, try_file)
+    def __init__(self, command: BaseCommand):
+        super().__init__(command)
 
         self.command = command
         self.cache = {

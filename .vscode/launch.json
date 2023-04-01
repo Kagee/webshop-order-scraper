@@ -13,23 +13,9 @@
             "args": [
                 "scrape",
                 "aliexpress",
-                "--cache"
             ],
             "django": true,
             "justMyCode": true
         },
-        {
-            "name": "Indent Ali",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}\\manage.py",
-            "args": [
-                "scrape",
-                "aliexpress",
-                "--indent"
-            ],
-            "django": true,
-            "justMyCode": true
-        }
     ]
 }
