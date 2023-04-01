@@ -361,6 +361,7 @@ class AliExpressScraper(BaseScraper):
                     ),"Timeout waiting for switch buttons"
                 )
             try:
+                time.sleep(1)
                 # Hide the good damn robot
                 god_damn_robot = brws.find_element(
                     By.ID,
@@ -384,10 +385,24 @@ class AliExpressScraper(BaseScraper):
                 # <span class="comet-icon comet-icon-arrowdown switch-icon">
                 # is not clickable at point (762,405) because another
                 # element <div class="comet-loading-wrap"> obscures it
-                wait10.until(
-                    EC.element_to_be_clickable(element)
-                    ).click()
-                time.sleep(1)
+                try:
+                    wait10.until(
+                        EC.element_to_be_clickable(element)
+                        ).click()
+                    time.sleep(1)
+                except ElementClickInterceptedException:
+                    try:
+                        time.sleep(1)
+                        # Hide the good damn robot
+                        god_damn_robot = brws.find_element(
+                            By.ID,
+                            "J_xiaomi_dialog")
+                        brws.execute_script(
+                            "arguments[0].setAttribute('style', 'display: none;')", 
+                            god_damn_robot
+                            )
+                    except NoSuchElementException:
+                        self.log.debug("Fant ingen robot å skjule")
             time.sleep(1)
         except TimeoutException:
             pass
@@ -442,16 +457,17 @@ class AliExpressScraper(BaseScraper):
 
 
             # Get snapshot of order page from Ali's archives
-            self.browser_save_item_sku_snapshot_to_pdf(order, thumb, item_sku_id)
+            move_mouse = self.browser_save_item_sku_snapshot_to_pdf(order, thumb, item_sku_id)
             # Thumbnail MUST happen after snapshot, as we hide the snapshot button
             # before saving thumbnail
-            self.browser_save_item_thumbnail(order, thumb, item_sku_id)
+            self.browser_save_item_thumbnail(order, thumb, item_sku_id, move_mouse)
 
         return fromstring(brws.page_source)
 
-    def browser_save_item_thumbnail(self, order, thumb, item_sku_id):
+    def browser_save_item_thumbnail(self, order, thumb, item_sku_id, move_mouse = False):
         # Find and hide the snapshot "camera" graphic that
         # overlays the thumbnail
+        print(thumb)
         snapshot_parent = thumb.find_element(
             By.XPATH,
             './/div[@class="order-detail-item-snapshot"]')
@@ -459,11 +475,16 @@ class AliExpressScraper(BaseScraper):
             "arguments[0].setAttribute('style', 'display: none;')", 
             snapshot_parent
             )
+        #self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        print(thumb)
         # move the "mouse" off the element so we do not get
         # a floating text box
-        ActionChains(self.browser).\
-            move_to_element_with_offset(thumb, 130, 0).\
-                perform()
+        #random = thumb.find_element(By.XPATH, './/parent::*')
+        # If we try to move the mouse without having "clicked" on
+        # anything on "this" page, selenium gets a brain aneurysm
+        if move_mouse:
+            ActionChains(self.browser).\
+                move_to_element_with_offset(thumb, 130, 0).perform()
 
         # Save copy of item thumbnail (without snapshot that
         # would appear if we screenshot the element)
@@ -483,6 +504,17 @@ class AliExpressScraper(BaseScraper):
         Uses Selenium to save the AliExpress snapshot of the 
         current item id+item sku to PDF.
         '''
+        order['items'][item_sku_id]['snapshot'] = \
+                    self.snapshot_template.format(
+                    order_id=order['id'],
+                    item_id=item_sku_id
+                    )
+        if os.access(order['items'][item_sku_id]['snapshot'], os.R_OK):
+            self.log.info(
+                "Not opening snapshot, already saved: %s", 
+                Path(order['items'][item_sku_id]['snapshot']).name
+                )
+            return False
         order_details_page_handle = self.browser.current_window_handle
         self.log.debug("Order details page handle is %s", order_details_page_handle)
         snapshot = thumb.find_element(
@@ -504,51 +536,40 @@ class AliExpressScraper(BaseScraper):
                 continue
             self.browser.switch_to.window(handle)
             if "snapshot" in self.browser.current_url:
-                order['items'][item_sku_id]['snapshot'] = \
-                    self.snapshot_template.format(
-                    order_id=order['id'],
-                    item_id=item_sku_id
-                    )
-                if os.access(order['items'][item_sku_id]['snapshot'], os.R_OK):
+                if os.access(self.pdf_temp_file, os.R_OK):
+                    os.remove(self.pdf_temp_file)
+                self.log.debug("Found snapshot tab")
+                self.log.debug("Trying to print to PDF")
+                self.browser.execute_script('window.print();')
+                    # Do some read- and size change tests
+                    # to try to detect when printing is complete
+                while not os.access(self.pdf_temp_file, os.R_OK):
+                    self.log.debug("PDF file does not exist yet")
+                    time.sleep(1)
+                pdf_size_stable = False
+                while not pdf_size_stable:
+                    sz1 = os.stat(self.pdf_temp_file).st_size
+                    time.sleep(2)
+                    sz2 = os.stat(self.pdf_temp_file).st_size
+                    time.sleep(2)
+                    sz3 = os.stat(self.pdf_temp_file).st_size
+                    pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+                    self.log.debug(
+                        "Watching for stable file size larger than 0 bytes: %s %s %s",
+                        sz1, sz2, sz3)
+                    # We assume file has stabilized/print is complete
+
+                try:
+                    try:
+                        os.makedirs(Path(order['items'][item_sku_id]['snapshot']).parent)
+                    except FileExistsError:
+                        pass
+                    os.rename(self.pdf_temp_file, order['items'][item_sku_id]['snapshot'])
+                except FileExistsError:
                     self.log.info(
                         "Not overriding existing file: %s", 
-                        order['items'][item_sku_id]['snapshot']
+                        Path(order['items'][item_sku_id]['snapshot']).name
                         )
-                else:
-                    if os.access(self.pdf_temp_file, os.R_OK):
-                        os.remove(self.pdf_temp_file)
-                    self.log.debug("Found snapshot tab")
-                    self.log.debug("Trying to print to PDF")
-                    self.browser.execute_script('window.print();')
-                        # Do some read- and size change tests
-                        # to try to detect when printing is complete
-                    while not os.access(self.pdf_temp_file, os.R_OK):
-                        self.log.debug("PDF file does not exist yet")
-                        time.sleep(1)
-                    pdf_size_stable = False
-                    while not pdf_size_stable:
-                        sz1 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz2 = os.stat(self.pdf_temp_file).st_size
-                        time.sleep(2)
-                        sz3 = os.stat(self.pdf_temp_file).st_size
-                        pdf_size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
-                        self.log.debug(
-                            "Watching for stable file size larger than 0 bytes: %s %s %s",
-                            sz1, sz2, sz3)
-                        # We assume file has stabilized/print is complete
-
-                    try:
-                        try:
-                            os.makedirs(Path(order['items'][item_sku_id]['snapshot']).parent)
-                        except FileExistsError:
-                            pass
-                        os.rename(self.pdf_temp_file, order['items'][item_sku_id]['snapshot'])
-                    except FileExistsError:
-                        self.log.info(
-                            "Not overriding existing file: %s", 
-                            order['items'][item_sku_id]['snapshot']
-                            )
                 debug_found_snapshot = True
             else:
                 self.log.debug("Found random page, closing: %s", handle)
@@ -561,6 +582,7 @@ class AliExpressScraper(BaseScraper):
             time.sleep(100000)
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
+        return True
 
     def get_scrape_tracking_page_html(self, order: Dict):
         '''
