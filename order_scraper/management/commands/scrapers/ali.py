@@ -359,8 +359,8 @@ class AliScraper(BaseScraper):
             try:
                 # Hide the good damn robot
                 god_damn_robot = brws.find_element(
-                    By.XPATH,
-                    "//div[contains(@class, 'J_xiaomi_dialog')]")
+                    By.ID,
+                    "J_xiaomi_dialog")
                 brws.execute_script(
                     "arguments[0].setAttribute('style', 'display: none;')", 
                     god_damn_robot
@@ -578,6 +578,14 @@ class AliScraper(BaseScraper):
         time.sleep(1)
         self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.debug("Waiting 10 seconds for tracking page load")
+        try:
+            self.browser.find_element(
+                By.XPATH,
+                "//div[contains(@class, 'benifit-cancel')]").click()
+        except NoSuchElementException:
+            pass
+
+        self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(10)
         with open(order['tracking_cache_file'], "w", encoding="utf-8") as ali_ordre:
             tracking_html = fromstring(self.browser.page_source)
@@ -625,6 +633,17 @@ class AliScraper(BaseScraper):
         time.sleep(5)
         self.log.debug("Loading order page")
         while True:
+            try:
+                # Hide the good damn robot
+                god_damn_robot = brws.find_element(
+                    By.ID,
+                    "J_xiaomi_dialog")
+                brws.execute_script(
+                    "arguments[0].setAttribute('style', 'display: none;')", 
+                    god_damn_robot
+                    )
+            except NoSuchElementException:
+                pass
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(3)
             try:
@@ -747,7 +766,7 @@ class AliScraper(BaseScraper):
                     c.current_url,
                     c.current_url==url_re_escaped)
                 WebDriverWait(c, 5).until(EC.url_matches(order_list_url_re_espaced))
-                order_list_page = True0
+                order_list_page = True
             except TimeoutException:
                 pass
             if not order_list_page:
