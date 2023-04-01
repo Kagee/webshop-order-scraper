@@ -13,11 +13,16 @@ class Command(BaseCommand):
                 choices=["aliexpress", "amazon.de"],
                 help="The online webshop to scrape orders from"
                 )
-
+        parser.add_argument(
+                '-c',
+                '--cache-orderlist',
+                action='store_true',
+                help="Use file for order list. Will not detect new orders with this."
+                )
     @no_translations
     def handle(self, *args, **options):
         if options['webshop'] == "aliexpress":
-            AliScraper(self).command_scrape()
+            AliScraper(self, options['cache_orderlist']).command_scrape()
         elif options['webshop'] == "amazon.de":
             AmazonDeScraper(self)
         else:

@@ -21,9 +21,10 @@ from lxml.html.soupparser import fromstring
 from selenium import webdriver
 from selenium.common.exceptions import (ElementClickInterceptedException,
                                         NoAlertPresentException,
+                                        NoSuchElementException,
                                         NoSuchWindowException,
                                         StaleElementReferenceException,
-                                        TimeoutException, WebDriverException, NoSuchElementException)
+                                        TimeoutException, WebDriverException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -41,7 +42,7 @@ class AliScraper(BaseScraper):
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
     log = logging.getLogger(__name__)
-
+    cache_orderlist: bool
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -217,14 +218,15 @@ class AliScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         '''
-        if os.access(self.order_list_cache_file, os.R_OK):
+        if self.cache_orderlist and os.access(self.order_list_cache_file, os.R_OK):
             self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
             with open(
                     self.order_list_cache_file,
                     "r",
                     encoding="utf-8") as ali:
                 return ali.read()
-        self.log.info("Tried to use order list cache, but found none")
+        else:
+            self.log.info("Tried to use order list cache, but found none")
         return self.browser_scrape_order_list_html()
 
 # Methods that use LXML to extract info from HTML
@@ -850,9 +852,9 @@ class AliScraper(BaseScraper):
 
 # Class init
 
-    def __init__(self, command: BaseCommand):
+    def __init__(self, command: BaseCommand, cache_orderlist: bool):
         super().__init__(command)
-
+        self.cache_orderlist = cache_orderlist
         self.command = command
         self.cache = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
