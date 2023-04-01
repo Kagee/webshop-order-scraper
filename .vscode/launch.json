@@ -9,7 +9,20 @@
             "name": "Scrape Ali",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}\\manage.py",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "aliexpress",
+                "--cache-orderlist"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Ali (nocache)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
                 "aliexpress",

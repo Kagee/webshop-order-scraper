@@ -188,7 +188,7 @@ class AliScraper(BaseScraper):
                 order,
                 self.get_scrape_tracking_page_html(order)
                 )
-            order.update(tracking)
+            order['tracking'] = tracking
 
             # We do this after all "online" scraping is complete
             self.log.info("Writing order details page to cache")
@@ -256,8 +256,10 @@ class AliScraper(BaseScraper):
             tracking['upgrade'] = service_upgraded[0].xpath(
                     './/div[@class="service-item-flex"]/span/text()'
                     )[0]
-        tracking['shipper'] = html.xpath('//span[contains(@class, "title-eclp")]/text()')[0]
-        tracking['status'] = html.xpath('//div[contains(@class, "status-title-text")]/text()')[0]
+        shipper_div = html.xpath('//span[contains(@class, "title-eclp")]')[0]
+        tracking['shipper'] = shipper_div.text.strip() if shipper_div else "Unknown"
+        status_div = html.xpath('//div[contains(@class, "status-title-text")]')[0]
+        tracking['status'] = status_div.text.strip() if status_div else "Unknown"
         addr = []
         for p_element in html.xpath('//div[contains(@class, "address-detail")]/p'):
             # Join and remove double spaces
