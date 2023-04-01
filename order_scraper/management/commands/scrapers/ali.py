@@ -831,7 +831,10 @@ class AliScraper(BaseScraper):
             "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
                        Path('aliexpress') / Path('items')).resolve(),
             }
-
+        try:
+            os.makedirs(Path(settings.SCRAPER_CACHE_BASE))
+        except FileExistsError:
+            pass
         for key in self.cache:  # pylint: disable=consider-using-dict-items
             self.log.debug("Cache folder %s: %s", key, self.cache[key])
             try:
