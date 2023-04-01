@@ -16,6 +16,10 @@ This requires Firefox. Firefox installed as a snap on Ubuntu is not supported. T
 ### Aliexpress
 Scrapes order list, item info and details, and saves a PDF copy of the Aliexpress item snapshot.
 
+Try not to resize or move the autmomated browser window while scraping. You will be
+prompted if you need to interract, i.e. accept a CAPTCHA. If you happen to watch and see that
+a page is "stuck" and not loading, you can *try* a quick F5.
+
 If you want to download some and some orders, you can start with i.e. `HLO_SCRAPER_ALI_ORDERS_MAX=10`, 
 and then increment with 10 for each run. Remember to use `--cache-orderlist` so you do not have
 to scrape the order list every time.
@@ -26,6 +30,10 @@ python manage.py scrape aliexpress
 
 ### Amazon.de
 Planned, not implemented.
+
+````
+python manage.py scrape amazon.de
+````
 
 ## Linux 101
 Terminal:
