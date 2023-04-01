@@ -1,6 +1,6 @@
 [project]
 name = "homelab-organizer"
-version = "0.2022.1"
+version = "0.2023.2"
 description = "Web app for organizing stuff in your homelab"
 readme = "README.md"
 requires-python = ">=3.9"

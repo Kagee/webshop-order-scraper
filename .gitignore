@@ -3,6 +3,8 @@ __pycache__
 *.swp
 chromedriver
 .env
+*.env
+!dev.env
 *.sqlite3
 tls/*
 *cache*/
