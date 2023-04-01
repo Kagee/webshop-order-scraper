@@ -37,7 +37,7 @@ from webdriver_manager.firefox import \
 from .base import BaseScraper
 
 
-class AliScraper(BaseScraper):
+class AliExpressScraper(BaseScraper):
     ORDER_LIST_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
