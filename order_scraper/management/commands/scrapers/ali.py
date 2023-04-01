@@ -360,14 +360,13 @@ class AliScraper(BaseScraper):
                 # Hide the good damn robot
                 god_damn_robot = brws.find_element(
                     By.XPATH,
-                    "//div[contains(@class, 'J_xiaomi_dialog']")
+                    "//div[contains(@class, 'J_xiaomi_dialog')]")
                 brws.execute_script(
                     "arguments[0].setAttribute('style', 'display: none;')", 
                     god_damn_robot
                     )
             except NoSuchElementException:
                 self.log.debug("Fant ingen robot å skjule")
-                pass
             # Expand address and payment info
             for element in brws.find_elements(
                     By.XPATH,
@@ -459,7 +458,7 @@ class AliScraper(BaseScraper):
         # move the "mouse" off the element so we do not get
         # a floating text box
         ActionChains(self.browser).\
-            move_to_element_with_offset(thumb, 121, 121).\
+            move_to_element_with_offset(thumb, 130, 0).\
                 perform()
 
         # Save copy of item thumbnail (without snapshot that
@@ -748,7 +747,7 @@ class AliScraper(BaseScraper):
                     c.current_url,
                     c.current_url==url_re_escaped)
                 WebDriverWait(c, 5).until(EC.url_matches(order_list_url_re_espaced))
-                order_list_page = True
+                order_list_page = True0
             except TimeoutException:
                 pass
             if not order_list_page:
