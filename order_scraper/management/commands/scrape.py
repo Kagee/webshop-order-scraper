@@ -38,9 +38,15 @@ class Command(BaseCommand):
             default="-1",
             type=str,
             help="What year(s, comma separated) to get orders for. "
-            "Only used for Amazon.de scraper. "
+            "Only used for Amazon.* scrapers. "
             "Default is -1, all years."
         )
+        parser.add_argument(
+                '-a',
+                '--archived',
+                action='store_true',
+                help="Also scrape archived orders. Only used for Amazon.* scrapers."
+                )
     @no_translations
     def handle(self, *args, **options):
         if options['webshop'] == "aliexpress":
