@@ -45,21 +45,12 @@
                 "-v",
                 "3",
                 "--year",
-                "2012,2011,2013"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.de (nocache)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon.de",
-                "-v",
-                "3"
+                // 2017 => some random free book, one page
+                // 2021 => 36, four pages
+                // 2022 => 13, two pages
+                // 2023 => 2, one page
+                // archived => 2 orders, one page
+                "2011,2012,2013,2014,2015,2016,2018,2019,2020"
             ],
             "django": true,
             "justMyCode": true
@@ -74,21 +65,15 @@
                 "amazon.co.uk",
                 "--cache-orderlist",
                 "-v",
-                "3"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.co.uk (nocache)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon.co.uk",
-                "-v",
-                "3"
+                "3",
+                "--year",
+                // archived => 2 ordre, 1 page
+                // 2013 => 1 ordre, 1 page
+                // 2015 => 3 ordre, 1 page
+                // 2016 => 1 ordre, 1 page
+                // 2017 => 1 ordre, 1 page
+                // 2019 => 1 ordre, 1 page
+                "2011,2012,2014,2018,2020,2021,2022,2023"
             ],
             "django": true,
             "justMyCode": true
@@ -103,21 +88,33 @@
                 "amazon.com",
                 "--cache-orderlist",
                 "-v",
-                "3"
+                "3",
+                "--year",
+                // archived => 1 orders, 1 page
+                // 2016 => 3 orders, 1 page
+                // 2017 => 3 orders, 1 page
+                // 2018 => 2 orders, 1 page (1 gift)
+                // 2019 => 1 orders, 1 page
+                // 2021 => 2 orders, 1 page
+                "2011,2012,2013,2014,2015,2020,2022,2023"
             ],
             "django": true,
             "justMyCode": true
         },
         {
-            "name": "Scrape Amazon.com (nocache)",
+            "name": "Scrape Amazon.co.jp",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
-                "amazon.com",
+                "amazon.co.jp",
+                "--cache-orderlist",
                 "-v",
-                "3"
+                "3",
+                "--year",
+                // 2022 => 2 orders, 1 page
+                "2023"
             ],
             "django": true,
             "justMyCode": true

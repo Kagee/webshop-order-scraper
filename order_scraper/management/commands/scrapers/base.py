@@ -128,13 +128,13 @@ class BaseScraper(object):
                                   "but we are at the login url. "
                                   "Probably something wrong happened.")
             # We were redirected to the login page
-            self.browser_login()
+            self.browser_login(url)
             if goto_url_after_login:
                 self.browser_visit_page(url, goto_url_after_login, do_login=False)
         return self.browser
 
-    def browser_login(self):
-        raise NotImplementedError("Child does not implement browser_login(url: str)")
+    def browser_login(self, url):
+        raise NotImplementedError("Child does not implement browser_login()")
 
     def rand_sleep(self, min_seconds: int = 0, max_seconds: int = 5) -> None:
         """

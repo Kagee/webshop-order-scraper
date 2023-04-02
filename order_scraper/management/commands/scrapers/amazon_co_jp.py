@@ -5,8 +5,8 @@ from django.core.management.base import BaseCommand
 from .amazon import AmazonScraper
 
 
-class AmazonComScraper(AmazonScraper):
-    TLD: Final[str] = "com"
+class AmazonCoJpScraper(AmazonScraper):
+    TLD: Final[str] = "co.jp"
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options)

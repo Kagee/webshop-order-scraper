@@ -1,22 +1,22 @@
-import re
 import datetime
+import json
 import os
-from pathlib import Path
+import re
 from getpass import getpass
+from pathlib import Path
 from typing import Dict, Final, List
-from lxml.html.soupparser import fromstring
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.core.serializers.json import DjangoJSONEncoder
+from lxml.html.soupparser import fromstring
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.common.exceptions import (TimeoutException)
+
 from .base import BaseScraper
 
-
-# Inspiration:
-# https://github.com/tobiasmcnulty/amzscraper
-# https://chase-seibert.github.io/blog/2011/01/15/backup-your-amazon-order-history-with-python.html
 
 class AmazonScraper(BaseScraper):
     TLD: str = "test"
@@ -26,7 +26,12 @@ class AmazonScraper(BaseScraper):
     ORDER_DETAIL_URL_TEMPLATE: Final[str]
     YEARS: Final[List]
     ORDER_LIST_CACHE_FILENAME_TEMPLATE: str
+    ORDER_LIST_JSON_FILENAME_TEMPLATE: str
     PDF_TEMP_FILE: str
+    EMPTY_ORDER_PATH_XPATH: Final[str] = \
+        '//div' \
+            '[contains(@class, "a-text-center")]' \
+                '[contains(@class, "a-section")]'
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options)
@@ -58,7 +63,6 @@ class AmazonScraper(BaseScraper):
         else:
             self.YEARS = sorted(options['year'])
 
-        self.YEARS = [2011, 2012, 2013]
 
     def setup_cache(self):
         cache = {
@@ -81,9 +85,14 @@ class AmazonScraper(BaseScraper):
         pdf_temp_file = cache['BASE'] / Path('temporary-pdf.pdf')
         order_list_cache_filename_template = \
             str(cache["ORDER_LISTS"] / Path("order-list-{year}-{start_index}.html"))
-        return cache, pdf_temp_file, order_list_cache_filename_template
+        order_list_year_json_template = \
+            str(cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
+        return cache, \
+            pdf_temp_file, \
+                order_list_cache_filename_template, \
+                    order_list_year_json_template
 
-    def load_order_list_html(self) -> List[str]:
+    def load_order_lists_html(self) -> Dict[int, str]:
         '''
         Returns the order list html, eithter from disk
         cache or using Selenium to visit the url.
@@ -95,7 +104,10 @@ class AmazonScraper(BaseScraper):
         missing_years = []
         for year in self.YEARS:
             found_year = False
-            if self.cache_orderlist:
+            if self.order_list_has_json(year) and self.cache_orderlist:
+                self.log.debug("Year %s already has json", year)
+                found_year = True
+            elif self.cache_orderlist:
                 start_index = 0
                 while True:
                     html_file = \
@@ -125,7 +137,7 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Found cache for all years: %s", ",".join(str(x) for x in self.YEARS))
         return order_list_html
 
-    def browser_login(self):
+    def browser_login(self, _):
         '''
         Uses Selenium to log in Amazon.
         Returns when the browser is at url, after login.
@@ -182,9 +194,45 @@ class AmazonScraper(BaseScraper):
             raise CommandError('Login to Amazon was not successful.')
         self.log.info('Login to Amazon was probably successful.')
 
+    def order_list_has_json(self, year):
+        return os.access(
+            self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(
+            year=year
+            ),
+            os.R_OK)
+
+    def save_order_lists_to_json(self, order_lists: Dict) -> None:
+        for year in order_lists:
+            json_file = \
+                self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(year=year)
+            with open(json_file, "w", encoding="utf-8") as jsonfile:
+                json_string = json.dumps(
+                    order_lists[year],
+                    indent=4,
+                    cls=DjangoJSONEncoder
+                    )
+                jsonfile.write(json_string)
+                self.log.debug("Saved %s", json_file)
+
     def command_scrape(self) -> None:
-        self.load_order_list_html()
+        order_lists_html = self.load_order_lists_html()
+        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
+        # ORDER_LIST_JSON_FILENAME_TEMPLATE
+        self.save_order_lists_to_json(order_lists)
         self.browser_safe_quit()
+
+    def lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
+        order_lists = {}
+        for key in order_lists_html:
+            html = order_lists_html[key]
+            empty_list = html.xpath(self.EMPTY_ORDER_PATH_XPATH)
+            if len(empty_list) == 1:
+                order_lists[key] = {}
+                # This order page is empty
+            else:
+                # TODO: Scrape order pages with items with LXML
+                pass
+        return order_lists
 
     # TypeError: Too few arguments for typing.Dict; actual 1, expected 2
     def browser_scrape_order_lists_html(self, years: List):
@@ -209,9 +257,7 @@ class AmazonScraper(BaseScraper):
                 WebDriverWait(brws, 3).until(
                     EC.presence_of_element_located(
                         (By.XPATH,
-                         '//div'
-                         '[contains(@class, "a-text-center")]'
-                         '[contains(@class, "a-section")]'
+                         self.EMPTY_ORDER_PATH_XPATH
                         )
                     ))
                 # No orders, save html and return
@@ -221,9 +267,11 @@ class AmazonScraper(BaseScraper):
                     )
                 self.log.info("No orders found, saving cache to %s", cache_file)
                 order_list_html[year] = self.save_page_to_file(cache_file)
+                self.rand_sleep()
                 continue
             except TimeoutException:
                 pass
-            # TODO
+            # TODO: Scrape order pages with items with Selenium
             self.log.debug("Page %s har orders, but we do not know how to scrape them", curr_url)
+            self.rand_sleep()
         return order_list_html

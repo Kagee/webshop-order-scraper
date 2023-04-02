@@ -14,4 +14,5 @@ class AmazonDeScraper(AmazonScraper):
         # pylint: disable=invalid-name
         (self.cache,
          self.PDF_TEMP_FILENAME,
-         self.ORDER_LIST_CACHE_FILENAME_TEMPLATE) = self.setup_cache()
+         self.ORDER_LIST_CACHE_FILENAME_TEMPLATE,
+         self.ORDER_LIST_JSON_FILENAME_TEMPLATE) = self.setup_cache()

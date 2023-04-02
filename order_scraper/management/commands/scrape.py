@@ -2,9 +2,11 @@ from django.core.management.base import (BaseCommand, CommandError,
                                          no_translations)
 
 from .scrapers.aliexpress import AliExpressScraper
-from .scrapers.amazon_de import AmazonDeScraper
+from .scrapers.amazon_co_jp import AmazonCoJpScraper
 from .scrapers.amazon_co_uk import AmazonCoUkScraper
 from .scrapers.amazon_com import AmazonComScraper
+from .scrapers.amazon_de import AmazonDeScraper
+
 
 class Command(BaseCommand):
     help = 'Scrapes a webshop for orders using Selenium'
@@ -19,7 +21,8 @@ class Command(BaseCommand):
                     "aliexpress",
                     "amazon.de",
                     "amazon.co.uk",
-                    "amazon.com"
+                    "amazon.com",
+                    "amazon.co.jp",
                     ],
                 help="The online webshop to scrape orders from"
                 )
@@ -48,5 +51,7 @@ class Command(BaseCommand):
             AmazonCoUkScraper(self, options).command_scrape()
         elif options['webshop'] == "amazon.com":
             AmazonComScraper(self, options).command_scrape()
+        elif options['webshop'] == "amazon.co.jp":
+            AmazonCoJpScraper(self, options).command_scrape()
         else:
             raise CommandError("Unknown webshop: {options['webshop']}")
