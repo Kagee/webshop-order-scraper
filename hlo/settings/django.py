@@ -83,10 +83,14 @@ except ImportError:
             'level': 'WARNING',
         },
         'loggers': {
-            'order_scraper.management.commands.scrapers.ali': {
+            'order_scraper.management.commands.scrapers.aliexpress': {
                 'handlers': ['console', 'file'],
-                'level': 'DEBUG',
+                'level': 'DEBUG', # Will be overriden by --verbosity
             },
+            'order_scraper.management.commands.scrapers.amazon_de': {
+                'handlers': ['console', 'file'],
+                'level': 'DEBUG', # Will be overriden by --verbosity
+            }
         },
     }
 

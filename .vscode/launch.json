@@ -13,6 +13,8 @@
                 "scrape",
                 "aliexpress",
                 "--cache-orderlist"
+                "-v",
+                "3"
             ],
             "django": true,
             "justMyCode": true
@@ -25,6 +27,8 @@
             "args": [
                 "scrape",
                 "aliexpress",
+                "-v",
+                "3"
             ],
             "django": true,
             "justMyCode": true
@@ -37,7 +41,11 @@
             "args": [
                 "scrape",
                 "amazon.de",
-                "--cache-orderlist"
+                "--cache-orderlist",
+                "-v",
+                "3",
+                "--year",
+                "-1"
             ],
             "django": true,
             "justMyCode": true
@@ -50,6 +58,20 @@
             "args": [
                 "scrape",
                 "amazon.de",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "--help",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "--help",
             ],
             "django": true,
             "justMyCode": true

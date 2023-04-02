@@ -10,6 +10,8 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
 from urllib.parse import urlparse
+from webdriver_manager.firefox import \
+    GeckoDriverManager as FirefoxDriverManager
 
 from django.conf import settings
 # This is used in a Django command
@@ -24,15 +26,15 @@ from selenium.common.exceptions import (ElementClickInterceptedException,
                                         NoSuchElementException,
                                         NoSuchWindowException,
                                         StaleElementReferenceException,
-                                        TimeoutException, WebDriverException)
-from selenium.webdriver.common.action_chains import ActionChains
+                                        TimeoutException)
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from webdriver_manager.firefox import \
-    GeckoDriverManager as FirefoxDriverManager  # type: ignore
+from selenium.webdriver.common.action_chains import ActionChains
+
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service as FirefoxService
+
 
 from .base import BaseScraper
 
@@ -41,8 +43,6 @@ class AliExpressScraper(BaseScraper):
     ORDER_LIST_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
-    log = logging.getLogger(__name__)
-    cache_orderlist: bool
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -763,6 +763,12 @@ class AliExpressScraper(BaseScraper):
         Raises and alert in the browser if user action
         is required. 
         '''
+        # We (optionally) ask for this here and not earlier, since we
+        # may not need to go live
+        self.username = input("Enter Aliexpress username: ") \
+                if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
+        self.password = getpass("Enter Aliexpress password: ") \
+                if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
         url_re_escaped = re.escape(url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
 
@@ -819,18 +825,6 @@ class AliExpressScraper(BaseScraper):
         self.log.info("Waiting up to 120 seconds for %s", url_re_escaped)
         WebDriverWait(c, 120).until(EC.url_matches(url_re_escaped))
 
-    def browser_safe_quit(self):
-        '''
-        Safely closed the browser instance. (without exceptions)
-        '''
-        try:
-            if self.browser_status == "created":
-                self.log.info("Safely closing browser")
-                self.browser.quit()
-                self.browser_status = "quit"
-        except WebDriverException:
-            pass
-
 # Command functions, used in scrape.py
 
     def command_scrape(self):
@@ -876,10 +870,12 @@ class AliExpressScraper(BaseScraper):
 
 # Class init
 
-    def __init__(self, command: BaseCommand, cache_orderlist: bool):
-        super().__init__(command)
-        self.cache_orderlist = cache_orderlist
+    def __init__(self, command: BaseCommand, options: Dict):
+        super().__init__(command, options)
         self.command = command
+        self.cache_orderlist = options['cache_orderlist']
+        self.log = self.setup_logger(logging.getLogger(__name__))
+
         self.cache = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
                      Path('aliexpress')).resolve(),
