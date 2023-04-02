@@ -17,9 +17,9 @@ SCRAPER_ALI_ORDERS = env.list('SCRAPER_ALI_ORDERS', default=[])
 SCRAPER_ALI_ORDERS_SKIP = env.list('SCRAPER_ALI_ORDERS_SKIP', default=[])
 SCRAPER_ALI_ORDERS_MAX: int = env('SCRAPER_ALI_ORDERS_MAX', default=-1)
 
-# Config for scraper amazon.de command
-SCRAPER_AMZDE_USERNAME: str = env('SCRAPER_AMZDE_USERNAME', default=None)
-SCRAPER_AMZDE_PASSWORD: str = env('SCRAPER_AMZDE_PASSWORD', default=None)
-SCRAPER_AMZDE_ORDERS_MAX: int = env('SCRAPER_AMZDE_ORDERS_MAX', default=-1)
-SCRAPER_AMZDE_ORDERS = env.list('SCRAPER_AMZDE_ORDERS_SKIP', default=[])
-SCRAPER_AMZDE_ORDERS_SKIP = env.list('SCRAPER_AMZDE_ORDERS_SKIP', default=[])
+# Config for scraper amazon.* command
+SCRAPER_AMZ_USERNAME: str = env('SCRAPER_AMZ_USERNAME', default=None)
+SCRAPER_AMZ_PASSWORD: str = env('SCRAPER_AMZ_PASSWORD', default=None)
+SCRAPER_AMZ_ORDERS_MAX: int = env('SCRAPER_AMZ_ORDERS_MAX', default=-1)
+SCRAPER_AMZ_ORDERS = env.list('SCRAPER_AMZ_ORDERS_SKIP', default=[])
+SCRAPER_AMZ_ORDERS_SKIP = env.list('SCRAPER_AMZ_ORDERS_SKIP', default=[])

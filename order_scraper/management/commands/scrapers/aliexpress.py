@@ -1,6 +1,5 @@
 import base64
 import json
-import logging
 import os
 import re
 import subprocess
@@ -9,7 +8,6 @@ from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
-from urllib.parse import urlparse
 
 from django.conf import settings
 # This is used in a Django command
@@ -41,6 +39,7 @@ class AliExpressScraper(BaseScraper):
     ORDER_LIST_URL: Final[str] = 'https://www.aliexpress.com/p/order/index.html'
     ORDER_DETAIL_URL: Final[str] = 'https://www.aliexpress.com/p/order/detail.html?orderId={}'
     ORDER_TRACKING_URL: Final[str] = 'https://track.aliexpress.com/logisticsdetail.htm?tradeId={}'
+    LOGIN_PAGE_RE: Final[str] = r"^https://login\.aliexpress\.com"
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -102,13 +101,13 @@ class AliExpressScraper(BaseScraper):
 
             if 'thumbnail' not in order['items']:
                 order['items'][item_sku_id]['thumbnail'] = \
-                    self.thumb_template.format(
+                    self.THUMB_FILENAME_TEMPLATE.format(
                     order_id=order_id,
                     item_id=item_sku_id
                     )
             if 'snapshot' not in order['items']:
                 order['items'][item_sku_id]['snapshot'] = \
-                    self.snapshot_template.format(
+                    self.SNAPSHOT_FILENAME_TEMPLATE.format(
                     order_id=order_id,
                     item_id=item_sku_id
                     )
@@ -161,7 +160,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.info("Skipping order ID %s", order['id'])
                 continue
 
-            json_file = self.cache_file_template.format(order_id=order['id'], ext="json")
+            json_file = self.ORDER_CACHE_FILENAME_TEMPLATE.format(order_id=order['id'], ext="json")
             if os.access(Path(json_file), os.R_OK):
                 self.log.info("Json for order %s found, skipping", order['id'])
                 continue
@@ -169,7 +168,11 @@ class AliExpressScraper(BaseScraper):
             self.log.info("Scraping order ID %s", order['id'])
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
-            order['cache_file'] = self.cache_file_template.format(order_id=order['id'], ext="html")
+            order['cache_file'] = \
+                self.ORDER_CACHE_FILENAME_TEMPLATE.format(
+                    order_id=order['id'],
+                    ext="html"
+                )
             if os.access(order['cache_file'], os.R_OK):
                 with open(order['cache_file'], "r", encoding="utf-8") as ali_ordre:
                     self.log.debug(
@@ -215,10 +218,10 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         '''
-        if self.cache_orderlist and os.access(self.order_list_cache_file, os.R_OK):
-            self.log.info("Loading order list from cache: %s", self.order_list_cache_file)
+        if self.cache_orderlist and os.access(self.ORDER_LIST_CACHE_FILENAME, os.R_OK):
+            self.log.info("Loading order list from cache: %s", self.ORDER_LIST_CACHE_FILENAME)
             with open(
-                    self.order_list_cache_file,
+                    self.ORDER_LIST_CACHE_FILENAME,
                     "r",
                     encoding="utf-8") as ali:
                 return ali.read()
@@ -345,7 +348,7 @@ class AliExpressScraper(BaseScraper):
         '''
         url = self.ORDER_DETAIL_URL.format(order['id'])
         self.log.info("Visiting %s", url)
-        brws = self.browser_visit_page(url)
+        brws = self.browser_visit_page(url, False)
 
         self.log.info("Waiting for page load")
         time.sleep(3)
@@ -487,7 +490,7 @@ class AliExpressScraper(BaseScraper):
         # image via some js trickery
         thumb_data = thumb.screenshot_as_base64
         order['items'][item_sku_id]['thumbnail'] = \
-            self.thumb_template.format(
+            self.THUMB_FILENAME_TEMPLATE.format(
             order_id=order['id'],
             item_id=item_sku_id
             )
@@ -500,7 +503,7 @@ class AliExpressScraper(BaseScraper):
         current item id+item sku to PDF.
         '''
         order['items'][item_sku_id]['snapshot'] = \
-                    self.snapshot_template.format(
+                    self.SNAPSHOT_FILENAME_TEMPLATE.format(
                     order_id=order['id'],
                     item_id=item_sku_id
                     )
@@ -588,14 +591,14 @@ class AliExpressScraper(BaseScraper):
                 tracking_html (HtmlElement): The HTML from this order['id'] tracking page
         '''
         order['tracking_cache_file'] = \
-                self.cache_tracking_file_template.format(order_id=order['id'])
+                self.TRACKING_CACHE_FILENAME_TEMPLATE.format(order_id=order['id'])
         if os.access(order['tracking_cache_file'], os.R_OK):
             with open(order['tracking_cache_file'], "r", encoding="utf-8") as ali_ordre:
                 self.log.debug(
                     "Loading individual order tracking data cache: %s", 
                     order['tracking_cache_file'])
                 return fromstring(ali_ordre.read())
-        self.browser_visit_page(self.ORDER_TRACKING_URL.format(order['id']))
+        self.browser_visit_page(self.ORDER_TRACKING_URL.format(order['id']), False)
         time.sleep(1)
         self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.debug("Waiting 10 seconds for tracking page load")
@@ -622,7 +625,7 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         '''
-        brws = self.browser_visit_page(self.ORDER_LIST_URL)
+        brws = self.browser_visit_page(self.ORDER_LIST_URL, False)
         wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
         try:
@@ -686,7 +689,7 @@ class AliExpressScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.info("All completed orders loaded (hopefully)")
         with open(
-                self.order_list_cache_file,
+                self.ORDER_LIST_CACHE_FILENAME,
                 "w",
                 encoding="utf-8") as ali:
             html = fromstring(brws.page_source)
@@ -695,22 +698,7 @@ class AliExpressScraper(BaseScraper):
 
 # Browser util methods
 
-    def browser_visit_page(self, url):
-        '''
-        Instructs the browser to visit url. 
 
-        If there is no browser instance, creates one.
-        If login is required, does that.
-
-            Returns:
-                browser: (WebDriver) the browser instance
-        '''
-        self.browser = self.browser_get_instance()
-        self.browser.get(url)
-        if urlparse(self.browser.current_url).hostname == "login.aliexpress.com":
-            # We were redirected to the login page
-            self.browser_login(url)
-        return self.browser
 
     def browser_get_instance(self):
         '''
@@ -804,7 +792,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.warning('Please complete log in to Aliexpress in the browser window..')
                 WebDriverWait(c, 30).until_not(
                         EC.alert_is_present(),
-                        "Please close altert an continue login!"
+                        "Please close alert an continue login!"
                         )
                 self.log.info("Waiting up to 120 seconds for %s", order_list_url_re_espaced)
                 WebDriverWait(c, 120).until(EC.url_matches(order_list_url_re_espaced))
@@ -881,10 +869,6 @@ class AliExpressScraper(BaseScraper):
             "ITEMS":  (Path(settings.SCRAPER_CACHE_BASE) / 
                        Path('aliexpress') / Path('items')).resolve(),
             }
-        try:
-            os.makedirs(Path(settings.SCRAPER_CACHE_BASE))
-        except FileExistsError:
-            pass
         for key in self.cache:  # pylint: disable=consider-using-dict-items
             self.log.debug("Cache folder %s: %s", key, self.cache[key])
             try:
@@ -892,14 +876,15 @@ class AliExpressScraper(BaseScraper):
             except FileExistsError:
                 pass
 
-        self.snapshot_template = str(self.cache['ITEMS'] /
+        # pylint: disable=invalid-name
+        self.SNAPSHOT_FILENAME_TEMPLATE = str(self.cache['ITEMS'] /
                                       Path("{order_id}/snapshot-{order_id}-{item_id}.pdf"))
-        self.thumb_template = str(self.cache['ITEMS'] /
+        self.THUMB_FILENAME_TEMPLATE = str(self.cache['ITEMS'] /
                                   Path("{order_id}/thumb-{order_id}-{item_id}.png"))
-        self.cache_file_template = str(self.cache['ORDERS'] /
+        self.ORDER_CACHE_FILENAME_TEMPLATE = str(self.cache['ORDERS'] /
                                        Path("order-{order_id}.{ext}"))
-        self.cache_tracking_file_template = str(self.cache['TRACKING'] /
+        self.TRACKING_CACHE_FILENAME_TEMPLATE = str(self.cache['TRACKING'] /
                                                 Path("tracking-{order_id}.html"))
 
-        self.order_list_cache_file = self.cache['BASE'] / Path('order-list.html')
-        self.pdf_temp_file = self.cache['BASE'] / Path('temporary-pdf.pdf')
+        self.ORDER_LIST_CACHE_FILENAME = self.cache['BASE'] / Path('order-list.html')
+        self.PDF_TEMP_FILENAME = self.cache['BASE'] / Path('temporary-pdf.pdf')

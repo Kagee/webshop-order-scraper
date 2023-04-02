@@ -12,7 +12,7 @@
             "args": [
                 "scrape",
                 "aliexpress",
-                "--cache-orderlist"
+                "--cache-orderlist",
                 "-v",
                 "3"
             ],
@@ -45,19 +45,77 @@
                 "-v",
                 "3",
                 "--year",
-                "-1"
+                "2012,2011,2013"
             ],
             "django": true,
             "justMyCode": true
         },
         {
-            "name": "Scrape Amacon.de (nocache)",
+            "name": "Scrape Amazon.de (nocache)",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
                 "amazon.de",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.co.uk",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.co.uk",
+                "--cache-orderlist",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.co.uk (nocache)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.co.uk",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.com",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.com",
+                "--cache-orderlist",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.com (nocache)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon.com",
                 "-v",
                 "3"
             ],
