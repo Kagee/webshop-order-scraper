@@ -1,9 +1,10 @@
 import logging
-import time
 import random
+import time
 from logging import Logger
 from pathlib import Path
-from typing import Dict, Final
+from typing import Dict
+
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from selenium import webdriver
@@ -12,6 +13,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.firefox import \
     GeckoDriverManager as FirefoxDriverManager
+
 
 class BaseScraper(object):
     browser: webdriver.Firefox
@@ -29,7 +31,8 @@ class BaseScraper(object):
         self.command = command
         self.options = options
 
-    def setup_logger(self, log: Logger) -> Logger:
+    def setup_logger(self, logname: str) -> Logger:
+        log = logging.getLogger(logname)
         if self.options['verbosity'] == 0:
             # 0 = minimal output
             log.setLevel(logging.ERROR)

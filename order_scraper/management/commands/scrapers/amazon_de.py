@@ -1,20 +1,9 @@
 import datetime
-import getpass
 import logging
-import random
-import re
-import time
 from typing import Dict, Final
-
 
 # This is used in a Django command
 from django.core.management.base import BaseCommand, CommandError
-from django.core.serializers.json import DjangoJSONEncoder
-from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
-
 
 from .amazon import AmazonScraper
 
@@ -33,7 +22,7 @@ class AmazonDeScraper(AmazonScraper):
         super().__init__(command, options)
         self.command = command
         self.cache_orderlist = options['cache_orderlist']
-        self.log = self.setup_logger(logging.getLogger(__name__))
+        self.log = self.setup_logger(__name__)
         if options['year'] != -1 and \
             (options['year'] > datetime.date.today().year or options['year'] < 2011):
             self.log.critical(

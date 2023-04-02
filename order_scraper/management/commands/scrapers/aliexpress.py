@@ -10,8 +10,6 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
 from urllib.parse import urlparse
-from webdriver_manager.firefox import \
-    GeckoDriverManager as FirefoxDriverManager
 
 from django.conf import settings
 # This is used in a Django command
@@ -27,14 +25,14 @@ from selenium.common.exceptions import (ElementClickInterceptedException,
                                         NoSuchWindowException,
                                         StaleElementReferenceException,
                                         TimeoutException)
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
-
+from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
-
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from webdriver_manager.firefox import \
+    GeckoDriverManager as FirefoxDriverManager
 
 from .base import BaseScraper
 
@@ -206,7 +204,6 @@ class AliExpressScraper(BaseScraper):
 
             with open(json_file, "w", encoding="utf-8") as jsonfile:
                 json_string = json.dumps(order, indent=4, cls=DjangoJSONEncoder)
-                print(json_string)
                 jsonfile.write(json_string)
         self.browser_safe_quit()
 
@@ -467,7 +464,6 @@ class AliExpressScraper(BaseScraper):
     def browser_save_item_thumbnail(self, order, thumb, item_sku_id, move_mouse = False):
         # Find and hide the snapshot "camera" graphic that
         # overlays the thumbnail
-        print(thumb)
         snapshot_parent = thumb.find_element(
             By.XPATH,
             './/div[@class="order-detail-item-snapshot"]')
@@ -475,8 +471,7 @@ class AliExpressScraper(BaseScraper):
             "arguments[0].setAttribute('style', 'display: none;')", 
             snapshot_parent
             )
-        #self.browser.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-        print(thumb)
+
         # move the "mouse" off the element so we do not get
         # a floating text box
         #random = thumb.find_element(By.XPATH, './/parent::*')
@@ -874,7 +869,7 @@ class AliExpressScraper(BaseScraper):
         super().__init__(command, options)
         self.command = command
         self.cache_orderlist = options['cache_orderlist']
-        self.log = self.setup_logger(logging.getLogger(__name__))
+        self.log = self.setup_logger(__name__)
 
         self.cache = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 

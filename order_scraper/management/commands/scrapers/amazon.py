@@ -1,14 +1,9 @@
 import re
-from typing import Dict, Final
 from getpass import getpass
+from typing import Dict, Final
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from selenium.common.exceptions import (ElementClickInterceptedException,
-                                        NoAlertPresentException,
-                                        NoSuchElementException,
-                                        NoSuchWindowException,
-                                        StaleElementReferenceException,
-                                        TimeoutException)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
