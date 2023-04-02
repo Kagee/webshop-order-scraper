@@ -2,11 +2,7 @@ from django.core.management.base import (BaseCommand, CommandError,
                                          no_translations)
 
 from .scrapers.aliexpress import AliExpressScraper
-from .scrapers.amazon_co_jp import AmazonCoJpScraper
-from .scrapers.amazon_co_uk import AmazonCoUkScraper
-from .scrapers.amazon_com import AmazonComScraper
-from .scrapers.amazon_de import AmazonDeScraper
-
+from .scrapers.amazon import AmazonScraper
 
 class Command(BaseCommand):
     help = 'Scrapes a webshop for orders using Selenium'
@@ -23,6 +19,8 @@ class Command(BaseCommand):
                     "amazon.co.uk",
                     "amazon.com",
                     "amazon.co.jp",
+                    "amazon.es",
+                    "amazon.se"
                     ],
                 help="The online webshop to scrape orders from"
                 )
@@ -52,12 +50,39 @@ class Command(BaseCommand):
         if options['webshop'] == "aliexpress":
             AliExpressScraper(self, options).command_scrape()
         elif options['webshop'] == "amazon.de":
-            AmazonDeScraper(self, options).command_scrape()
+            AmazonScraper(self, 'de', options).command_scrape()
         elif options['webshop'] == "amazon.co.uk":
-            AmazonCoUkScraper(self, options).command_scrape()
+            AmazonScraper(self, 'co.uk', options).command_scrape()
         elif options['webshop'] == "amazon.com":
-            AmazonComScraper(self, options).command_scrape()
+            AmazonScraper(self, 'com', options).command_scrape()
         elif options['webshop'] == "amazon.co.jp":
-            AmazonCoJpScraper(self, options).command_scrape()
+            AmazonScraper(self, 'co.jp', options).command_scrape()
+        elif options['webshop'] == "amazon.es":
+            AmazonScraper(self, 'es', options, archived="No hay pedidos").command_scrape()
+        elif options['webshop'] == "amazon.se":
+            AmazonScraper(self, 'se', options, archived="Det finns inga arkiverade").command_scrape()
+
+        #
+        # https://en.wikipedia.org/wiki/Amazon_(company)#Amazon.com
+        #
+        # Will *probably* work with minor monifications, but not tested:
+        # amazon.com.br - Brazil
+        # amazon.ca - Canada
+        # amazon.com.mx - Mexico
+        # amazon.in - India
+        # amazon.sg - Singapore
+        # amazon.com.tr - Turkey
+        # amazon.com.be - Belgium
+        # amazon.fr - France
+        # amazon.it - Italy
+        # amazon.nl - Netherlands
+        # amazon.pl - Poland
+        # amazon.au - Australia
+        #
+        # More than minor modifications may be required
+        # amazon.eg - Egypt - Formerly souq.com, modifications may be required
+        # amazon.cn - China -  Formerly joyo.com, modifications may be required
+        # amazon.sa - Saudi Arabia - Formerly souq.com, modifications may be required
+        # amazon.ae - United Arab Emirates - Formerly souq.com, modifications may be required
         else:
             raise CommandError("Unknown webshop: {options['webshop']}")

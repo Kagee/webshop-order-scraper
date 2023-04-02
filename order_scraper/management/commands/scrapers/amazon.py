@@ -1,5 +1,7 @@
 import datetime
 import json
+import math
+import sys
 import os
 import re
 from getpass import getpass
@@ -10,7 +12,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.core.serializers.json import DjangoJSONEncoder
 from lxml.html.soupparser import fromstring
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
@@ -19,7 +21,7 @@ from .base import BaseScraper
 
 
 class AmazonScraper(BaseScraper):
-    TLD: str = "test"
+    TLD: Final[str] = "test"
     LOGIN_PAGE_RE: Final[str]
     ORDER_LIST_URL_TEMPLATE: Final[str]
     ORDER_LIST_ARCHIVED_URL_TEMPLATE: Final[str]
@@ -33,13 +35,16 @@ class AmazonScraper(BaseScraper):
             '[contains(@class, "a-text-center")]' \
                 '[contains(@class, "a-section")]'
 
-    def __init__(self, command: BaseCommand, options: Dict):
+    def __init__(self, command: BaseCommand, tld: str, options: Dict, archived = 'There are no'):
         super().__init__(command, options)
+
         self.log = self.setup_logger(__name__)
         self.command = command
+        self.archived = archived
         self.cache_orderlist = options['cache_orderlist']
 
         # pylint: disable=invalid-name
+        self.TLD = tld
         self.LOGIN_PAGE_RE = fr'^https://www\.amazon\.{self.TLD}/ap/signin'
         self.ORDER_LIST_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/gp/css/order-history?'
@@ -65,6 +70,10 @@ class AmazonScraper(BaseScraper):
             self.YEARS = sorted(options['year'])
         if options['archived']:
             self.YEARS.append("archived")
+        (self.cache,
+         self.PDF_TEMP_FILENAME,
+         self.ORDER_LIST_CACHE_FILENAME_TEMPLATE,
+         self.ORDER_LIST_JSON_FILENAME_TEMPLATE) = self.setup_cache()
 
 
     def setup_cache(self):
@@ -124,7 +133,7 @@ class AmazonScraper(BaseScraper):
                         found_year = True
                         self.log.debug("Found cache %s, index %s", year, start_index)
                         with open(html_file, "r", encoding="utf-8") as olf:
-                            order_list_html[year] = fromstring(olf.read())
+                            order_list_html[(year, start_index)] = fromstring(olf.read())
                         start_index += 10
                     else:
                         break
@@ -220,19 +229,23 @@ class AmazonScraper(BaseScraper):
 
     def command_scrape(self) -> None:
         order_lists_html = self.load_order_lists_html()
+        for key in order_lists_html:
+            print(key)
+        return
         order_lists = self.lxml_parse_order_lists_html(order_lists_html)
         self.save_order_lists_to_json(order_lists)
         self.browser_safe_quit()
 
     def lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
         order_lists = {}
-        if order_lists_html: 
+        if order_lists_html:
             for key in order_lists_html:
                 html = order_lists_html[key]
                 # TODO: Detekter tomme archive-html riktig
                 empty_list = html.xpath(self.EMPTY_ORDER_PATH_XPATH)
                 if len(empty_list) == 1:
                     order_lists[key] = {}
+                    self.log.debug("%s has not orders, returning empty dict", key)
                     # This order page is empty
                 else:
                     # TODO: Scrape order pages with items with LXML
@@ -241,7 +254,110 @@ class AmazonScraper(BaseScraper):
             self.log.debug("No order HTML to parse")
         return order_lists
 
-    # TypeError: Too few arguments for typing.Dict; actual 1, expected 2
+    def save_cache_file(self, year, start_index):
+        cache_file = self.ORDER_LIST_CACHE_FILENAME_TEMPLATE.format(
+            year=year,
+            start_index=start_index
+            )
+        self.log.info("Saving cache to %s and "
+                        "appending to html list", cache_file)
+        self.rand_sleep()
+        return self.save_page_to_file(cache_file)
+
+    def browser_scrape_order_list_page(self, year, start_index, order_list_html):
+        '''
+        Returns False when there are no more pages?
+        '''
+        self.log.debug("Scraping order list for %s, index %s", year, start_index)
+        if year != "archived":
+            curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
+                year=year,
+                start_index=start_index
+                )
+        else:
+            curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
+                year=year,
+                start_index=start_index
+                )
+        self.log.debug("Visiting %s", curr_url)
+        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
+        wait2 = WebDriverWait(brws, 2)
+
+        empty_order_list = True
+
+        if year == 'archived':
+            # Apparently we always find this on archived order lists
+            maybe_empty_order = wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,
+                        self.EMPTY_ORDER_PATH_XPATH
+                        )
+                    ))
+            if self.archived in maybe_empty_order.text:
+                empty_order_list = True
+                self.log.info("No archived orders")
+            else:
+                empty_order_list = False
+
+        else:
+            try:
+                # On a normal order list, if we find this,
+                # the order list is empty
+                wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,
+                        self.EMPTY_ORDER_PATH_XPATH
+                        )
+                    ))
+            except TimeoutException:
+                # This trigger if we *don't* find the element,
+                # indicating a non-empty normal order list
+                empty_order_list = False
+
+        if empty_order_list:
+            self.log.info("No orders on %s", year)
+            order_list_html[(year, start_index)] = self.save_cache_file(year, start_index)
+            return False
+
+        # Non-empty order page
+        self.log.debug("Page %s has orders", curr_url)
+        try:
+            num_orders = brws.find_element(By.XPATH,
+                            "//span[contains(@class, 'num-orders')]"
+                            )
+            num_orders: int = int(re.match(r'^(\d+)', num_orders.text).group(1))
+        except NoSuchElementException:
+            num_orders = 0
+
+        self.log.debug(
+            "Total of %s orders, probably %s page(s)", 
+            num_orders, math.ceil(num_orders/10))
+
+        found_next_button = False
+        next_button_works = False
+        try:
+            next_button = brws.find_element(By.XPATH,
+                        "//li[contains(@class, 'a-last')]"
+                        )
+            found_next_button = True
+            next_button.find_element(By.XPATH,
+                        ".//a"
+                        )
+            next_button_works = True
+        except NoSuchElementException:
+            pass
+        order_list_html[(year, start_index)] = self.save_cache_file(year, start_index)
+        if num_orders <= 10:
+            self.log.debug("This order list (%s) has only one page", year)
+            if found_next_button:
+                self.log.critical(
+                    "But we found a \"Next\" button. "
+                    "Don't know how to handle this...")
+                sys.exit()
+            return False
+
+        return found_next_button and next_button_works
+
     def browser_scrape_order_lists_html(self, years: List):
         '''
         Uses Selenium to visit, load, save and then
@@ -250,62 +366,15 @@ class AmazonScraper(BaseScraper):
             Returns:
                 order_lists_html (Dict[str]): A list of the HTML from the order list pages
         '''
-        self.log.debug("Scraping %s using Selenium", years)
+        self.log.debug("Scraping %s using Selenium", ", ".join(str(x) for x in years))
         order_list_html = {}
         for year in years:
-            self.log.debug("Scraping order list")
+            more_pages = True
             start_index = 0
-            if year != "archived":
-                curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
-                    year=year,
-                    start_index=start_index
-                    )
-            else:
-                curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
-                    year=year,
-                    start_index=start_index
-                    )
-            self.log.debug("Visiting %s", curr_url)
-            # TODO Finish support of archived-url
-            brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
-            # wait10 = WebDriverWait(brws, 10)
-            def save_cache_file(year, start_index):
-                cache_file = self.ORDER_LIST_CACHE_FILENAME_TEMPLATE.format(
-                    year=year,
-                    start_index=start_index
-                    )
-                self.log.info("No orders found, "
-                              "saving cache to %s and "
-                              "appending to html list", cache_file)
+            while more_pages:
+                more_pages = self.browser_scrape_order_list_page(year, start_index, order_list_html)
+                start_index += 10
                 self.rand_sleep()
-                return self.save_page_to_file(cache_file)
-                
-
-            try:
-                maybe_empty_order = WebDriverWait(brws, 3).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH,
-                         self.EMPTY_ORDER_PATH_XPATH
-                        )
-                    ))
-                if year == 'archived':
-                    if 'There are no' in maybe_empty_order.text:
-                        self.log.info("No archived orders")
-                        order_list_html[year] = save_cache_file(year, start_index)
-                        continue
-                    else:
-                        self.log.debug("Page %s har orders, but we do not know how to scrape them", curr_url)
-                        self.rand_sleep()
-                        continue
-                        # Not-empty archived
-                # No orders, save html and return
-                order_list_html[year] = save_cache_file(year, start_index)
-                continue
-            except TimeoutException:
-                pass
-            # TODO: Scrape order pages with items with Selenium
-            self.log.debug("Page %s har orders, but we do not know how to scrape them", curr_url)
-            self.rand_sleep()
         return order_list_html
 
     def guess_amazon_tld_based_on_order_number(self, order_number: str):
@@ -316,15 +385,14 @@ class AmazonScraper(BaseScraper):
             three = int(three)
         except ValueError:
             return "UNKNOWN"
-        if (three >= 100 and three < 200):
+        if three == 2 or \
+            (three >= 100 and three < 200):
             return "com"
-        elif (three >= 200 and three < 300):
+        elif three == 26 or \
+            (three >= 200 and three < 300):
             return "co.uk"
         if three == 28 or \
             (three >= 300 and three < 400):
             return "de"
         elif (three >= 500 and three < 600):
             return "co.jp"
-
-
-

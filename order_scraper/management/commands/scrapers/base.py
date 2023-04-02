@@ -1,15 +1,16 @@
 import logging
+import os
 import random
+import re
 import time
 from logging import Logger
 from pathlib import Path
 from typing import Dict
-import re
-import os
-from lxml.etree import tostring
-from lxml.html.soupparser import fromstring
+
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from lxml.etree import tostring
+from lxml.html.soupparser import fromstring
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.firefox.options import Options
