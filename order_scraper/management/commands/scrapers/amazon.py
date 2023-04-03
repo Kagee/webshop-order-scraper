@@ -376,23 +376,3 @@ class AmazonScraper(BaseScraper):
                 start_index += 10
                 self.rand_sleep()
         return order_list_html
-
-    def guess_amazon_tld_based_on_order_number(self, order_number: str):
-        three = order_number[:3].lower()
-        if three == "d01":
-            return "DIGITAL"
-        try:
-            three = int(three)
-        except ValueError:
-            return "UNKNOWN"
-        if three == 2 or \
-            (three >= 100 and three < 200):
-            return "com"
-        elif three == 26 or \
-            (three >= 200 and three < 300):
-            return "co.uk"
-        if three == 28 or \
-            (three >= 300 and three < 400):
-            return "de"
-        elif (three >= 500 and three < 600):
-            return "co.jp"
