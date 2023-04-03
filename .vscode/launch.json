@@ -40,13 +40,31 @@
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
-                "amazon.de",
+                "amazon",
                 "--cache-orderlist",
                 "-v",
                 "3",
-                "--year",
-                "-1",
-                "--archived"
+                "-y",
+                "2017,2023",
+                "--not-archived"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Scrape Amazon.de",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "amazon",
+                "--cache-orderlist",
+                "-v",
+                "3",
+                "-y",
+                "2017,2023",
+                "--not-archived"
             ],
             "django": true,
             "justMyCode": true
@@ -58,13 +76,12 @@
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
-                "amazon.co.uk",
+                "amazon",
                 "--cache-orderlist",
+                "--tld",
+                "co.uk",
                 "-v",
                 "3",
-                "--year",
-                "-1",
-                "--archived"
             ],
             "django": true,
             "justMyCode": true
@@ -76,14 +93,15 @@
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
-                "amazon.com",
+                "amazon",
+                "--tld",
+                "com",
                 "--cache-orderlist",
                 "-v",
                 "3",
-                "--year",
+                // "--year",
                 // 2018 => 2 orders, 1 page (1 gift)
-                "-1",
-                "--archived"
+
             ],
             "django": true,
             "justMyCode": true
@@ -95,49 +113,12 @@
             "program": "${workspaceFolder}${pathSeparator}manage.py",
             "args": [
                 "scrape",
-                "amazon.co.jp",
+                "amazon",
+                "--tld",
+                "co.jp",
                 "--cache-orderlist",
                 "-v",
                 "3",
-                "--year",
-                "-1",
-                "--archived"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.es",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon.es",
-                "--cache-orderlist",
-                "-v",
-                "3",
-                "--year",
-                "-1",
-                "--archived"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.se",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon.se",
-                "--cache-orderlist",
-                "-v",
-                "3",
-                "--year",
-                "-1",
-                "--archived"
             ],
             "django": true,
             "justMyCode": true
