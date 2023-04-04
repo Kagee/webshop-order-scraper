@@ -1,11 +1,12 @@
 import logging
 import os
+import pprint
 import random
 import re
 import time
 from logging import Logger
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -32,7 +33,7 @@ class BaseScraper(object):
     options: Dict
     LOGIN_PAGE_RE = r'.+login.example.com.*'
     PDF_TEMP_FILENAME: str
-
+    PDF_TEMP_FOLDER: str
     def __init__(self, command: BaseCommand, options: Dict):
         self.command = command
         self.options = options
@@ -85,7 +86,14 @@ class BaseScraper(object):
             self.log.debug("Printer set to %s", settings.SCRAPER_PDF_PRINTER)
             printer_name = settings.SCRAPER_PDF_PRINTER.replace(" ","_")
             options.set_preference(f'print.printer_{ printer_name }.print_to_file', True)
-            self.log.debug("PDF temporary file is %s", str(self.PDF_TEMP_FILENAME))
+            options.set_preference("browser.download.folderList", 2)
+            options.set_preference("browser.download.manager.showWhenStarting", False)
+            options.set_preference("browser.download.alwaysOpenInSystemViewerContextMenuItem", False)
+            options.set_preference("browser.download.alwaysOpenPanel", False)
+            options.set_preference("browser.download.dir", str(self.PDF_TEMP_FOLDER))
+            options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/pdf")
+            options.set_preference("pdfjs.disabled", True)
+            self.log.debug("PDF temporary file is %s", str(self.PDF_TEMP_FOLDER))
             options.set_preference(
                 f'print.printer_{ printer_name }.print_to_filename', str(self.PDF_TEMP_FILENAME))
             options.set_preference(
@@ -136,6 +144,9 @@ class BaseScraper(object):
 
     def browser_login(self, url):
         raise NotImplementedError("Child does not implement browser_login()")
+
+    def pprint(self, value: Any) -> None:
+        pprint.PrettyPrinter(indent=2).pprint(value)
 
     def rand_sleep(self, min_seconds: int = 0, max_seconds: int = 5) -> None:
         """

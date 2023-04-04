@@ -1,8 +1,10 @@
+import base64
 import datetime
 import json
 import math
 import os
 import re
+import time
 from getpass import getpass
 from pathlib import Path
 from typing import Dict, Final, List
@@ -13,6 +15,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
@@ -24,7 +27,7 @@ class AmazonScraper(BaseScraper):
     LOGIN_PAGE_RE: Final[str]
     ORDER_LIST_URL_TEMPLATE: Final[str]
     ORDER_LIST_ARCHIVED_URL_TEMPLATE: Final[str]
-    ORDER_DETAIL_URL_TEMPLATE: Final[str]
+    ORDER_URL_TEMPLATE: Final[str]
     YEARS: Final[List]
     ORDER_LIST_CACHE_FILENAME_TEMPLATE: str
     ORDER_LIST_JSON_FILENAME_TEMPLATE: str
@@ -57,20 +60,210 @@ class AmazonScraper(BaseScraper):
             (f'https://www.amazon.{self.TLD}/gp/your-account/order-history'
                 '?&orderFilter=archived&startIndex={start_index}')
         # The double {{order_id}} is intentional
-        self.ORDER_DETAIL_URL_TEMPLATE = \
-            f'https://www.amazon.{self.TLD}/your-account/order-details?ie=UTF8&orderID={{order_id}}'
+        self.ORDER_URL_TEMPLATE = \
+            (f'https://www.amazon.{self.TLD}/'
+            'gp/your-account/order-details/?ie=UTF8&orderID={order_id}')
 
         (self.cache,
          self.PDF_TEMP_FILENAME,
+         self.PDF_TEMP_FOLDER,
          self.ORDER_LIST_CACHE_FILENAME_TEMPLATE,
-         self.ORDER_LIST_JSON_FILENAME_TEMPLATE) = self.setup_cache()
+         self.ORDER_LIST_JSON_FILENAME_TEMPLATE,
+         self.ORDER_JSON_FILENAME_TEMPLATE) = self.setup_cache()
 
     def command_scrape(self) -> None:
-        order_lists_html = self.load_order_lists_html()
-        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
-        self.save_order_lists_to_json(order_lists)
+        #order_lists_html = self.load_order_lists_html()
+        #order_lists = self.lxml_parse_order_lists_html(order_lists_html)
+        #self.save_order_lists_to_json(order_lists)
+        order_lists: Dict[str, Dict] = {}
+        counter = 0
+        for year in self.YEARS:
+            self.log.debug("Year: %s", year)
+            order_lists[year] = self.order_list_json( year, read = True)
+            for order_id in sorted(order_lists[year]):
+                if order_id.startswith("D01"):
+                    self.log.info(
+                            "Digital orders (%s) is PITA to scrape, "
+                            "so we don't support them for now", 
+                            order_id)
+                    continue
+                if (len(settings.SCRAPER_AMZ_ORDERS) and \
+                    order_id not in settings.SCRAPER_AMZ_ORDERS) or \
+                        order_id in settings.SCRAPER_AMZ_ORDERS_SKIP:
+                    self.log.info("Skipping order ID %s", order_id)
+                    continue
+                counter += 1
+                if settings.SCRAPER_AMZ_ORDERS_MAX > 0:
+                    if counter > settings.SCRAPER_AMZ_ORDERS_MAX:
+                        self.log.info(
+                            "Scraped %s order(s), breaking", 
+                            settings.SCRAPER_ALI_ORDERS_MAX)
+                        break
+                self.parse_order(order_id, order_lists[year][order_id])
+
         self.browser_safe_quit()
 
+    def parse_order(self, order_id: Dict, order: Dict):
+        cache_dir = self.cache['ORDERS'] / Path(order_id)
+        html_cache = cache_dir / Path(f"{order_id}.html")
+        self.pprint(order)
+        try:
+            os.makedirs(cache_dir)
+        except FileExistsError:
+            pass
+        if os.access(html_cache, os.R_OK):
+            self.log.debug("Found HTML cache for order %s", order_id)
+        else:
+            self.log.debug("Did not find HTML cache for order %s", order_id)
+            order.update(self.browser_scrape_order(order_id))
+        self.pprint(order)
+
+    def browser_scrape_order(self, order_id: str) -> Dict:
+        curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
+        self.log.debug("Visiting %s", curr_url)
+        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
+        wait2 = WebDriverWait(brws, 2)
+        invoice_a = ("//a[contains(@class, 'a-popover-trigger')]"
+                        "/span[contains(text(), 'Invoice')]/ancestor::a")
+        # Need to wait a tiny bit for the JS
+        # connected to this link to load
+        time.sleep(2)
+        wait2.until(
+                EC.presence_of_element_located(
+                    (By.XPATH,
+                    invoice_a
+                    )
+                ), "Timeout waiting for Invoice").click()
+        self.log.debug("Visiting %s", curr_url)
+        time.sleep(1)
+        # then this should appear
+        invoice_wrapper: WebElement = wait2.until(
+                EC.presence_of_element_located(
+                    (By.XPATH,
+                    "//div[contains(@class, 'a-popover-wrapper')]"
+                    )
+                ), "Timeout waiting for invoice wrapper")
+        order_handle = brws.current_window_handle
+        for invoice_item in invoice_wrapper.find_elements(By.TAG_NAME, 'a'):
+            text = invoice_item.text.replace('\r\n', ' ').replace('\r', '').replace('\n', ' ')
+            href = invoice_item.get_attribute('href')
+            text_file_safe = base64.urlsafe_b64encode(
+                    text.encode("utf-8")).decode("utf-8")
+            print(text, href)
+            order_summary = re.match(r'.+summary/print.+', href)
+            download_pdf = re.match(r'.+/download/.+\.pdf', href)
+            if order_summary:
+                self.log.debug("This is the order summary. Open, print to PDF, close.")
+            elif download_pdf:
+                self.log.debug("This is some invoice PDF. Get a good reference somehow.")
+                #invoice_item.click()
+                for pdf in self.PDF_TEMP_FOLDER.glob('*.pdf'):
+                    os.remove(pdf)
+                brws.switch_to.new_window()
+                # Can't use .get(...) here, since Selenium appears to
+                # be confused by the fact that Firefox downloads the PDF
+                brws.execute_script("""
+                    setTimeout(() => {
+                        document.location.href = arguments[0];
+                    }, "500");
+                    """,
+                    href
+                    )
+                self.log.debug("Opened pdf")
+                ## Look for PDF in folder
+                pdf = list(self.PDF_TEMP_FOLDER.glob('*.pdf'))
+                while not pdf:
+                    print(pdf)
+                    pdf = list(self.PDF_TEMP_FOLDER.glob('*.pdf'))
+                    time.sleep(3)
+                # We have a PDF, move it to  a proper name
+                print(pdf)
+                brws.close()
+        brws.switch_to.window(order_handle)
+        time.sleep(120)
+        return {}
+
+    def browser_scrape_individual_order_list_page(self, year, start_index, order_list_html):
+        '''
+        Returns False when there are no more pages
+        '''
+        self.log.debug("Scraping order list for %s, index %s", year, start_index)
+        if year != "archived":
+            curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
+                year=year,
+                start_index=start_index
+                )
+        else:
+            curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
+                year=year,
+                start_index=start_index
+                )
+
+        self.log.debug("Visiting %s", curr_url)
+        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
+        wait2 = WebDriverWait(brws, 2)
+
+        empty_order_list = True
+
+        try:
+            wait2.until(
+                EC.presence_of_element_located(
+                    (By.XPATH,
+                    self.ORDER_CARD_XPATH
+                    )
+                ))
+            # If we found any order items
+            # the order list is not empty
+            empty_order_list = False
+        except TimeoutException:
+            pass
+
+        if empty_order_list:
+            # Empty order list, shotcut and save
+            self.log.info("No orders on %s", year)
+            order_list_html[(year, start_index)] = \
+                self.save_order_list_cache_html_file(year, start_index)
+            return False
+
+        # Non-empty order page
+        self.log.debug("Page %s has orders", curr_url)
+        try:
+            num_orders = brws.find_element(By.XPATH,
+                            "//span[contains(@class, 'num-orders')]"
+                            )
+            num_orders: int = int(re.match(r'^(\d+)', num_orders.text).group(1))
+        except NoSuchElementException:
+            num_orders = 0
+
+        self.log.debug(
+            "Total of %s orders, probably %s page(s)", 
+            num_orders, math.ceil(num_orders/10))
+
+        found_next_button = False
+        next_button_works = False
+        try:
+            next_button = brws.find_element(By.XPATH,
+                        "//li[contains(@class, 'a-last')]"
+                        )
+            found_next_button = True
+            next_button.find_element(By.XPATH,
+                        ".//a"
+                        )
+            next_button_works = True
+        except NoSuchElementException:
+            pass
+        order_list_html[(year, start_index)] = \
+            self.save_order_list_cache_html_file(year, start_index)
+        if num_orders <= 10:
+            self.log.debug("This order list (%s) has only one page", year)
+            if found_next_button:
+                self.log.critical(
+                    "But we found a \"Next\" button. "
+                    "Don't know how to handle this...")
+                raise CommandError("See critical error above")
+            return False
+
+        return found_next_button and next_button_works
 
     def lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
         order_lists = {}
@@ -88,7 +281,7 @@ class AmazonScraper(BaseScraper):
                         order_lists[year] = {}
                     for order_card in order_card:
                         values = order_card.xpath(".//span[contains(@class, 'value')]")
-                        
+
                         value_matches = {"date": None, "id": None, "total": None}
                         for value in values:
                             txtvalue = "".join(value.itertext()).strip()
@@ -99,32 +292,42 @@ class AmazonScraper(BaseScraper):
                                 r'(?P<total>.*\d+(,|\.)\d+.*)', 
                                 txtvalue)
                             if not matches:
-                                raise CommandError(f"We failed to match '{txtvalue}' to one of id/date/total")
+                                raise CommandError(
+                                    f"We failed to match '{txtvalue}' "
+                                    "to one of id/date/total")
 
                             matches_dict = matches.groupdict().copy()
                             if matches.group('date1'):
-                                matches_dict['date'] = datetime.datetime.strptime(matches.group('date1'), '%d %B %Y')
+                                matches_dict['date'] = \
+                                    datetime.datetime.strptime(
+                                    matches.group('date1'), '%d %B %Y'
+                                    )
 
                             elif matches.group('date2'):
-                                matches_dict['date'] = datetime.datetime.strptime(matches.group('date2'), '%B %d, %Y')
-                            
+                                matches_dict['date'] = \
+                                    datetime.datetime.strptime(
+                                    matches.group('date2'), '%B %d, %Y'
+                                    )
+
                             del matches_dict['date1']
                             del matches_dict['date2']
 
                             value_matches.update({k:v for (k,v) in matches_dict.items() if v})
-                      
+
                         if value_matches['id'] not in order_lists[year]:
                             order_lists[year][value_matches['id']] = {"items": {}}
-                        
+
                         order_lists[year][value_matches['id']]['total'] = value_matches['total']
-                        
+
                         order_lists[year][value_matches['id']]['date']= value_matches['date']
-                        self.log.info("Order ID %s, %s, %s", value_matches['id'], value_matches['total'],  value_matches['date'].strftime('%Y-%m-%d'))
+                        self.log.info(
+                            "Order ID %s, %s, %s", 
+                            value_matches['id'],
+                            value_matches['total'],
+                            value_matches['date'].strftime('%Y-%m-%d'))
         else:
             self.log.info("No order HTML to parse")
         return order_lists
-
-
 
     def save_order_list_cache_html_file(self, year, start_index):
         json_file = \
@@ -188,8 +391,12 @@ class AmazonScraper(BaseScraper):
                 if found_year:
                     missing_years.remove(year)
 
-        self.log.info("Found HTML cache for order list: %s", ", ".join([str(x) for x in self.YEARS if x not in missing_years]))
-        self.log.info("Found JSON cache for order list: %s", ", ".join([str(x) for x in json_cache]))
+        self.log.info(
+            "Found HTML cache for order list: %s", 
+            ", ".join([str(x) for x in self.YEARS if x not in missing_years]))
+        self.log.info(
+            "Found JSON cache for order list: %s", 
+            ", ".join([str(x) for x in json_cache]))
         if missing_years:
             self.log.info("Missing HTML cache for: %s", ", ".join(str(x) for x in missing_years))
             order_list_html.update(self.browser_scrape_order_lists(missing_years))
@@ -210,85 +417,7 @@ class AmazonScraper(BaseScraper):
 
     # Function primarily using Selenium to scrape websites
 
-    def browser_scrape_individual_order_list_page(self, year, start_index, order_list_html):
-        '''
-        Returns False when there are no more pages
-        '''
-        self.log.debug("Scraping order list for %s, index %s", year, start_index)
-        if year != "archived":
-            curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
-                year=year,
-                start_index=start_index
-                )
-        else:
-            curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
-                year=year,
-                start_index=start_index
-                )
 
-        self.log.debug("Visiting %s", curr_url)
-        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
-        wait2 = WebDriverWait(brws, 2)
-
-        empty_order_list = True
-    
-        try:    
-            wait2.until(
-                EC.presence_of_element_located(
-                    (By.XPATH,
-                    self.ORDER_CARD_XPATH
-                    )
-                ))
-            # If we found any order items 
-            # the order list is not empty
-            empty_order_list = False
-        except TimeoutException:
-            pass
-
-        if empty_order_list:
-            # Empty order list, shotcut and save
-            self.log.info("No orders on %s", year)
-            order_list_html[(year, start_index)] = self.save_order_list_cache_html_file(year, start_index)
-            return False
-
-        # Non-empty order page
-        self.log.debug("Page %s has orders", curr_url)
-        try:
-            num_orders = brws.find_element(By.XPATH,
-                            "//span[contains(@class, 'num-orders')]"
-                            )
-            num_orders: int = int(re.match(r'^(\d+)', num_orders.text).group(1))
-        except NoSuchElementException:
-            num_orders = 0
-
-        self.log.debug(
-            "Total of %s orders, probably %s page(s)", 
-            num_orders, math.ceil(num_orders/10))
-
-        found_next_button = False
-        next_button_works = False
-        try:
-            next_button = brws.find_element(By.XPATH,
-                        "//li[contains(@class, 'a-last')]"
-                        )
-            found_next_button = True
-            next_button.find_element(By.XPATH,
-                        ".//a"
-                        )
-            next_button_works = True
-        except NoSuchElementException:
-            pass
-        order_list_html[(year, start_index)] = self.save_order_list_cache_html_file(year, start_index)
-        if num_orders <= 10:
-            self.log.debug("This order list (%s) has only one page", year)
-            if found_next_button:
-                self.log.critical(
-                    "But we found a \"Next\" button. "
-                    "Don't know how to handle this...")
-                raise CommandError("See critical error above")
-            return False
-
-        return found_next_button and next_button_works
 
     def browser_scrape_order_lists(self, years: List):
         '''
@@ -304,7 +433,11 @@ class AmazonScraper(BaseScraper):
             more_pages = True
             start_index = 0
             while more_pages:
-                more_pages = self.browser_scrape_individual_order_list_page(year, start_index, order_list_html)
+                more_pages = \
+                    self.browser_scrape_individual_order_list_page(
+                    year,
+                    start_index,
+                    order_list_html)
                 start_index += 10
                 self.rand_sleep()
         return order_list_html
@@ -317,51 +450,57 @@ class AmazonScraper(BaseScraper):
         Raises and alert in the browser if user action
         is required.
         '''
-        # We (optionally) ask for this here and not earlier, since we
-        # may not need to go live
-        self.username = input(f"Enter Amazon.{self.TLD} username: ") \
-                if not settings.SCRAPER_AMZ_USERNAME else settings.SCRAPER_AMZ_USERNAME
-        self.password = getpass(f"Enter Amazon.{self.TLD} password: ") \
-                if not settings.SCRAPER_AMZ_PASSWORD else settings.SCRAPER_AMZ_PASSWORD
+        if settings.SCRAPER_AMZ_MANUAL_LOGIN:
+            self.log.debug(
+                self.command.style.ERROR(
+                f"Please log in to amazon.{self.TLD} and press enter when ready."))
+            input()
+        else:
+            # We (optionally) ask for this here and not earlier, since we
+            # may not need to go live
+            self.username = input(f"Enter Amazon.{self.TLD} username: ") \
+                    if not settings.SCRAPER_AMZ_USERNAME else settings.SCRAPER_AMZ_USERNAME
+            self.password = getpass(f"Enter Amazon.{self.TLD} password: ") \
+                    if not settings.SCRAPER_AMZ_PASSWORD else settings.SCRAPER_AMZ_PASSWORD
 
-        self.log.info(self.command.style.NOTICE("We need to log in to amazon.%s"), self.TLD)
-        brws = self.browser_get_instance()
+            self.log.info(self.command.style.NOTICE("We need to log in to amazon.%s"), self.TLD)
+            brws = self.browser_get_instance()
 
-        wait = WebDriverWait(brws, 10)
-        try:
-            self.rand_sleep()
-            username = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_email"))
-                    )
-            username.send_keys(self.username)
-            self.rand_sleep()
-            wait.until(
-                    EC.element_to_be_clickable(
-                        ((By.ID, "continue"))
+            wait = WebDriverWait(brws, 10)
+            try:
+                self.rand_sleep()
+                username = wait.until(
+                        EC.presence_of_element_located((By.ID, "ap_email"))
                         )
-                    ).click()
-            self.rand_sleep()
-            password = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_password"))
-                    )
-            password.send_keys(self.password)
-            self.rand_sleep()
-            remember = wait.until(
-                    EC.presence_of_element_located((By.NAME, "rememberMe"))
-                    )
-            remember.click()
-            self.rand_sleep()
-            sign_in = wait.until(
-                    EC.presence_of_element_located((By.ID, "auth-signin-button"))
-                    )
-            sign_in.click()
-            self.rand_sleep()
+                username.send_keys(self.username)
+                self.rand_sleep()
+                wait.until(
+                        EC.element_to_be_clickable(
+                            ((By.ID, "continue"))
+                            )
+                        ).click()
+                self.rand_sleep()
+                password = wait.until(
+                        EC.presence_of_element_located((By.ID, "ap_password"))
+                        )
+                password.send_keys(self.password)
+                self.rand_sleep()
+                remember = wait.until(
+                        EC.presence_of_element_located((By.NAME, "rememberMe"))
+                        )
+                remember.click()
+                self.rand_sleep()
+                sign_in = wait.until(
+                        EC.presence_of_element_located((By.ID, "auth-signin-button"))
+                        )
+                sign_in.click()
+                self.rand_sleep()
 
-        except TimeoutException:
-            self.browser_safe_quit()
-            # pylint: disable=raise-missing-from
-            raise CommandError("Login to Amazon was not successful "
-                               "because we could not find a expected element..")
+            except TimeoutException:
+                self.browser_safe_quit()
+                # pylint: disable=raise-missing-from
+                raise CommandError("Login to Amazon was not successful "
+                                "because we could not find a expected element..")
         if re.match(self.LOGIN_PAGE_RE ,self.browser.current_url):
             raise CommandError('Login to Amazon was not successful.')
         self.log.info('Login to Amazon was probably successful.')
@@ -379,6 +518,7 @@ class AmazonScraper(BaseScraper):
             "ORDERS":  (cache['BASE'] / 
                         Path('orders')).resolve(),
         })
+
         for key in cache:  # pylint: disable=consider-using-dict-items
             self.log.debug("Cache folder %s: %s", key, cache[key])
             try:
@@ -386,15 +526,26 @@ class AmazonScraper(BaseScraper):
             except FileExistsError:
                 pass
 
-        pdf_temp_file = cache['BASE'] / Path('temporary-pdf.pdf')
+        pdf_temp_folder = cache['BASE'] / Path('temporary-pdf/')
+        try:
+            os.makedirs(pdf_temp_folder)
+        except FileExistsError:
+            pass
+
+        pdf_temp_file = pdf_temp_folder / Path('temporary-pdf.pdf')
+
         order_list_cache_filename_template = \
             str(cache["ORDER_LISTS"] / Path("order-list-{year}-{start_index}.html"))
-        order_list_year_json_template = \
+        order_list_json_template = \
             str(cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
+        order_json_filename_template = \
+            str(cache["ORDERS"] / Path("{order_id}/order-{order_id}.json"))
         return cache, \
             pdf_temp_file, \
-                order_list_cache_filename_template, \
-                    order_list_year_json_template
+            pdf_temp_folder, \
+            order_list_cache_filename_template, \
+            order_list_json_template, \
+            order_json_filename_template
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
         years = list()
@@ -444,7 +595,7 @@ class AmazonScraper(BaseScraper):
         "co.jp": ("Japan", 0),
         "es": ("Spain", 0),
         "se": ("Sweden", 0),
-               
+
         "com.br": ("Brazil", 1),
         "ca": ("Canada", 1),
         "com.mx": ("Mexico", 1),
@@ -490,3 +641,15 @@ class AmazonScraper(BaseScraper):
             with open(fname, "r", encoding="utf-8") as json_file:
                 return json.load(json_file)
         return None
+
+    def order_json(self, order_id, read = False) -> Dict:
+        fname = self.ORDER_JSON_FILENAME_TEMPLATE.format(
+            order_id=order_id
+            )
+        if os.access(fname,os.R_OK):
+            if not read:
+                return True
+            with open(fname, "r", encoding="utf-8") as json_file:
+                return json.load(json_file)
+        return None
+    

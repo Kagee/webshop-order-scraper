@@ -746,64 +746,71 @@ class AliExpressScraper(BaseScraper):
         Raises and alert in the browser if user action
         is required. 
         '''
-        # We (optionally) ask for this here and not earlier, since we
-        # may not need to go live
-        self.username = input("Enter Aliexpress username: ") \
-                if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
-        self.password = getpass("Enter Aliexpress password: ") \
-                if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
+        self.log.info(self.command.style.NOTICE("We need to log in to Aliexpress"))
+
         url_re_escaped = re.escape(url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
+        if settings.SCRAPER_ALI_MANUAL_LOGIN:
+            self.log.debug(
+                self.command.style.ERROR(
+                "Please log in to aliexpress.com and press enter when ready."))
+            input()
+        else:
+            # We (optionally) ask for this here and not earlier, since we
+            # may not need to go live
+            self.username = input("Enter Aliexpress username: ") \
+                    if not settings.SCRAPER_ALI_USERNAME else settings.SCRAPER_ALI_USERNAME
+            self.password = getpass("Enter Aliexpress password: ") \
+                    if not settings.SCRAPER_ALI_PASSWORD else settings.SCRAPER_ALI_PASSWORD
 
-        self.log.info(self.command.style.NOTICE("We need to log in to Aliexpress"))
-        c = self.browser_get_instance() #  pylint: disable=invalid-name
-        # We go to the order list, else ... maybe russian?
-        c.get(self.ORDER_LIST_URL)
+            c = self.browser_get_instance() #  pylint: disable=invalid-name
+            # We go to the order list, else ... maybe russian?
+            c.get(self.ORDER_LIST_URL)
 
-        wait = WebDriverWait(c, 10)
-        try:
-            username = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-id"))
-                    )
-            password = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-password"))
-                    )
-            username.send_keys(self.username)
-            password.send_keys(self.password)
-            wait.until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, "//button[@type='submit'][not(@disabled)]")
-                        )
-                    ).click()
-            order_list_page = False
+            wait = WebDriverWait(c, 10)
             try:
-                self.log.debug(
-                    "Current url: %s correct url: %s", 
-                    c.current_url,
-                    c.current_url==url_re_escaped)
-                WebDriverWait(c, 5).until(EC.url_matches(order_list_url_re_espaced))
-                order_list_page = True
+                username = wait.until(
+                        EC.presence_of_element_located((By.ID, "fm-login-id"))
+                        )
+                password = wait.until(
+                        EC.presence_of_element_located((By.ID, "fm-login-password"))
+                        )
+                username.send_keys(self.username)
+                password.send_keys(self.password)
+                wait.until(
+                        EC.element_to_be_clickable(
+                            (By.XPATH, "//button[@type='submit'][not(@disabled)]")
+                            )
+                        ).click()
+                order_list_page = False
+                try:
+                    self.log.debug(
+                        "Current url: %s correct url: %s", 
+                        c.current_url,
+                        c.current_url==url_re_escaped)
+                    WebDriverWait(c, 5).until(EC.url_matches(order_list_url_re_espaced))
+                    order_list_page = True
+                except TimeoutException:
+                    pass
+                if not order_list_page:
+                    c.execute_script(
+                        "alert('Please complete login (CAPTCHA etc.). You have two minutes.');"
+                        )
+                    self.log.warning('Please complete log in to Aliexpress in the browser window..')
+                    WebDriverWait(c, 30).until_not(
+                            EC.alert_is_present(),
+                            "Please close alert an continue login!"
+                            )
+                    self.log.info("Waiting up to 120 seconds for %s", order_list_url_re_espaced)
+                    WebDriverWait(c, 120).until(EC.url_matches(order_list_url_re_espaced))
             except TimeoutException:
-                pass
-            if not order_list_page:
-                c.execute_script(
-                    "alert('Please complete login (CAPTCHA etc.). You have two minutes.');"
-                    )
-                self.log.warning('Please complete log in to Aliexpress in the browser window..')
-                WebDriverWait(c, 30).until_not(
-                        EC.alert_is_present(),
-                        "Please close alert an continue login!"
-                        )
-                self.log.info("Waiting up to 120 seconds for %s", order_list_url_re_espaced)
-                WebDriverWait(c, 120).until(EC.url_matches(order_list_url_re_espaced))
-        except TimeoutException:
-            try:
-                c.switch_to.alert.accept()
-            except NoAlertPresentException:
-                pass
-            self.browser_safe_quit()
-            # pylint: disable=raise-missing-from
-            raise CommandError('Login to Aliexpress was not successful.')
+                try:
+                    c.switch_to.alert.accept()
+                except NoAlertPresentException:
+                    pass
+                self.browser_safe_quit()
+                # pylint: disable=raise-missing-from
+                raise CommandError('Login to Aliexpress was not successful.')
         c.get(url)
         self.log.info("Waiting up to 120 seconds for %s", url_re_escaped)
         WebDriverWait(c, 120).until(EC.url_matches(url_re_escaped))
