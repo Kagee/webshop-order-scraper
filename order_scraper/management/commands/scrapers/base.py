@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium import webdriver
@@ -88,7 +88,9 @@ class BaseScraper(object):
             options.set_preference(f'print.printer_{ printer_name }.print_to_file', True)
             options.set_preference("browser.download.folderList", 2)
             options.set_preference("browser.download.manager.showWhenStarting", False)
-            options.set_preference("browser.download.alwaysOpenInSystemViewerContextMenuItem", False)
+            options.set_preference(
+                "browser.download.alwaysOpenInSystemViewerContextMenuItem", 
+                False)
             options.set_preference("browser.download.alwaysOpenPanel", False)
             options.set_preference("browser.download.dir", str(self.PDF_TEMP_FOLDER))
             options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/pdf")
@@ -153,3 +155,24 @@ class BaseScraper(object):
         Wait rand(min_seconds(0), max_seconds(5)), so we don't spam Amazon.
         """
         time.sleep(random.randint(min_seconds, max_seconds))
+
+    def wait_for_stable_file(self, filename: Path | str):
+        size_stable = False
+        counter = 10
+        while not size_stable:
+
+            sz1 = os.stat(filename).st_size
+            time.sleep(2)
+            sz2 = os.stat(filename).st_size
+            time.sleep(2)
+            sz3 = os.stat(filename).st_size
+            size_stable = (sz1 == sz2 == sz3) and sz1+sz2+sz3 > 0
+            self.log.debug(
+                "Watching for stable file size larger than 0 bytes: %s %s %s %s",
+                sz1, sz2, sz3, filename)
+            counter -= 1
+            if counter == 0:
+                raise CommandError(
+                    f"Waited 40 seconds for {filename} "
+                    "to be stable, never stabilized.")
+        self.log.debug("File %s appears stable.", filename)

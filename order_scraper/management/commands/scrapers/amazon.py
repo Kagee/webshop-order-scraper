@@ -12,6 +12,7 @@ from typing import Dict, Final, List
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.core.serializers.json import DjangoJSONEncoder
+from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -29,7 +30,7 @@ class AmazonScraper(BaseScraper):
     ORDER_LIST_ARCHIVED_URL_TEMPLATE: Final[str]
     ORDER_URL_TEMPLATE: Final[str]
     YEARS: Final[List]
-    ORDER_LIST_CACHE_FILENAME_TEMPLATE: str
+    ORDER_LIST_HTML_FILENAME_TEMPLATE: str
     ORDER_LIST_JSON_FILENAME_TEMPLATE: str
     PDF_TEMP_FILE: str
     # Xpath to individual order item parent element
@@ -64,12 +65,7 @@ class AmazonScraper(BaseScraper):
             (f'https://www.amazon.{self.TLD}/'
             'gp/your-account/order-details/?ie=UTF8&orderID={order_id}')
 
-        (self.cache,
-         self.PDF_TEMP_FILENAME,
-         self.PDF_TEMP_FOLDER,
-         self.ORDER_LIST_CACHE_FILENAME_TEMPLATE,
-         self.ORDER_LIST_JSON_FILENAME_TEMPLATE,
-         self.ORDER_JSON_FILENAME_TEMPLATE) = self.setup_cache()
+        self.setup_cache()
 
     def command_scrape(self) -> None:
         #order_lists_html = self.load_order_lists_html()
@@ -104,21 +100,23 @@ class AmazonScraper(BaseScraper):
         self.browser_safe_quit()
 
     def parse_order(self, order_id: Dict, order: Dict):
-        cache_dir = self.cache['ORDERS'] / Path(order_id)
-        html_cache = cache_dir / Path(f"{order_id}.html")
+        order_cache_dir = self.cache['ORDERS'] / Path(order_id)
+        html_cache = order_cache_dir / Path(f"{order_id}.html")
         self.pprint(order)
         try:
-            os.makedirs(cache_dir)
+            os.makedirs(order_cache_dir)
         except FileExistsError:
             pass
         if os.access(html_cache, os.R_OK):
             self.log.debug("Found HTML cache for order %s", order_id)
         else:
             self.log.debug("Did not find HTML cache for order %s", order_id)
-            order.update(self.browser_scrape_order(order_id))
+            #/home/user/src/homelab-organizer/scraper-cache/amazon_de/orders/303-0367415-4457106
+            order.update(self.browser_scrape_order(order_id, order_cache_dir))
         self.pprint(order)
 
-    def browser_scrape_order(self, order_id: str) -> Dict:
+    def browser_scrape_order(self, order_id: str, order_cache_dir: Path) -> Dict:
+        order = {}
         curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
         self.log.debug("Visiting %s", curr_url)
         brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
@@ -144,20 +142,48 @@ class AmazonScraper(BaseScraper):
                     )
                 ), "Timeout waiting for invoice wrapper")
         order_handle = brws.current_window_handle
+        order['attachements'] = []
         for invoice_item in invoice_wrapper.find_elements(By.TAG_NAME, 'a'):
             text = invoice_item.text.replace('\r\n', ' ').replace('\r', '').replace('\n', ' ')
             href = invoice_item.get_attribute('href')
-            text_file_safe = base64.urlsafe_b64encode(
+            attachement = { "text": text, "href": href }
+
+            text_filename_safe = base64.urlsafe_b64encode(
                     text.encode("utf-8")).decode("utf-8")
-            print(text, href)
+
+            attachement_file = (order_cache_dir / \
+                Path(f"{order_id}-attachement-{text_filename_safe}.pdf")).resolve()
+
+            if os.access(attachement_file, os.R_OK):
+                attachement['file'] = str(Path(attachement_file)\
+                    .relative_to(self.cache['BASE'])) # keep this
+                order['attachements'].append(attachement)
+                self.log.debug("We already have this file saved")
+                continue
             order_summary = re.match(r'.+summary/print.+', href)
             download_pdf = re.match(r'.+/download/.+\.pdf', href)
+            contact_link = re.match(r'.+contact/contact.+', href)
+
             if order_summary:
+                if os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+                    # Remove old random temp
+                    os.remove(self.PDF_TEMP_FILENAME)
+                brws.switch_to.new_window()
+                brws.get(href)
                 self.log.debug("This is the order summary. Open, print to PDF, close.")
+                self.browser.execute_script('window.print();')
+                while not os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+                    self.log.debug("PDF file does not exist yet")
+                    time.sleep(1)
+                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+                attachement['file'] = str(Path(attachement_file)\
+                    .relative_to(self.cache['BASE'])) # keep this
+                os.rename(self.PDF_TEMP_FILENAME, attachement_file)
+                brws.close()
             elif download_pdf:
                 self.log.debug("This is some invoice PDF. Get a good reference somehow.")
-                #invoice_item.click()
                 for pdf in self.PDF_TEMP_FOLDER.glob('*.pdf'):
+                    # Remove old/random PDFs
                     os.remove(pdf)
                 brws.switch_to.new_window()
                 # Can't use .get(...) here, since Selenium appears to
@@ -177,11 +203,32 @@ class AmazonScraper(BaseScraper):
                     pdf = list(self.PDF_TEMP_FOLDER.glob('*.pdf'))
                     time.sleep(3)
                 # We have a PDF, move it to  a proper name
-                print(pdf)
+                self.wait_for_stable_file(pdf[0])
+                attachement['file'] = str(Path(attachement_file)\
+                    .relative_to(self.cache['BASE'])) # keep this
+                os.rename(pdf[0], attachement_file)
                 brws.close()
-        brws.switch_to.window(order_handle)
-        time.sleep(120)
-        return {}
+            elif contact_link:
+                self.log.warning("Contact link, nothing useful to save")
+            else:
+                self.log.warning(self.command.style.WARNING("Unknown attachement, not saving."))
+            order['attachements'].append(attachement)
+            brws.switch_to.window(order_handle)
+
+        # Finished "scraping", save HTML to disk
+        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        time.sleep(2)
+
+
+        # Can't do this before we same item pages to disk - pdf?
+        #fname = self.ORDER_FILENAME_TEMPLATE.format(
+        #    order_id=order_id, ext="html"
+        #    )
+        #with open(fname, "w", encoding="utf-8") as html_file:
+        #    order_html = fromstring(self.browser.page_source)
+        #    html_file.write(tostring(order_html).decode("utf-8"))
+        return order
+
 
     def browser_scrape_individual_order_list_page(self, year, start_index, order_list_html):
         '''
@@ -338,7 +385,7 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Removed json cache for %s", year)
         except FileNotFoundError:
             pass
-        cache_file = self.ORDER_LIST_CACHE_FILENAME_TEMPLATE.format(
+        cache_file = self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
             year=year,
             start_index=start_index
             )
@@ -374,7 +421,7 @@ class AmazonScraper(BaseScraper):
                     more_pages_this_year = True
                     while more_pages_this_year:
                         html_file = \
-                            self.ORDER_LIST_CACHE_FILENAME_TEMPLATE.format(
+                            self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
                             year=year,
                             start_index=start_index
                             )
@@ -442,7 +489,7 @@ class AmazonScraper(BaseScraper):
                 self.rand_sleep()
         return order_list_html
 
-    def browser_login(self, _):  # Optinal manual login?
+    def browser_login(self, _):
         '''
         Uses Selenium to log in Amazon.
         Returns when the browser is at url, after login.
@@ -507,8 +554,9 @@ class AmazonScraper(BaseScraper):
 
     # Init / Utility Functions
 
-    def setup_cache(self):  # FIN
-        cache = {
+    def setup_cache(self):
+        # pylint: disable=invalid-name
+        cache: Dict[str, Path] = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
                      Path(f'amazon_{self.TLD.replace(".","_")}')).resolve()
         }
@@ -526,26 +574,20 @@ class AmazonScraper(BaseScraper):
             except FileExistsError:
                 pass
 
-        pdf_temp_folder = cache['BASE'] / Path('temporary-pdf/')
+        self.PDF_TEMP_FOLDER: Path = cache['BASE'] / Path('temporary-pdf/')
         try:
-            os.makedirs(pdf_temp_folder)
+            os.makedirs(self.PDF_TEMP_FOLDER)
         except FileExistsError:
             pass
 
-        pdf_temp_file = pdf_temp_folder / Path('temporary-pdf.pdf')
+        self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path('temporary-pdf.pdf')
 
-        order_list_cache_filename_template = \
+        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = \
             str(cache["ORDER_LISTS"] / Path("order-list-{year}-{start_index}.html"))
-        order_list_json_template = \
+        self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = \
             str(cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
-        order_json_filename_template = \
-            str(cache["ORDERS"] / Path("{order_id}/order-{order_id}.json"))
-        return cache, \
-            pdf_temp_file, \
-            pdf_temp_folder, \
-            order_list_cache_filename_template, \
-            order_list_json_template, \
-            order_json_filename_template
+        self.ORDER_FILENAME_TEMPLATE: Path = \
+            str(cache["ORDERS"] / Path("{order_id}/order-{order_id}.{ext}"))
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
         years = list()
@@ -643,8 +685,8 @@ class AmazonScraper(BaseScraper):
         return None
 
     def order_json(self, order_id, read = False) -> Dict:
-        fname = self.ORDER_JSON_FILENAME_TEMPLATE.format(
-            order_id=order_id
+        fname = self.ORDER_FILENAME_TEMPLATE.format(
+            order_id=order_id, ext="html"
             )
         if os.access(fname,os.R_OK):
             if not read:
