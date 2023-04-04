@@ -14,7 +14,7 @@ Look in `hlo/settings/django.py` for example
 This requires Firefox. Firefox installed as a snap on Ubuntu is not supported. To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubuntu.co.uk/2022/04/how-to-install-firefox-deb-apt-ubuntu-22-04) article for omg!ubuntu.
 
 ### Aliexpress
-Scrapes order list, item info and details, and saves a PDF copy of the Aliexpress item snapshot.
+Scrapes order list, item info and details to JSON, and saves a PDF copy of the Aliexpress item snapshot.
 
 Try not to resize or move the autmomated browser window while scraping. You will be
 prompted if you need to interract, i.e. accept a CAPTCHA. If you happen to watch and see that
@@ -28,11 +28,22 @@ to scrape the order list every time.
 python manage.py scrape aliexpress
 ````
 
-### Amazon.de
-Planned, not implemented.
+### Amazon
+Currently can save order lists to HTML cache and convert to 
+JOSN that contains order is, total and date.
 
 ````
-python manage.py scrape amazon.de
+# Scrape this year and archived orders orders on amazon.de
+python manage.py scrape amazon --cache-orderlist
+
+# Scrape orders from 2021 and 2023 on amazon.es
+python manage.py scrape amazon --cache-orderlist --year 2021,2023 --not-archived --tld es
+
+# Scrape all orders on amazon.co.jp from 2011 onwards, including archived orders
+python manage.py scrape amazon --cache-orderlist --start-year 2011 --tld co.jp
+
+# See help for details
+python manage.py scrape --help
 ````
 
 ## Linux 101
