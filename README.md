@@ -75,3 +75,6 @@ cp dev.env .env
 notepad .env # Edit .env to your liking
 python manage.py migrate
 ````
+
+# Notes and ideas
+* https://rk.edu.pl/en/fulltext-search-sqlite-and-django-app/

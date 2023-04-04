@@ -5,9 +5,12 @@ import math
 import os
 import re
 import time
+import urllib.request
 from getpass import getpass
 from pathlib import Path
 from typing import Dict, Final, List
+from urllib.parse import urlparse
+from selenium.webdriver.common.action_chains import ActionChains
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -64,6 +67,9 @@ class AmazonScraper(BaseScraper):
         self.ORDER_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/'
             'gp/your-account/order-details/?ie=UTF8&orderID={order_id}')
+        self.ITEM_URL_TEMPLATE = \
+            (f'https://www.amazon.{self.TLD}/'
+            '-/en/gp/product/{item_id}/?ie=UTF8')
 
         self.setup_cache()
 
@@ -97,12 +103,13 @@ class AmazonScraper(BaseScraper):
                         break
                 self.parse_order(order_id, order_lists[year][order_id])
 
-        self.browser_safe_quit()
+        #self.browser_safe_quit()
 
     def parse_order(self, order_id: Dict, order: Dict):
         order_cache_dir = self.cache['ORDERS'] / Path(order_id)
-        html_cache = order_cache_dir / Path(f"{order_id}.html")
-        self.pprint(order)
+        html_cache = self.ORDER_FILENAME_TEMPLATE.format(
+            order_id=order_id, ext="html"
+            )
         try:
             os.makedirs(order_cache_dir)
         except FileExistsError:
@@ -111,14 +118,13 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Found HTML cache for order %s", order_id)
         else:
             self.log.debug("Did not find HTML cache for order %s", order_id)
-            #/home/user/src/homelab-organizer/scraper-cache/amazon_de/orders/303-0367415-4457106
             order.update(self.browser_scrape_order(order_id, order_cache_dir))
         self.pprint(order)
 
     def browser_scrape_order(self, order_id: str, order_cache_dir: Path) -> Dict:
         order = {}
         curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
-        self.log.debug("Visiting %s", curr_url)
+        self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
         brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
         wait2 = WebDriverWait(brws, 2)
         invoice_a = ("//a[contains(@class, 'a-popover-trigger')]"
@@ -143,8 +149,10 @@ class AmazonScraper(BaseScraper):
                 ), "Timeout waiting for invoice wrapper")
         order_handle = brws.current_window_handle
         order['attachements'] = []
+        self.log.debug("Downloading attachements")
         for invoice_item in invoice_wrapper.find_elements(By.TAG_NAME, 'a'):
             text = invoice_item.text.replace('\r\n', ' ').replace('\r', '').replace('\n', ' ')
+            self.log.debug("Attachement '%s'", text)
             href = invoice_item.get_attribute('href')
             attachement = { "text": text, "href": href }
 
@@ -199,7 +207,6 @@ class AmazonScraper(BaseScraper):
                 ## Look for PDF in folder
                 pdf = list(self.PDF_TEMP_FOLDER.glob('*.pdf'))
                 while not pdf:
-                    print(pdf)
                     pdf = list(self.PDF_TEMP_FOLDER.glob('*.pdf'))
                     time.sleep(3)
                 # We have a PDF, move it to  a proper name
@@ -211,7 +218,10 @@ class AmazonScraper(BaseScraper):
             elif contact_link:
                 self.log.warning("Contact link, nothing useful to save")
             else:
-                self.log.warning(self.command.style.WARNING("Unknown attachement, not saving."))
+                self.log.warning(
+                    self.command.style.WARNING(
+                    "Unknown attachement, not saving: %s, %s"),
+                      text, href)
             order['attachements'].append(attachement)
             brws.switch_to.window(order_handle)
 
@@ -219,14 +229,147 @@ class AmazonScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(2)
 
+        if 'items' not in order:
+            order['items'] = {}
+        self.log.debug("Scraping item IDs, thumbnails and pages (as PDF)")
+        for item in brws.find_elements(
+            By.XPATH,
+            "//div[contains(@class, 'yohtmlc-item')]"
+            "/parent::div"):
+            item_id = None
+            for atag in item.find_elements(By.TAG_NAME, 'a'):
+                product_link = re.match(
+                    r'.+/product/(?P<id>[A-Z0-9]*).+', 
+                    atag.get_attribute('href'))
+                if product_link:
+                    item_id = product_link.group('id')
+            self.log.debug("Item id: %s", item_id)
+            assert item_id
+            if item_id not in order['items']:
+                order['items'][item_id]= {}
+            thumb = item.find_element(By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]")
+            high_res_thumb_url = thumb.get_attribute("data-a-hires")
+            ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
+            item_thumb_file = (order_cache_dir / \
+                Path(f"{order_id}-item-thumb-{item_id}.{ext}")).resolve()
 
-        # Can't do this before we same item pages to disk - pdf?
-        #fname = self.ORDER_FILENAME_TEMPLATE.format(
-        #    order_id=order_id, ext="html"
-        #    )
-        #with open(fname, "w", encoding="utf-8") as html_file:
-        #    order_html = fromstring(self.browser.page_source)
-        #    html_file.write(tostring(order_html).decode("utf-8"))
+            urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
+            order['items'][item_id]['thumbnail'] = str(Path(item_thumb_file)\
+                    .relative_to(self.cache['BASE'])) # keep this
+
+        for item_id in order['items']:
+
+            self.log.debug("New tab")
+            brws.switch_to.window(order_handle)
+            brws.switch_to.new_window()
+            self.log.debug("Opening item page for %s", item_id)
+            brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
+
+            self.log.debug("Slowly scrolling to bottom of page")
+            brws.execute_script(
+                """
+                var hlo_wh = window.innerHeight/2;
+                var hlo_count = 0;
+                var intervalID = setInterval(function() {
+                    window.scrollTo(0,hlo_wh*hlo_count)
+                    hlo_count = hlo_count + 1;
+                    console.log(hlo_count)
+                    if (hlo_count > 20) {
+                        clearInterval(intervalID);
+                    }
+                }, 500);
+
+                """,
+                )
+
+            # Javascript above happens async
+            time.sleep(11)
+
+            elemets_to_hide = brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-row')]")
+            elemets_to_hide += brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-header-row')]")
+            elemets_to_hide += brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-container')]")
+            elemets_to_hide += brws.find_elements(By.ID, "navFooter")
+            elemets_to_hide += brws.find_elements(By.ID, "navbar")
+            elemets_to_hide += brws.find_elements(By.ID, "similarities_feature_div")
+            elemets_to_hide += brws.find_elements(By.ID, "dp-ads-center-promo_feature_div")
+            elemets_to_hide += brws.find_elements(By.ID, "ask-btf_feature_div")
+            elemets_to_hide += brws.find_elements(By.ID, "customer-reviews_feature_div")
+            self.log.debug("Hide flutt, ads, etc")
+            self.browser.execute_script(
+                """
+                console.log("Hiding stuff")
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].setAttribute('style', 'display: none;');
+                    arguments[0][i].style.opacity = 0;
+                    arguments[0][i].style.display = "none";
+                    console.log(arguments[0][i])
+                }
+                arguments[1].scrollIntoView()
+                """,
+                elemets_to_hide, brws.find_element(By.ID, 'landingImage'))
+            time.sleep(1)
+            self.log.debug("View and preload all item images")
+            img_btns = brws.find_elements(By.XPATH, "//li[contains(@class,'imageThumbnail')]")
+            
+            ActionChains(self.browser).\
+                scroll_to_element(brws.find_element(By.ID, 'productTitle')).perform()
+            for img_btn in img_btns:
+                time.sleep(1)
+                img_btn.click()
+            img_btns[0].click()
+
+            images = brws.find_elements(By.XPATH, "//li[contains(@class,'image')][contains(@class,'item')]//img")
+            img_urls = []
+            for image in images:
+                highres = image.get_attribute('data-old-hires')
+                if highres:
+                    img_urls.append(highres)
+            
+            self.log.debug("Include all item images on bottom of page")
+            self.browser.execute_script(
+                """
+                for (let i = 0; i < arguments[0].length; i++) {
+                    var img = document.createElement('img');
+                    img.src = arguments[0][i];
+                    arguments[1].appendChild(img);
+                    console.log(arguments[0][i])
+                }
+                """,
+                img_urls, brws.find_element(By.ID, "dp"))
+            time.sleep(2)
+            self.log.debug("Printing page to PDF")
+            brws.execute_script('window.print();')
+            while not os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+                self.log.debug("PDF file does not exist yet")
+                time.sleep(1)
+            self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+            item_pdf_file = (order_cache_dir / \
+                Path(f"{order_id}-item-{item_id}.pdf")).resolve()
+            order['items'][item_id]['pdf'] = str(Path(item_pdf_file)\
+                .relative_to(self.cache['BASE']))
+            os.rename(self.PDF_TEMP_FILENAME, item_pdf_file)
+            self.log.debug("PDF moved to cache")
+            
+            brws.close()
+            self.log.debug("Closed page for item %s", item_id)
+        
+        time.sleep(10)
+        self.log.debug("Opening order page again")
+        brws.switch_to.window(order_handle)
+        #brws.get(curr_url)
+        wait2.until(
+        EC.presence_of_element_located(
+            (By.XPATH,
+            invoice_a
+            )
+        ), "Timeout waiting for Invoice").click()
+        fname = self.ORDER_FILENAME_TEMPLATE.format(
+            order_id=order_id, ext="html"
+            )
+        with open(fname, "w", encoding="utf-8") as html_file:
+            order_html = fromstring(brws.page_source)
+            html_file.write(tostring(order_html).decode("utf-8"))
+            self.log.debug("Saved order page HTML to file")
         return order
 
 
@@ -556,25 +699,25 @@ class AmazonScraper(BaseScraper):
 
     def setup_cache(self):
         # pylint: disable=invalid-name
-        cache: Dict[str, Path] = {
+        self.cache: Dict[str, Path] = {
             "BASE": (Path(settings.SCRAPER_CACHE_BASE) / 
                      Path(f'amazon_{self.TLD.replace(".","_")}')).resolve()
         }
-        cache.update({
-            "ORDER_LISTS":  (cache['BASE'] / 
+        self.cache.update({
+            "ORDER_LISTS":  (self.cache['BASE'] / 
                              Path('order_lists')).resolve(),
-            "ORDERS":  (cache['BASE'] / 
+            "ORDERS":  (self.cache['BASE'] / 
                         Path('orders')).resolve(),
         })
 
-        for key in cache:  # pylint: disable=consider-using-dict-items
-            self.log.debug("Cache folder %s: %s", key, cache[key])
+        for key in self.cache:  # pylint: disable=consider-using-dict-items
+            self.log.debug("Cache folder %s: %s", key, self.cache[key])
             try:
-                os.makedirs(cache[key])
+                os.makedirs(self.cache[key])
             except FileExistsError:
                 pass
 
-        self.PDF_TEMP_FOLDER: Path = cache['BASE'] / Path('temporary-pdf/')
+        self.PDF_TEMP_FOLDER: Path = self.cache['BASE'] / Path('temporary-pdf/')
         try:
             os.makedirs(self.PDF_TEMP_FOLDER)
         except FileExistsError:
@@ -583,11 +726,11 @@ class AmazonScraper(BaseScraper):
         self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path('temporary-pdf.pdf')
 
         self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = \
-            str(cache["ORDER_LISTS"] / Path("order-list-{year}-{start_index}.html"))
+            str(self.cache["ORDER_LISTS"] / Path("order-list-{year}-{start_index}.html"))
         self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = \
-            str(cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
+            str(self.cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
         self.ORDER_FILENAME_TEMPLATE: Path = \
-            str(cache["ORDERS"] / Path("{order_id}/order-{order_id}.{ext}"))
+            str(self.cache["ORDERS"] / Path("{order_id}/order-{order_id}.{ext}"))
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
         years = list()
