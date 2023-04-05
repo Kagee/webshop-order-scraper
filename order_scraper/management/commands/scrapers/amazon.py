@@ -260,7 +260,8 @@ class AmazonScraper(BaseScraper):
             item_id = None
             for atag in item.find_elements(By.TAG_NAME, 'a'):
                 product_link = re.match(
-                    r'.+/product/(?P<id>[A-Z0-9]*).+', 
+                    # item id or "gc" => gift card
+                    r'.+/product/(?P<id>([A-Z0-9]*|gc)).+', 
                     atag.get_attribute('href'))
                 if product_link:
                     item_id = product_link.group('id')
