@@ -3,7 +3,8 @@ import re
 import time
 from pathlib import Path
 from typing import Dict, List
-
+from lxml.etree import tostring
+from lxml.html.soupparser import fromstring
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -34,6 +35,16 @@ class TryOutScraper(BaseScraper):
         self.browser_visit_page(url_trigger_login, True)
         self.browser_visit_page(url, False)
         self.browser_cleanup_item_page()
+        self.browser.execute_script(
+        """
+        arguments[0].style.paddingBottom=0
+        arguments[1].classList.remove("a-ember");
+        """,
+        self.browser.find_element(By.TAG_NAME, "body"),
+        self.browser.find_element(By.TAG_NAME, "html"))
+        html_filename = self.cache['BASE'] / Path("login.html")
+        with open(html_filename, "w", encoding="utf-8") as html_file:
+                html_file.write(tostring(fromstring(self.browser.page_source)).decode("utf-8"))
         self.browser.execute_script('window.print();')
         #time.sleep(30)
         #self.browser_safe_quit()
@@ -52,6 +63,9 @@ class TryOutScraper(BaseScraper):
                 (By.CSS_SELECTOR, "div.ad"),
                 (By.CSS_SELECTOR, "div.copilot-secure-display"),
                 (By.CSS_SELECTOR, "div.outOfStock"),
+                # share-button, gives weird artefacts on PDF
+                (By.CSS_SELECTOR, "div.ssf-background"),
+                (By.ID, "imageBlockEDPOverlay"),
                 (By.ID, "aplusBrandStory_feature_div"),
                 (By.ID, "value-pick-ac"),
                 (By.ID, "valuePick_feature_div"),

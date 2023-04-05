@@ -199,6 +199,7 @@ class AmazonScraper(BaseScraper):
             order_summary = re.match(r'.+summary/print.+', href)
             download_pdf = re.match(r'.+/download/.+\.pdf', href)
             contact_link = re.match(r'.+contact/contact.+', href)
+            invoice_unavailable = re.match(r'.+legal_invoice_help.+', href)
 
             if order_summary:
                 if self.can_read(self.PDF_TEMP_FILENAME):
@@ -243,8 +244,8 @@ class AmazonScraper(BaseScraper):
                     .relative_to(self.cache['BASE'])) # keep this
                 self.move_file(pdf[0], attachement_file)
                 brws.close()
-            elif contact_link:
-                self.log.warning("Contact link, nothing useful to save")
+            elif contact_link or invoice_unavailable:
+                self.log.warning("Contact or lnvoice unavailable link, nothing useful to save")
             else:
                 self.log.warning(
                     self.command.style.WARNING(
@@ -393,7 +394,14 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Hide fluff, ads, etc")
         elemets_to_hide: List[WebElement] = []
         for element in [
-                (By.XPATH, "//div[contains(@class, 'ComparisonWidget')]"),
+                (By.XPATH,
+                 "//div[contains(@class, 'ComparisonWidget')]"),
+                (By.XPATH,
+                 "//table[@id='productDetails_warranty_support_sections']"
+                 "/parent::div/parent::div"),
+                (By.XPATH,
+                 "//table[@id='productDetails_feedback_sections']"
+                 "/parent::div/parent::div"),
                 (By.CSS_SELECTOR, "div.a-carousel-row"),
                 (By.CSS_SELECTOR, "div.a-carousel-header-row"),
                 (By.CSS_SELECTOR, "div.a-carousel-container"),
@@ -402,6 +410,8 @@ class AmazonScraper(BaseScraper):
                 (By.CSS_SELECTOR, "div.ad"),
                 (By.CSS_SELECTOR, "div.copilot-secure-display"),
                 (By.CSS_SELECTOR, "div.outOfStock"),
+                 # share-button, gived weird artefacts on PDF
+                (By.CSS_SELECTOR, "div.ssf-background"),
                 (By.ID, "aplusBrandStory_feature_div"),
                 (By.ID, "value-pick-ac"),
                 (By.ID, "valuePick_feature_div"),
@@ -430,11 +440,15 @@ class AmazonScraper(BaseScraper):
                 }
                 // Give product text more room
                 arguments[1].style.marginRight=0
-                arguments[2].scrollIntoView()
+                // Turn om Amazon's special font
+                arguments[2].classList.remove("a-ember");
+                arguments[3].scrollIntoView()
                 """,
                 elemets_to_hide,
                 brws.find_element(By.CSS_SELECTOR, "div.centerColAlign"),
-                brws.find_element(By.ID, 'rightCol'))
+                brws.find_element(By.TAG_NAME, "html"),
+                brws.find_element(By.ID, 'leftCol'),
+                )
         time.sleep(2)
 
 
