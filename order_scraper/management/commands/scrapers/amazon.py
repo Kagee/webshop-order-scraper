@@ -80,9 +80,9 @@ class AmazonScraper(BaseScraper):
         order_lists: Dict[str, Dict] = {}
         counter = 0
         if settings.SCRAPER_AMZ_ORDERS_SKIP:
-            self.log.debug("Scraping only: %s", settings.SCRAPER_AMZ_ORDERS_SKIP)
+            self.log.debug("Skipping scraping order IDs: %s", settings.SCRAPER_AMZ_ORDERS_SKIP)
         if settings.SCRAPER_AMZ_ORDERS:
-            self.log.debug("Skipping scraping: %s", settings.SCRAPER_AMZ_ORDERS)
+            self.log.debug("Scraping only order IDs: %s", settings.SCRAPER_AMZ_ORDERS)
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
             order_lists[year] = self.order_list_json( year, read = True)
