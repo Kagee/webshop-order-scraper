@@ -119,7 +119,7 @@ class BaseScraper(object):
         except WebDriverException:
             pass
 
-    def browser_visit_page(self, url, goto_url_after_login, do_login = True):
+    def browser_visit_page(self, url: str, goto_url_after_login: bool, do_login = True):
         '''
         Instructs the browser to visit url. 
 
@@ -165,6 +165,12 @@ class BaseScraper(object):
         try:
             os.makedirs(path)
         except FileExistsError:
+            pass
+
+    def remove(self, path: Union[Path, str]) -> None:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
             pass
 
     def can_read(self, path: Union[Path, str]):

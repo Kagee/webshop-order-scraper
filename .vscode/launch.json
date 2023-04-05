@@ -162,6 +162,8 @@
             "args": [
                 "scrape",
                 "tryout",
+                "-v",
+                "3"
             ],
             "django": true,
             "justMyCode": true

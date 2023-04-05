@@ -318,7 +318,7 @@ class AmazonScraper(BaseScraper):
             # Javascript above happens async
             time.sleep(11)
 
-            self.browser_cleanup_item_page(brws)
+            self.browser_cleanup_item_page()
 
             self.log.debug("View and preload all item images")
 
@@ -388,7 +388,8 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Saved order page HTML to file")
         return order
 
-    def browser_cleanup_item_page(self, brws):
+    def browser_cleanup_item_page(self):
+        brws = self.browser
         self.log.debug("Hide fluff, ads, etc")
         elemets_to_hide: List[WebElement] = []
         for element in [
