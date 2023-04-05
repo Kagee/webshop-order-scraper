@@ -347,16 +347,18 @@ class AmazonScraper(BaseScraper):
                 elemets_to_hide, brws.find_element(By.ID, 'landingImage'))
             time.sleep(1)
             self.log.debug("View and preload all item images")
-            img_btns = brws.find_elements(
-                By.XPATH,
-                "//li[contains(@class,'imageThumbnail')]")
 
+            # Scroll to "top" of product listing
             ActionChains(self.browser).\
                 scroll_to_element(
                 brws.find_element(
                 By.ID,
                 'ppd')).perform()
 
+            img_btns = brws.find_elements(
+                By.XPATH,
+                "//li[contains(@class,'imageThumbnail')]")
+            
             for img_btn in img_btns:
                 time.sleep(1)
                 img_btn.click()
