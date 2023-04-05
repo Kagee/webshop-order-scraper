@@ -136,6 +136,8 @@
                 "--cache-orderlist",
                 "-v",
                 "3",
+                "--start-year",
+                "2022",
             ],
             "django": true,
             "justMyCode": true

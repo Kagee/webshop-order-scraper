@@ -349,7 +349,7 @@ class AmazonScraper(BaseScraper):
             self.log.debug("View and preload all item images")
 
             # Scroll to "top" of product listing
-            ActionChains(self.browser).\
+            ActionChains(brws).\
                 scroll_to_element(
                 brws.find_element(
                 By.ID,
