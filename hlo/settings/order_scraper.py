@@ -22,6 +22,11 @@ SCRAPER_ALI_MANUAL_LOGIN = env.bool('SCRAPER_ALI_MANUAL_LOGIN', False)
 SCRAPER_AMZ_USERNAME: str = env('SCRAPER_AMZ_USERNAME', default=None)
 SCRAPER_AMZ_PASSWORD: str = env('SCRAPER_AMZ_PASSWORD', default=None)
 SCRAPER_AMZ_ORDERS_MAX: int = env('SCRAPER_AMZ_ORDERS_MAX', default=-1)
-SCRAPER_AMZ_ORDERS = [x.strip() for x in env.list('SCRAPER_AMZ_ORDERS', default=[])]
+#SCRAPER_AMZ_ORDERS: dict = 
+SCRAPER_AMZ_ORDERS = {
+    key:[x.strip() for x in value.split(';')] \
+        for (key,value) in \
+            env.dict('SCRAPER_AMZ_ORDERS', default={}).items() \
+                  }
 SCRAPER_AMZ_ORDERS_SKIP = [x.strip() for x in env.list('SCRAPER_AMZ_ORDERS_SKIP', default=[])]
 SCRAPER_AMZ_MANUAL_LOGIN = env.bool('SCRAPER_AMZ_MANUAL_LOGIN', False)
