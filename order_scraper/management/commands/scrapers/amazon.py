@@ -89,9 +89,9 @@ class AmazonScraper(BaseScraper):
                             "so we don't support them for now", 
                             order_id)
                     continue
-                if (len(settings.SCRAPER_AMZ_ORDERS) and \
-                    order_id not in settings.SCRAPER_AMZ_ORDERS) or \
-                        order_id in settings.SCRAPER_AMZ_ORDERS_SKIP:
+                if ((len(settings.SCRAPER_AMZ_ORDERS) and \
+                    order_id not in settings.SCRAPER_AMZ_ORDERS)) or \
+                        (order_id in settings.SCRAPER_AMZ_ORDERS_SKIP):
                     self.log.info("Skipping order ID %s", order_id)
                     continue
                 counter += 1
@@ -325,7 +325,7 @@ class AmazonScraper(BaseScraper):
                 scroll_to_element(
                 brws.find_element(
                 By.ID,
-                'productTitle')).perform()
+                'ppd')).perform()
 
             for img_btn in img_btns:
                 time.sleep(1)
