@@ -161,6 +161,15 @@ class BaseScraper(object):
             os.remove(new_path)
         os.rename(old_path, new_path)
 
+    def makedir(self, path: Union[Path, str]) -> None:
+        try:
+            os.makedirs(path)
+        except FileExistsError:
+            pass
+
+    def can_read(self, path: Union[Path, str]):
+        return os.access(path, os.R_OK)
+
     def wait_for_stable_file(self, filename: Union[Path, str]):
         size_stable = False
         counter = 10

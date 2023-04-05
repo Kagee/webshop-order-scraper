@@ -120,11 +120,9 @@ class AmazonScraper(BaseScraper):
         html_cache = self.ORDER_FILENAME_TEMPLATE.format(
             order_id=order_id, ext="html"
             )
-        try:
-            os.makedirs(order_cache_dir)
-        except FileExistsError:
-            pass
-        if os.access(html_cache, os.R_OK):
+        self.makedir(order_cache_dir)
+
+        if self.can_read(html_cache):
             self.log.debug("Found HTML cache for order %s", order_id)
         else:
             self.log.debug("Did not find HTML cache for order %s", order_id)
@@ -192,7 +190,7 @@ class AmazonScraper(BaseScraper):
             attachement_file = (order_cache_dir / \
                 Path(f"{order_id}-attachement-{text_filename_safe}.pdf")).resolve()
 
-            if os.access(attachement_file, os.R_OK):
+            if self.can_read(attachement_file):
                 attachement['file'] = str(Path(attachement_file)\
                     .relative_to(self.cache['BASE'])) # keep this
                 order['attachements'].append(attachement)
@@ -203,14 +201,14 @@ class AmazonScraper(BaseScraper):
             contact_link = re.match(r'.+contact/contact.+', href)
 
             if order_summary:
-                if os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+                if self.can_read(self.PDF_TEMP_FILENAME):
                     # Remove old random temp
                     os.remove(self.PDF_TEMP_FILENAME)
                 brws.switch_to.new_window()
                 brws.get(href)
                 self.log.debug("This is the order summary. Open, print to PDF, close.")
                 self.browser.execute_script('window.print();')
-                while not os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+                while not self.can_read(self.PDF_TEMP_FILENAME):
                     self.log.debug("PDF file does not exist yet")
                     time.sleep(1)
                 self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
@@ -320,53 +318,7 @@ class AmazonScraper(BaseScraper):
             # Javascript above happens async
             time.sleep(11)
 
-            self.log.debug("Hide fluff, ads, etc")
-            elemets_to_hide: List[WebElement] = []
-            for element in [
-                (By.XPATH, "//div[contains(@class, 'ComparisonWidget')]"),
-                (By.CSS_SELECTOR, "div.a-carousel-row"),
-                (By.CSS_SELECTOR, "div.a-carousel-header-row"),
-                (By.CSS_SELECTOR, "div.a-carousel-container"),
-                (By.CSS_SELECTOR, "div.widgetContentContainer"),
-                (By.CSS_SELECTOR, "div.adchoices-container"),
-                (By.CSS_SELECTOR, "div.ad"),
-                (By.CSS_SELECTOR, "div.copilot-secure-display"),
-                (By.CSS_SELECTOR, "div.outOfStock"),
-                (By.ID, "aplusBrandStory_feature_div"),
-                (By.ID, "value-pick-ac"),
-                (By.ID, "valuePick_feature_div"),
-                (By.ID, 'orderInformationGroup'),
-                (By.ID, 'navFooter'),
-                (By.ID, 'navbar'),
-                (By.ID, 'similarities_feature_div'),
-                (By.ID, 'dp-ads-center-promo_feature_div'),
-                (By.ID, 'ask-btf_feature_div'),
-                (By.ID, 'customer-reviews_feature_div'),
-                (By.ID, 'rhf-container'),
-                (By.ID, 'rhf-frame'),
-                (By.ID, 'productAlert_feature_div'),
-                (By.ID, 'sellYoursHere_feature_div'),
-                (By.ID, 'rightCol'),
-                (By.TAG_NAME, 'hr'),
-                (By.TAG_NAME, 'iframe'),
-            ]:
-                elemets_to_hide += brws.find_elements(element[0], element[1])\
-
-            self.browser.execute_script(
-                """
-                // remove spam/ad elements
-                for (let i = 0; i < arguments[0].length; i++) {
-                    arguments[0][i].remove()
-                }
-                // Give product text more room
-                arguments[1].style.marginRight=0
-                arguments[2].scrollIntoView()
-
-                """,
-                elemets_to_hide,
-                brws.find_element(By.CSS_SELECTOR, "div.centerColAlign"),
-                brws.find_element(By.ID, 'rightCol'))
-            time.sleep(1)
+            self.browser_cleanup_item_page(brws)
 
             self.log.debug("View and preload all item images")
 
@@ -403,7 +355,7 @@ class AmazonScraper(BaseScraper):
             time.sleep(1)
             self.log.debug("Printing page to PDF")
             brws.execute_script('window.print();')
-            while not os.access(self.PDF_TEMP_FILENAME, os.R_OK):
+            while not self.can_read(self.PDF_TEMP_FILENAME):
                 self.log.debug("PDF file does not exist yet")
                 time.sleep(1)
             self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
@@ -435,6 +387,54 @@ class AmazonScraper(BaseScraper):
             html_file.write(tostring(order_html).decode("utf-8"))
             self.log.debug("Saved order page HTML to file")
         return order
+
+    def browser_cleanup_item_page(self, brws):
+        self.log.debug("Hide fluff, ads, etc")
+        elemets_to_hide: List[WebElement] = []
+        for element in [
+                (By.XPATH, "//div[contains(@class, 'ComparisonWidget')]"),
+                (By.CSS_SELECTOR, "div.a-carousel-row"),
+                (By.CSS_SELECTOR, "div.a-carousel-header-row"),
+                (By.CSS_SELECTOR, "div.a-carousel-container"),
+                (By.CSS_SELECTOR, "div.widgetContentContainer"),
+                (By.CSS_SELECTOR, "div.adchoices-container"),
+                (By.CSS_SELECTOR, "div.ad"),
+                (By.CSS_SELECTOR, "div.copilot-secure-display"),
+                (By.CSS_SELECTOR, "div.outOfStock"),
+                (By.ID, "aplusBrandStory_feature_div"),
+                (By.ID, "value-pick-ac"),
+                (By.ID, "valuePick_feature_div"),
+                (By.ID, 'orderInformationGroup'),
+                (By.ID, 'navFooter'),
+                (By.ID, 'navbar'),
+                (By.ID, 'similarities_feature_div'),
+                (By.ID, 'dp-ads-center-promo_feature_div'),
+                (By.ID, 'ask-btf_feature_div'),
+                (By.ID, 'customer-reviews_feature_div'),
+                (By.ID, 'rhf-container'),
+                (By.ID, 'rhf-frame'),
+                (By.ID, 'productAlert_feature_div'),
+                (By.ID, 'sellYoursHere_feature_div'),
+                (By.ID, 'rightCol'),
+                (By.TAG_NAME, 'hr'),
+                (By.TAG_NAME, 'iframe'),
+            ]:
+            elemets_to_hide += brws.find_elements(element[0], element[1])\
+
+        brws.execute_script(
+                """
+                // remove spam/ad elements
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].remove()
+                }
+                // Give product text more room
+                arguments[1].style.marginRight=0
+                arguments[2].scrollIntoView()
+                """,
+                elemets_to_hide,
+                brws.find_element(By.CSS_SELECTOR, "div.centerColAlign"),
+                brws.find_element(By.ID, 'rightCol'))
+        time.sleep(2)
 
 
     def browser_scrape_individual_order_list_page(self, year, start_index, order_list_html):
@@ -633,7 +633,7 @@ class AmazonScraper(BaseScraper):
                             start_index=start_index
                             )
                         self.log.debug("Looking for cache in: %s", html_file)
-                        if os.access(html_file, os.R_OK):
+                        if self.can_read(html_file):
                             found_year = True
                             self.log.debug("Found cache for %s, index %s", year, start_index)
                             with open(html_file, "r", encoding="utf-8") as olf:
@@ -774,18 +774,12 @@ class AmazonScraper(BaseScraper):
                         Path('orders')).resolve(),
         })
 
-        for key in self.cache:  # pylint: disable=consider-using-dict-items
-            self.log.debug("Cache folder %s: %s", key, self.cache[key])
-            try:
-                os.makedirs(self.cache[key])
-            except FileExistsError:
-                pass
+        for (name, path) in self.cache.items():
+            self.log.debug("Cache folder %s: %s", name, path)
+            self.makedir(path)
 
         self.PDF_TEMP_FOLDER: Path = self.cache['BASE'] / Path('temporary-pdf/')
-        try:
-            os.makedirs(self.PDF_TEMP_FOLDER)
-        except FileExistsError:
-            pass
+        self.makedir(self.PDF_TEMP_FOLDER)
 
         self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path('temporary-pdf.pdf')
 
@@ -884,7 +878,7 @@ class AmazonScraper(BaseScraper):
         fname = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(
             year=year
             )
-        if os.access(fname,os.R_OK):
+        if self.can_read(fname):
             if not read:
                 return True
             with open(fname, "r", encoding="utf-8") as json_file:
@@ -895,7 +889,7 @@ class AmazonScraper(BaseScraper):
         fname = self.ORDER_FILENAME_TEMPLATE.format(
             order_id=order_id, ext="html"
             )
-        if os.access(fname,os.R_OK):
+        if self.can_read(fname):
             if not read:
                 return True
             with open(fname, "r", encoding="utf-8") as json_file:
