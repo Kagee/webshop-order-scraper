@@ -76,5 +76,11 @@ notepad .env # Edit .env to your liking
 python manage.py migrate
 ````
 
+# Acknowledgements 
+For steadfast bug fixing, having orders that totally scramble my scraping, and coming up with those excellent ideas when I have been struggling with a bug for an hour.
+
+[![neslekkim](https://github.com/neslekkim.png/?size=50) <br>
+neslekkim](https://github.com/neslekkim)
+
 # Notes and ideas
 * https://rk.edu.pl/en/fulltext-search-sqlite-and-django-app/
