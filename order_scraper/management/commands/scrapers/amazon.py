@@ -74,9 +74,9 @@ class AmazonScraper(BaseScraper):
         self.setup_cache()
 
     def command_scrape(self) -> None:
-        #order_lists_html = self.load_order_lists_html()
-        #order_lists = self.lxml_parse_order_lists_html(order_lists_html)
-        #self.save_order_lists_to_json(order_lists)
+        order_lists_html = self.load_order_lists_html()
+        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
+        self.save_order_lists_to_json(order_lists)
         order_lists: Dict[str, Dict] = {}
         counter = 0
         for year in self.YEARS:
@@ -189,7 +189,7 @@ class AmazonScraper(BaseScraper):
                 os.rename(self.PDF_TEMP_FILENAME, attachement_file)
                 brws.close()
             elif download_pdf:
-                self.log.debug("This is some invoice PDF. Get a good reference somehow.")
+                self.log.debug("This is a invoice PDF.")
                 for pdf in self.PDF_TEMP_FOLDER.glob('*.pdf'):
                     # Remove old/random PDFs
                     os.remove(pdf)
@@ -284,7 +284,7 @@ class AmazonScraper(BaseScraper):
 
             # Javascript above happens async
             time.sleep(11)
-            elemets_to_hide: List[WebElement]
+            elemets_to_hide: List[WebElement] = []
             for xpath in [
                 "//div[contains(@class, 'a-carousel-row')]",
                 "//div[contains(@class, 'a-carousel-header-row')]",
@@ -841,7 +841,7 @@ class AmazonScraper(BaseScraper):
                 return True
             with open(fname, "r", encoding="utf-8") as json_file:
                 return json.load(json_file)
-        return None
+        return {}
 
     def order_json(self, order_id, read = False) -> Dict:
         fname = self.ORDER_FILENAME_TEMPLATE.format(
