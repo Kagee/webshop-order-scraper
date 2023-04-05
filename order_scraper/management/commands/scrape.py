@@ -5,7 +5,7 @@ from django.core.management.base import (BaseCommand, CommandError,
 
 from .scrapers.aliexpress import AliExpressScraper
 from .scrapers.amazon import AmazonScraper
-
+from .scrapers.tryout import TryOutScraper
 
 class Command(BaseCommand):
     help = 'Scrapes a webshop for orders using Selenium'
@@ -51,6 +51,7 @@ class Command(BaseCommand):
                 choices=[
                     "aliexpress",
                     "amazon",
+                    "tryout"
                     ],
                 help="The online webshop to scrape orders from. (REQUIRED)"
                 )
@@ -71,5 +72,7 @@ class Command(BaseCommand):
             AliExpressScraper(self, options).command_scrape()
         elif options['webshop'] == "amazon":
             AmazonScraper(self, options).command_scrape()
+        elif options['webshop'] == "tryout":
+            TryOutScraper(self, options).command_scrape()
         else:
             raise CommandError("Unknown webshop: {options['webshop']}")

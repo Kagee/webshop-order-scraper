@@ -154,5 +154,17 @@
             "django": true,
             "justMyCode": true
         },
+        {
+            "name": "TryOut",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "tryout",
+            ],
+            "django": true,
+            "justMyCode": true
+        },
     ]
 }

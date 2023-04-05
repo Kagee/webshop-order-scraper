@@ -17,7 +17,6 @@ from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
@@ -41,12 +40,11 @@ class AmazonScraper(BaseScraper):
         "//div[contains(@class, 'js-order-card')]"
     years: list
 
-    def __init__(self, command: BaseCommand, options: Dict, archived = 'There are no'):
+    def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options)
 
         self.log = self.setup_logger(__name__)
         self.command = command
-        self.archived = archived
         self.cache_orderlist = options['cache_orderlist']
 
         # pylint: disable=invalid-name
@@ -79,11 +77,12 @@ class AmazonScraper(BaseScraper):
         self.save_order_lists_to_json(order_lists)
         order_lists: Dict[str, Dict] = {}
         counter = 0
+
         if settings.SCRAPER_AMZ_ORDERS_SKIP:
             self.log.debug(
                 "Skipping scraping order IDs: %s", 
                 settings.SCRAPER_AMZ_ORDERS_SKIP)
-            
+
         scraper_amz_orders = \
             settings.SCRAPER_AMZ_ORDERS[self.TLD] \
                 if self.TLD in settings.SCRAPER_AMZ_ORDERS else []
@@ -145,7 +144,6 @@ class AmazonScraper(BaseScraper):
         # Need to wait a tiny bit for the JS
         # connected to this link to load
         time.sleep(2)
-        # TODO: Fix when no invoice button
         try:
             wait2.until(
                     EC.presence_of_element_located(
@@ -283,12 +281,12 @@ class AmazonScraper(BaseScraper):
             # Don't save anything for gift cards
             if item_id != 'gc':
                 thumb = item.find_element(
-                    By.XPATH, 
+                    By.XPATH,
                     ".//img[contains(@class, 'yo-critical-feature')]")
                 high_res_thumb_url = thumb.get_attribute("data-a-hires")
                 ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
                 item_thumb_file = (order_cache_dir / \
-                    Path(f"{order_id}-item-thumb-{item_id}.{ext}")).resolve()
+                    Path(f"{order_id}-item-thumb-{item_id}{ext}")).resolve()
 
                 urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
                 order['items'][item_id]['thumbnail'] = str(Path(item_thumb_file)\
@@ -321,55 +319,66 @@ class AmazonScraper(BaseScraper):
 
             # Javascript above happens async
             time.sleep(11)
+
+            self.log.debug("Hide fluff, ads, etc")
             elemets_to_hide: List[WebElement] = []
-            for xpath in [
-                "//div[contains(@class, 'a-carousel-row')]",
-                "//div[contains(@class, 'a-carousel-header-row')]",
-                "//div[contains(@class, 'a-carousel-container')]",
+            for element in [
+                (By.XPATH, "//div[contains(@class, 'ComparisonWidget')]"),
+                (By.CSS_SELECTOR, "div.a-carousel-row"),
+                (By.CSS_SELECTOR, "div.a-carousel-header-row"),
+                (By.CSS_SELECTOR, "div.a-carousel-container"),
+                (By.CSS_SELECTOR, "div.widgetContentContainer"),
+                (By.CSS_SELECTOR, "div.adchoices-container"),
+                (By.CSS_SELECTOR, "div.ad"),
+                (By.CSS_SELECTOR, "div.copilot-secure-display"),
+                (By.CSS_SELECTOR, "div.outOfStock"),
+                (By.ID, "aplusBrandStory_feature_div"),
+                (By.ID, "value-pick-ac"),
+                (By.ID, "valuePick_feature_div"),
+                (By.ID, 'orderInformationGroup'),
+                (By.ID, 'navFooter'),
+                (By.ID, 'navbar'),
+                (By.ID, 'similarities_feature_div'),
+                (By.ID, 'dp-ads-center-promo_feature_div'),
+                (By.ID, 'ask-btf_feature_div'),
+                (By.ID, 'customer-reviews_feature_div'),
+                (By.ID, 'rhf-container'),
+                (By.ID, 'rhf-frame'),
+                (By.ID, 'productAlert_feature_div'),
+                (By.ID, 'sellYoursHere_feature_div'),
+                (By.ID, 'rightCol'),
+                (By.TAG_NAME, 'hr'),
+                (By.TAG_NAME, 'iframe'),
             ]:
-                elemets_to_hide += brws.find_elements(By.XPATH, xpath)
+                elemets_to_hide += brws.find_elements(element[0], element[1])\
 
-            for element_id in [
-                "navFooter",
-                "navbar",
-                "similarities_feature_div",
-                "dp-ads-center-promo_feature_div",
-                "ask-btf_feature_div",
-                "customer-reviews_feature_div"
-            ]:
-                elemets_to_hide += brws.find_elements(By.ID, element_id)
-
-            self.log.debug("Hide flutt, ads, etc")
             self.browser.execute_script(
                 """
-                console.log("Hiding stuff")
+                // remove spam/ad elements
                 for (let i = 0; i < arguments[0].length; i++) {
-                    arguments[0][i].setAttribute('style', 'display: none;');
-                    arguments[0][i].style.opacity = 0;
-                    arguments[0][i].style.display = "none";
-                    console.log(arguments[0][i])
+                    arguments[0][i].remove()
                 }
-                arguments[1].scrollIntoView()
-                """,
-                elemets_to_hide, brws.find_element(By.ID, 'landingImage'))
-            time.sleep(1)
-            self.log.debug("View and preload all item images")
+                // Give product text more room
+                arguments[1].style.marginRight=0
+                arguments[2].scrollIntoView()
 
-            # Scroll to "top" of product listing
-            ActionChains(brws).\
-                scroll_to_element(
-                brws.find_element(
-                By.ID,
-                'ppd')).perform()
+                """,
+                elemets_to_hide,
+                brws.find_element(By.CSS_SELECTOR, "div.centerColAlign"),
+                brws.find_element(By.ID, 'rightCol'))
+            time.sleep(1)
+
+            self.log.debug("View and preload all item images")
 
             img_btns = brws.find_elements(
                 By.XPATH,
                 "//li[contains(@class,'imageThumbnail')]")
-            
+
             for img_btn in img_btns:
                 time.sleep(1)
                 img_btn.click()
-            img_btns[0].click()
+            if len(img_btns):
+                img_btns[0].click()
 
             images = brws.find_elements(
                 By.XPATH,
@@ -391,7 +400,7 @@ class AmazonScraper(BaseScraper):
                 }
                 """,
                 img_urls, brws.find_element(By.ID, "dp"))
-            time.sleep(2)
+            time.sleep(1)
             self.log.debug("Printing page to PDF")
             brws.execute_script('window.print();')
             while not os.access(self.PDF_TEMP_FILENAME, os.R_OK):
