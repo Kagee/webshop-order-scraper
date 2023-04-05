@@ -10,7 +10,6 @@ from getpass import getpass
 from pathlib import Path
 from typing import Dict, Final, List
 from urllib.parse import urlparse
-from selenium.webdriver.common.action_chains import ActionChains
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -18,6 +17,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
@@ -284,16 +284,24 @@ class AmazonScraper(BaseScraper):
 
             # Javascript above happens async
             time.sleep(11)
+            elemets_to_hide: List[WebElement]
+            for xpath in [
+                "//div[contains(@class, 'a-carousel-row')]",
+                "//div[contains(@class, 'a-carousel-header-row')]",
+                "//div[contains(@class, 'a-carousel-container')]",
+            ]:
+                elemets_to_hide += brws.find_elements(By.XPATH, xpath)
 
-            elemets_to_hide = brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-row')]")
-            elemets_to_hide += brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-header-row')]")
-            elemets_to_hide += brws.find_elements(By.XPATH, "//div[contains(@class, 'a-carousel-container')]")
-            elemets_to_hide += brws.find_elements(By.ID, "navFooter")
-            elemets_to_hide += brws.find_elements(By.ID, "navbar")
-            elemets_to_hide += brws.find_elements(By.ID, "similarities_feature_div")
-            elemets_to_hide += brws.find_elements(By.ID, "dp-ads-center-promo_feature_div")
-            elemets_to_hide += brws.find_elements(By.ID, "ask-btf_feature_div")
-            elemets_to_hide += brws.find_elements(By.ID, "customer-reviews_feature_div")
+            for element_id in [
+                "navFooter",
+                "navbar",
+                "similarities_feature_div",
+                "dp-ads-center-promo_feature_div",
+                "ask-btf_feature_div",
+                "customer-reviews_feature_div"
+            ]:
+                elemets_to_hide += brws.find_elements(By.ID, element_id)
+
             self.log.debug("Hide flutt, ads, etc")
             self.browser.execute_script(
                 """
@@ -309,22 +317,30 @@ class AmazonScraper(BaseScraper):
                 elemets_to_hide, brws.find_element(By.ID, 'landingImage'))
             time.sleep(1)
             self.log.debug("View and preload all item images")
-            img_btns = brws.find_elements(By.XPATH, "//li[contains(@class,'imageThumbnail')]")
-            
+            img_btns = brws.find_elements(
+                By.XPATH,
+                "//li[contains(@class,'imageThumbnail')]")
+
             ActionChains(self.browser).\
-                scroll_to_element(brws.find_element(By.ID, 'productTitle')).perform()
+                scroll_to_element(
+                brws.find_element(
+                By.ID,
+                'productTitle')).perform()
+
             for img_btn in img_btns:
                 time.sleep(1)
                 img_btn.click()
             img_btns[0].click()
 
-            images = brws.find_elements(By.XPATH, "//li[contains(@class,'image')][contains(@class,'item')]//img")
+            images = brws.find_elements(
+                By.XPATH,
+                "//li[contains(@class,'image')][contains(@class,'item')]//img")
             img_urls = []
             for image in images:
                 highres = image.get_attribute('data-old-hires')
                 if highres:
                     img_urls.append(highres)
-            
+
             self.log.debug("Include all item images on bottom of page")
             self.browser.execute_script(
                 """
@@ -349,10 +365,10 @@ class AmazonScraper(BaseScraper):
                 .relative_to(self.cache['BASE']))
             os.rename(self.PDF_TEMP_FILENAME, item_pdf_file)
             self.log.debug("PDF moved to cache")
-            
+
             brws.close()
             self.log.debug("Closed page for item %s", item_id)
-        
+
         time.sleep(10)
         self.log.debug("Opening order page again")
         brws.switch_to.window(order_handle)

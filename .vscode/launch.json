@@ -34,7 +34,7 @@
             "justMyCode": true
         },
         {
-            "name": "Scrape Amazon.de",
+            "name": "Scrape Amazon.de 17,23",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",

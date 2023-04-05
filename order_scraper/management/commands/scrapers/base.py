@@ -6,7 +6,7 @@ import re
 import time
 from logging import Logger
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -156,7 +156,7 @@ class BaseScraper(object):
         """
         time.sleep(random.randint(min_seconds, max_seconds))
 
-    def wait_for_stable_file(self, filename: Path | str):
+    def wait_for_stable_file(self, filename: Union[Path, str]):
         size_stable = False
         counter = 10
         while not size_stable:
