@@ -75,7 +75,8 @@ except ImportError:
             'file': {
                 'class' : 'logging.FileHandler',
                 'filename': 'scraper.log',
-                'formatter': 'verbose'
+                'formatter': 'verbose',
+                'encoding': 'utf-8',
             }
         },
         'root': {
