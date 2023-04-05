@@ -156,6 +156,11 @@ class BaseScraper(object):
         """
         time.sleep(random.randint(min_seconds, max_seconds))
 
+    def move_file(self, old_path, new_path, remove_old = True):
+        if remove_old and os.access(new_path, os.R_OK):
+            os.remove(new_path)
+        os.rename(old_path, new_path)
+
     def wait_for_stable_file(self, filename: Union[Path, str]):
         size_stable = False
         counter = 10

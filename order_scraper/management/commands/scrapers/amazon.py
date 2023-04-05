@@ -80,9 +80,16 @@ class AmazonScraper(BaseScraper):
         order_lists: Dict[str, Dict] = {}
         counter = 0
         if settings.SCRAPER_AMZ_ORDERS_SKIP:
-            self.log.debug("Skipping scraping order IDs: %s", settings.SCRAPER_AMZ_ORDERS_SKIP)
-        if settings.SCRAPER_AMZ_ORDERS:
-            self.log.debug("Scraping only order IDs: %s", settings.SCRAPER_AMZ_ORDERS)
+            self.log.debug(
+                "Skipping scraping order IDs: %s", 
+                settings.SCRAPER_AMZ_ORDERS_SKIP)
+            
+        scraper_amz_orders = \
+            settings.SCRAPER_AMZ_ORDERS[self.TLD] \
+                if self.TLD in settings.SCRAPER_AMZ_ORDERS else []
+        if scraper_amz_orders:
+            self.log.debug("Scraping only order IDs: %s", scraper_amz_orders)
+
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
             order_lists[year] = self.order_list_json( year, read = True)
@@ -93,8 +100,8 @@ class AmazonScraper(BaseScraper):
                             "so we don't support them for now", 
                             order_id)
                     continue
-                if ((len(settings.SCRAPER_AMZ_ORDERS) and \
-                    order_id not in settings.SCRAPER_AMZ_ORDERS)) or \
+                if ((len(scraper_amz_orders) and \
+                    order_id not in scraper_amz_orders)) or \
                         (order_id in settings.SCRAPER_AMZ_ORDERS_SKIP):
                     self.log.info("Skipping order ID %s", order_id)
                     continue
@@ -211,7 +218,7 @@ class AmazonScraper(BaseScraper):
                 self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
                 attachement['file'] = str(Path(attachement_file)\
                     .relative_to(self.cache['BASE'])) # keep this
-                os.rename(self.PDF_TEMP_FILENAME, attachement_file)
+                self.move_file(self.PDF_TEMP_FILENAME, attachement_file)
                 brws.close()
             elif download_pdf:
                 self.log.debug("This is a invoice PDF.")
@@ -238,7 +245,7 @@ class AmazonScraper(BaseScraper):
                 self.wait_for_stable_file(pdf[0])
                 attachement['file'] = str(Path(attachement_file)\
                     .relative_to(self.cache['BASE'])) # keep this
-                os.rename(pdf[0], attachement_file)
+                self.move_file(pdf[0], attachement_file)
                 brws.close()
             elif contact_link:
                 self.log.warning("Contact link, nothing useful to save")
@@ -395,7 +402,7 @@ class AmazonScraper(BaseScraper):
                 Path(f"{order_id}-item-{item_id}.pdf")).resolve()
             order['items'][item_id]['pdf'] = str(Path(item_pdf_file)\
                 .relative_to(self.cache['BASE']))
-            os.rename(self.PDF_TEMP_FILENAME, item_pdf_file)
+            self.move_file(self.PDF_TEMP_FILENAME, item_pdf_file)
             self.log.debug("PDF moved to cache")
 
             brws.close()
