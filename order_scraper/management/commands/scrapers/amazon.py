@@ -129,28 +129,49 @@ class AmazonScraper(BaseScraper):
         wait2 = WebDriverWait(brws, 2)
         invoice_a = ("//a[contains(@class, 'a-popover-trigger')]"
                         "/span[contains(text(), 'Invoice')]/ancestor::a")
+        order_summary_a = ("//span[contains(@class, 'a-button')]"
+                        "/a[contains(text(), 'Order Summary')]")
         # Need to wait a tiny bit for the JS
         # connected to this link to load
         time.sleep(2)
-        wait2.until(
-                EC.presence_of_element_located(
-                    (By.XPATH,
-                    invoice_a
-                    )
-                ), "Timeout waiting for Invoice").click()
-        self.log.debug("Visiting %s", curr_url)
-        time.sleep(1)
-        # then this should appear
-        invoice_wrapper: WebElement = wait2.until(
+        # TODO: Fix when no invoice button
+        try:
+            wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,
+                        invoice_a
+                        )
+                    ), "Timeout waiting for Invoice").click()
+            self.log.debug(
+                "Found Invoice button"
+                )
+            time.sleep(1)
+            # then this should appear
+            invoice_wrapper: WebElement = wait2.until(
                 EC.presence_of_element_located(
                     (By.XPATH,
                     "//div[contains(@class, 'a-popover-wrapper')]"
                     )
                 ), "Timeout waiting for invoice wrapper")
+            elements_to_loop: List[WebElement] = \
+                invoice_wrapper.find_elements(By.TAG_NAME, 'a')
+        except TimeoutException:
+            self.log.debug(
+                "Timeout waiting for Invoice, "
+                "maybe only have Order Summary"
+                )
+            elements_to_loop: List[WebElement] = [wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,
+                        order_summary_a
+                        )
+                    ), "Timeout waiting for Order Summary button")]
+
         order_handle = brws.current_window_handle
         order['attachements'] = []
         self.log.debug("Downloading attachements")
-        for invoice_item in invoice_wrapper.find_elements(By.TAG_NAME, 'a'):
+
+        for invoice_item in elements_to_loop:
             text = invoice_item.text.replace('\r\n', ' ').replace('\r', '').replace('\n', ' ')
             self.log.debug("Attachement '%s'", text)
             href = invoice_item.get_attribute('href')
