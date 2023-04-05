@@ -79,6 +79,10 @@ class AmazonScraper(BaseScraper):
         self.save_order_lists_to_json(order_lists)
         order_lists: Dict[str, Dict] = {}
         counter = 0
+        if settings.SCRAPER_AMZ_ORDERS_SKIP:
+            self.log.debug("Scraping only: %s", settings.SCRAPER_AMZ_ORDERS_SKIP)
+        if settings.SCRAPER_AMZ_ORDERS:
+            self.log.debug("Skipping scraping: %s", settings.SCRAPER_AMZ_ORDERS)
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
             order_lists[year] = self.order_list_json( year, read = True)
@@ -269,15 +273,19 @@ class AmazonScraper(BaseScraper):
             assert item_id
             if item_id not in order['items']:
                 order['items'][item_id]= {}
-            thumb = item.find_element(By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]")
-            high_res_thumb_url = thumb.get_attribute("data-a-hires")
-            ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
-            item_thumb_file = (order_cache_dir / \
-                Path(f"{order_id}-item-thumb-{item_id}.{ext}")).resolve()
+            # Don't save anything for gift cards
+            if item_id != 'gc':
+                thumb = item.find_element(
+                    By.XPATH, 
+                    ".//img[contains(@class, 'yo-critical-feature')]")
+                high_res_thumb_url = thumb.get_attribute("data-a-hires")
+                ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
+                item_thumb_file = (order_cache_dir / \
+                    Path(f"{order_id}-item-thumb-{item_id}.{ext}")).resolve()
 
-            urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
-            order['items'][item_id]['thumbnail'] = str(Path(item_thumb_file)\
-                    .relative_to(self.cache['BASE'])) # keep this
+                urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
+                order['items'][item_id]['thumbnail'] = str(Path(item_thumb_file)\
+                        .relative_to(self.cache['BASE'])) # keep this
 
         for item_id in order['items']:
 
