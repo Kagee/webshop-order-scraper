@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -123,6 +124,14 @@ class BaseScraper(object):
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_file", True
             )
+
+            options.set_preference(f"print.print_headercenter", "&U")
+            options.set_preference(f"print.print_headerleft", "")
+            options.set_preference(f"print.print_headerright", "")
+            options.set_preference(f"print.print_footercenter", "&PT - &D")
+            options.set_preference(f"print.print_footerleft", "")
+            options.set_preference(f"print.print_footerright", "")
+
             options.set_preference("browser.download.folderList", 2)
             options.set_preference(
                 "browser.download.manager.showWhenStarting", False
@@ -256,16 +265,25 @@ class BaseScraper(object):
         to_json=False,
         binary=False,
         html=False,
+        from_base64=False,
     ):
+        kwargs = {"encoding": "utf-8"}
         write_mode = "w"
-        if binary:
-            write_mode += "b"
+        if from_base64:
+            content = base64.b64decode(content)
         if to_json:
             content = json.dumps(content, indent=4, cls=DjangoJSONEncoder)
         if html:
-            content = tostring(fromstring(content)).decode("utf-8")
-        with open(path, "w", encoding="utf-8") as file:
-            file.write(content)
+            html_element = fromstring(content)
+            content = tostring(html_element).decode("utf-8")
+        if binary:
+            write_mode += "b"
+            kwargs = {}
+        else:
+            with open(path, write_mode, **kwargs) as file:
+                file.write(content)
+        if html:
+            return html_element
         return content
 
     def read(

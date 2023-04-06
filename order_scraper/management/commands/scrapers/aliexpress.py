@@ -24,6 +24,7 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
@@ -112,22 +113,25 @@ class AliExpressScraper(BaseScraper):
                         order_id=order_id, item_id=item_sku_id
                     )
                 )
-            if "snapshot" not in order["items"]:
-                order["items"][item_sku_id]["snapshot"] = (
-                    self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                        order_id=order_id, item_id=item_sku_id
-                    )
-                )
+            if "snapshot" not in order["items"][item_sku_id]:
+                order["items"][item_sku_id]["snapshot"] = {
+                    "pdf": Path(
+                        self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                            order_id=order_id, item_id=item_sku_id, ext="pdf"
+                        )
+                    ).relative_to(self.cache["BASE"]),
+                    "html": Path(
+                        self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                            order_id=order_id, item_id=item_sku_id, ext="html"
+                        )
+                    ).relative_to(self.cache["BASE"]),
+                }
             order["items"][item_sku_id]["thumbnail"] = str(
                 Path(order["items"][item_sku_id]["thumbnail"]).relative_to(
                     self.cache["BASE"]
                 )
             )
-            order["items"][item_sku_id]["snapshot"] = str(
-                Path(order["items"][item_sku_id]["snapshot"]).relative_to(
-                    self.cache["BASE"]
-                )
-            )
+
             order["items"][item_sku_id].update(
                 {
                     "title": title.strip(),
@@ -186,7 +190,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.info("Skipping order ID %s", order["id"])
                 continue
 
-            json_filename = self.ORDER_CACHE_FILENAME_TEMPLATE.format(
+            json_filename = self.ORDER_FILENAME_TEMPLATE.format(
                 order_id=order["id"], ext="json"
             )
             if self.can_read(Path(json_filename)):
@@ -196,7 +200,7 @@ class AliExpressScraper(BaseScraper):
             self.log.info("Scraping order ID %s", order["id"])
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
-            order["cache_file"] = self.ORDER_CACHE_FILENAME_TEMPLATE.format(
+            order["cache_file"] = self.ORDER_FILENAME_TEMPLATE.format(
                 order_id=order["id"], ext="html"
             )
             if self.can_read(order["cache_file"]):
@@ -242,13 +246,13 @@ class AliExpressScraper(BaseScraper):
                 order_list_html (str): The HTML from the order list page
         """
         if self.cache_orderlist and os.access(
-            self.ORDER_LIST_CACHE_FILENAME, os.R_OK
+            self.ORDER_LIST_FILENAME, os.R_OK
         ):
             self.log.info(
                 "Loading order list from cache: %s",
-                self.ORDER_LIST_CACHE_FILENAME,
+                self.ORDER_LIST_FILENAME,
             )
-            return self.read(self.ORDER_LIST_CACHE_FILENAME)
+            return self.read(self.ORDER_LIST_FILENAME)
         else:
             self.log.info("Tried to use order list cache, but found none")
         return self.browser_scrape_order_list_html()
@@ -525,7 +529,7 @@ class AliExpressScraper(BaseScraper):
                 order["items"][item_sku_id] = {}
 
             # Get snapshot of order page from Ali's archives
-            move_mouse = self.browser_save_item_sku_snapshot_to_pdf(
+            move_mouse = self.browser_save_item_sku_snapshot(
                 order, thumb, item_sku_id
             )
             # Thumbnail MUST happen after snapshot, as we hide the snapshot button
@@ -569,23 +573,31 @@ class AliExpressScraper(BaseScraper):
                 order_id=order["id"], item_id=item_sku_id
             )
         )
-        with open(order["items"][item_sku_id]["thumbnail"], "wb") as file:
-            file.write(base64.b64decode(thumb_data))
+        self.write(
+            order["items"][item_sku_id]["thumbnail"],
+            base64.b64decode(thumb_data),
+            binary=True,
+        )
 
-    def browser_save_item_sku_snapshot_to_pdf(self, order, thumb, item_sku_id):
+    def browser_save_item_sku_snapshot(self, order, thumb, item_sku_id):
         """
         Uses Selenium to save the AliExpress snapshot of the
         current item id+item sku to PDF.
         """
-        order["items"][item_sku_id]["snapshot"] = (
-            self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                order_id=order["id"], item_id=item_sku_id
-            )
-        )
-        if self.can_read(order["items"][item_sku_id]["snapshot"]):
+        if "snapshot" not in order["items"][item_sku_id]:
+            order["items"][item_sku_id]["snapshot"] = {
+                "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                    order_id=order["id"], item_id=item_sku_id, ext="pdf"
+                ),
+                "html": self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                    order_id=order["id"], item_id=item_sku_id, ext="html"
+                ),
+            }
+        if self.can_read(
+            order["items"][item_sku_id]["snapshot"]["pdf"]
+        ) and self.can_read(order["items"][item_sku_id]["snapshot"]["html"]):
             self.log.info(
-                "Not opening snapshot, already saved: %s",
-                Path(order["items"][item_sku_id]["snapshot"]).name,
+                "Not opening snapshot, already saved: %s", item_sku_id
             )
             return False
         order_details_page_handle = self.browser.current_window_handle
@@ -613,24 +625,29 @@ class AliExpressScraper(BaseScraper):
                 continue
             self.browser.switch_to.window(handle)
             if "snapshot" in self.browser.current_url:
-                self.remove(self.pdf_temp_file)
                 self.log.debug("Found snapshot tab")
+                self.browser_cleanup_item_page()
+                time.sleep(2)
+                self.remove(self.PDF_TEMP_FILENAME)
+
                 self.log.debug("Trying to print to PDF")
                 self.browser.execute_script("window.print();")
+                # self.write(self.PDF_TEMP_FILENAME, self.browser.print_page(),binary=True, from_base64=True)
+                # print()
                 # Do some read- and size change tests
                 # to try to detect when printing is complete
-                while not self.can_read(self.pdf_temp_file):
+                while not self.can_read(self.PDF_TEMP_FILENAME):
                     self.log.debug("PDF file does not exist yet")
                     time.sleep(1)
-                self.wait_for_stable_file(self.pdf_temp_file)
-                # We assume file has stabilized/print is complete
-
-                self.makedir(
-                    Path(order["items"][item_sku_id]["snapshot"]).parent
-                )
+                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
                 self.move_file(
-                    self.pdf_temp_file,
-                    order["items"][item_sku_id]["snapshot"],
+                    self.PDF_TEMP_FILENAME,
+                    order["items"][item_sku_id]["snapshot"]["pdf"],
+                )
+                self.write(
+                    order["items"][item_sku_id]["snapshot"]["html"],
+                    self.browser.page_source,
+                    html=True,
                 )
                 debug_found_snapshot = True
             else:
@@ -647,6 +664,70 @@ class AliExpressScraper(BaseScraper):
         self.browser.switch_to.window(order_details_page_handle)
         return True
 
+    def browser_cleanup_item_page(self) -> None:
+        brws = self.browser
+        self.log.debug("Hide fluff, ads, etc")
+        elemets_to_hide: List[WebElement] = []
+        for element_xpath in []:
+            elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
+
+        for element_id in []:
+            elemets_to_hide += brws.find_elements(By.ID, element_id)
+
+        for css_selector in [
+            "div.site-footer",
+            "div.footer-copywrite",
+            "#top-lighthouse",
+            "#header",
+            "#view-product",
+        ]:
+            elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
+
+        for element in []:
+            elemets_to_hide += brws.find_elements(element[0], element[1])
+
+        page = brws.find_element(By.ID, "page")
+        preview_images: List[WebElement] = brws.find_elements(
+            By.CSS_SELECTOR, "li.image-nav-item img"
+        )
+
+        brws.execute_script(
+            """
+                // remove spam/ad elements
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].remove()
+                }
+                // Give page rooooooom
+                arguments[1].style.width="100%"
+                // preview_images
+                for (let i = 0; i < arguments[2].length; i++) {
+                    var img = document.createElement('img');
+                    img.src = arguments[2][i].src;
+                    console.log(img.src)
+                    arguments[3].appendChild(img); // #product-desc
+                }
+                style = document.createElement('style');
+                style.innerHTML = "@page {size: A4 portrait;}";
+                document.head.appendChild(style);
+                """,
+            elemets_to_hide,
+            page,
+            preview_images,
+            brws.find_element(By.CSS_SELECTOR, "#product-desc"),
+        )
+        time.sleep(2)
+        self.log.debug("Set max-width of all images")
+        all_images = brws.find_elements(By.TAG_NAME, "img")
+        brws.execute_script(
+            """
+                // set max-width of images
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].style.maxWidth = "900px"
+                }
+                """,
+            all_images,
+        )
+
     def get_scrape_tracking_page_html(self, order: Dict):
         """
         Uses LXML to read from cache, or Selenium to visit, load
@@ -656,7 +737,7 @@ class AliExpressScraper(BaseScraper):
                 tracking_html (HtmlElement): The HTML from this order['id'] tracking page
         """
         order["tracking_cache_file"] = (
-            self.TRACKING_CACHE_FILENAME_TEMPLATE.format(order_id=order["id"])
+            self.TRACKING_HTML_FILENAME_TEMPLATE.format(order_id=order["id"])
         )
         if os.access(order["tracking_cache_file"], os.R_OK):
             with open(
@@ -786,7 +867,7 @@ class AliExpressScraper(BaseScraper):
                 break
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.info("All completed orders loaded (hopefully)")
-        with open(self.ORDER_LIST_CACHE_FILENAME, "w", encoding="utf-8") as ali:
+        with open(self.ORDER_LIST_FILENAME, "w", encoding="utf-8") as ali:
             html = fromstring(brws.page_source)
             ali.write(tostring(html).decode("utf-8"))
         return brws.page_source
@@ -915,39 +996,22 @@ class AliExpressScraper(BaseScraper):
         self.cache_orderlist = options["cache_orderlist"]
         self.log = self.setup_logger(__name__)
         super().setup_cache(Path("aliexpress"))
-        self.cache = {
-            "BASE": Path(settings.SCRAPER_CACHE_BASE) / Path("aliexpress")
-        }
-        self.cache.update(
-            {
-                "TRACKING": self.cache["BASE"] / Path("tracking"),
-            }
-        )
-
-        for name, path in self.cache.items():
-            self.makedir(path)
-            self.log.debug("Cache folder %s: %s", name, path)
 
         # pylint: disable=invalid-name
         self.SNAPSHOT_FILENAME_TEMPLATE = str(
-            self.cache["ITEMS"]
-            / Path("{order_id}/snapshot-{order_id}-{item_id}.pdf")
+            self.cache["ORDERS"] / "{order_id}/item-snapshot-{item_id}.{ext}"
         )
         self.THUMB_FILENAME_TEMPLATE = str(
-            self.cache["ITEMS"]
-            / Path("{order_id}/thumb-{order_id}-{item_id}.png")
+            self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
         )
-        self.ORDER_CACHE_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / Path("order-{order_id}.{ext}")
+        self.ORDER_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "{order_id}/order.{ext}"
         )
-        self.TRACKING_CACHE_FILENAME_TEMPLATE = str(
-            self.cache["TRACKING"] / Path("tracking-{order_id}.html")
+        self.TRACKING_HTML_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "tracking-{order_id}.html"
         )
 
-        self.ORDER_LIST_CACHE_FILENAME = self.cache["BASE"] / Path(
-            "order-list.html"
-        )
-        self.PDF_TEMP_FILENAME = self.cache["BASE"] / Path("temporary-pdf.pdf")
+        self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
 
     def _part_to_filename(self, _, **__):
         # Not used here yet
