@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pprint
@@ -7,7 +8,7 @@ import time
 from enum import Enum
 from logging import Logger
 from pathlib import Path
-from typing import Any, Dict, Final, Union
+from typing import Any, Dict, Union
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -32,7 +33,7 @@ class BaseScraper(object):
     log: Logger
     command: BaseCommand
     options: Dict
-    LOGIN_PAGE_RE: Final[str] = r".+login.example.com.*"
+    LOGIN_PAGE_RE: str = r".+login.example.com.*"
     PDF_TEMP_FILENAME: str
     PDF_TEMP_FOLDER: str
 
@@ -46,13 +47,12 @@ class BaseScraper(object):
         command: BaseCommand,
         options: Dict,
         logname: str,
-        login_page_re: str,
     ):
+        self.options = options
         self.log = self.setup_logger(logname)
         self.command = command
-        self.options = options
+
         # pylint: disable=invalid-name
-        self.LOGIN_PAGE_RE = login_page_re
         self.makedir(Path(settings.SCRAPER_CACHE_BASE))
 
     def setup_logger(self, logname: str) -> Logger:
@@ -71,12 +71,27 @@ class BaseScraper(object):
             log.setLevel(logging.DEBUG)
         return log
 
-    def save_page_to_file(self, file: Path):
-        with open(file, "w", encoding="utf-8") as page_file:
-            # lxml+beautifulsoup
-            html = fromstring(self.browser.page_source)
-            page_file.write(tostring(html).decode("utf-8"))
-            return html
+    def setup_cache(self, base_folder: Path):
+        self.cache: Dict[str, Path] = {
+            "BASE": Path(settings.SCRAPER_CACHE_BASE, base_folder)
+        }
+        self.cache.update(
+            {
+                "ORDER_LISTS": self.cache["BASE"] / Path("order_lists"),
+                "ORDERS": self.cache["BASE"] / Path("orders"),
+            }
+        )
+        for name, path in self.cache.items():
+            self.log.debug("Cache folder %s: %s", name, path)
+            self.makedir(path)
+
+        # pylint: disable=invalid-name
+        self.PDF_TEMP_FOLDER: Path = self.cache["BASE"] / Path("temporary-pdf/")
+        self.makedir(self.PDF_TEMP_FOLDER)
+
+        self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path(
+            "temporary-pdf.pdf"
+        )
 
     def browser_get_instance(self):
         """
@@ -196,7 +211,7 @@ class BaseScraper(object):
     def read_json(self, part: Part, **kwargs) -> Any:
         if not self.has_json(part, **kwargs):
             return {}
-        return self.read(self._part_to_filename(part, **kwargs), json=True)
+        return self.read(self._part_to_filename(part, **kwargs), from_json=True)
 
     def pprint(self, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
@@ -207,16 +222,16 @@ class BaseScraper(object):
         """
         time.sleep(random.randint(min_seconds, max_seconds))
 
-    def move_file(self, old_path, new_path, remove_old=True):
-        if self.can_read(new_path):
-            if remove_old:
-                self.remove(new_path)
-                os.rename(old_path, new_path)
-            else:
-                self.log.info(
-                    "Not overriding existing file: %s",
-                    Path(new_path).name,
-                )
+    def move_file(self, old_path, new_path, overwrite=True):
+        if not overwrite and self.can_read(new_path):
+            self.log.info(
+                "Not overriding existing file: %s",
+                Path(new_path).name,
+            )
+            return
+        if overwrite:
+            self.remove(new_path)
+        os.rename(old_path, new_path)
 
     def makedir(self, path: Union[Path, str]) -> None:
         try:
@@ -238,29 +253,31 @@ class BaseScraper(object):
         self,
         path: Union[Path, str],
         content: Any,
-        json=False,
+        to_json=False,
         binary=False,
         html=False,
     ):
         write_mode = "w"
         if binary:
             write_mode += "b"
-        if json:
+        if to_json:
             content = json.dumps(content, indent=4, cls=DjangoJSONEncoder)
         if html:
             content = tostring(fromstring(content)).decode("utf-8")
         with open(path, "w", encoding="utf-8") as file:
             file.write(content)
+        return content
 
-    def read(self, path: Union[Path, str], json=False, html=False) -> Any:
+    def read(
+        self, path: Union[Path, str], from_json=False, from_html=False
+    ) -> Any:
         with open(path, "r", encoding="utf-8") as file:
             contents = file.read()
-            if json:
-                json.load(contents)
-            elif html:
-                fromstring(contents)
-            else:
-                return contents
+            if from_json:
+                contents = json.loads(contents)
+            elif from_html:
+                contents = fromstring(contents)
+            return contents
 
     def wait_for_stable_file(self, filename: Union[Path, str]):
         while not self.can_read(filename):

@@ -230,7 +230,7 @@ class AliExpressScraper(BaseScraper):
                     self.cache["BASE"]
                 )
             )
-            self.write(json_filename, order, json=True)
+            self.write(json_filename, order, to_json=True)
         self.browser_safe_quit()
 
     def load_order_list_html(self):
@@ -910,19 +910,17 @@ class AliExpressScraper(BaseScraper):
     # Class init
 
     def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options)
+        super().__init__(command, options, __name__)
         self.command = command
         self.cache_orderlist = options["cache_orderlist"]
         self.log = self.setup_logger(__name__)
-
+        super().setup_cache(Path("aliexpress"))
         self.cache = {
             "BASE": Path(settings.SCRAPER_CACHE_BASE) / Path("aliexpress")
         }
         self.cache.update(
             {
                 "TRACKING": self.cache["BASE"] / Path("tracking"),
-                "ORDERS": self.cache["BASE"] / Path("orders"),
-                "ITEMS": self.cache["BASE"] / Path("items"),
             }
         )
 

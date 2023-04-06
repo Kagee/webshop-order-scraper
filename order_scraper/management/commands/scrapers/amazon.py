@@ -30,28 +30,21 @@ class AmazonScraper(BaseScraper):
     years: list
 
     def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(
-            command,
-            options,
-            __name__,
-            (
-                r"^https://www\.amazon\."
-                + self.check_tld(options["tld"])
-                + "/ap/signin"
-            ),
-        )
+        super().__init__(command, options, __name__)
+        self.do_cache_orderlist = options["cache_orderlist"]
+        # pylint: disable=invalid-name
+        self.TLD = self.check_tld(options["tld"])
+        self.LOGIN_PAGE_RE = rf"^https://www\.amazon\.{self.TLD}/ap/signin"
         self.SCRAPER_AMZ_ORDERS = (
             settings.SCRAPER_AMZ_ORDERS[self.TLD]
             if self.TLD in settings.SCRAPER_AMZ_ORDERS
             else []
         )
-        self.cache_orderlist = options["cache_orderlist"]
-        # pylint: disable=invalid-name
+        super().setup_cache(Path(f'amazon_{self.TLD.replace(".","_")}'))
         self.YEARS = self.check_year(
             options["year"], options["start_year"], options["not_archived"]
         )
         self.setup_templates()
-        self.setup_cache()
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -74,14 +67,28 @@ class AmazonScraper(BaseScraper):
             f"https://www.amazon.{self.TLD}/"
             "-/en/gp/product/{item_id}/?ie=UTF8"
         )
+        # File name templates
+        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDER_LISTS"]
+            / Path("order-list-{year}-{start_index}.html")
+        )
+        self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json")
+        )
+        self.ORDER_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
+        )
+        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+        )
 
     def load_order_lists_from_json(self):
         order_lists = {}
         for year in self.YEARS:
-            order_lists[year] = sorted(
-                self.read_json(BaseScraper.Part.ORDER_LIST, year=year)
+            order_lists[year] = self.read_json(
+                BaseScraper.Part.ORDER_LIST, year=year
             )
-        return sorted(order_lists)
+        return order_lists
 
     def command_scrape(self) -> None:
         order_lists_html = self.load_order_lists_html()
@@ -145,7 +152,9 @@ class AmazonScraper(BaseScraper):
         if self.can_read(order_json_filename):
             # TODO: Enable order loading from json when ready
             if False is True:
-                order_id_dict.update(self.read(order_json_filename, json=True))
+                order_id_dict.update(
+                    self.read(order_json_filename, from_json=True)
+                )
 
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
         html_cache = Path(
@@ -178,7 +187,6 @@ class AmazonScraper(BaseScraper):
     def browser_scrape_order(
         self, order_id: str, order_cache_dir: Path
     ) -> Dict:
-        # TODO: Refactor browser_scrape_order
         order = {}
         curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
         self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
@@ -191,13 +199,13 @@ class AmazonScraper(BaseScraper):
             order_id, order_cache_dir, order["attachements"]
         )
 
-        # Finished "scraping", save HTML to disk
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(2)
 
         if "items" not in order:
             order["items"] = {}
-        self.log.debug("Scraping item IDs, thumbnails and pages (as PDF)")
+
+        self.log.debug("Scraping item IDs and thumbnails")
         for item in brws.find_elements(
             By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div"
         ):
@@ -214,6 +222,7 @@ class AmazonScraper(BaseScraper):
             assert item_id
             if item_id not in order["items"]:
                 order["items"][item_id] = {}
+
             # Don't save anything for gift cards
             if item_id != "gc":
                 thumb = item.find_element(
@@ -231,18 +240,53 @@ class AmazonScraper(BaseScraper):
                     Path(item_thumb_file).relative_to(self.cache["BASE"])
                 )  # keep this
 
+        self.log.debug("Saving item pages to PDF and HTML")
         for item_id in order["items"]:
-            self.log.debug("New tab")
+            self.browser_scrape_item_page(
+                item_id, order["items"][item_id], order_id, order_cache_dir
+            )
             brws.switch_to.window(order_handle)
-            brws.switch_to.new_window()
-            self.log.debug("Opening item page for %s", item_id)
-            brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
-            if "Page Not Found" in self.browser.title:
-                self.log.debug("Item page for %s has been removed", item_id)
-                order["items"][item_id]["was_404"] = True
-                continue
 
-            self.log.debug("Slowly scrolling to bottom of page")
+        time.sleep(10)
+        self.log.debug("Opening order page again")
+        brws.switch_to.window(order_handle)
+
+        # brws.get(curr_url)
+
+        # We "open" the Invoice popup before saving HTML
+        # so it is in the DOM
+        try:
+            wait2.until(
+                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
+                "Timeout waiting for Invoice",
+            ).click()
+        except TimeoutException:
+            # It may not be there if we have only order summary
+            pass
+        fname = self.ORDER_FILENAME_TEMPLATE.format(
+            order_id=order_id, ext="html"
+        )
+        self.write(fname, brws.page_source, html=True)
+        self.log.debug("Saved order page HTML to file")
+        return order
+
+    def browser_scrape_item_page(
+        self,
+        item_id: str,
+        item_dict: Dict,
+        order_id: str,
+        order_cache_dir: Path,
+        is_digital: bool = False,
+    ):
+        # TODO: Finish process_item_page
+        brws = self.browser
+        self.log.debug("New tab for item %s", item_id)
+        brws.switch_to.new_window()
+        brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
+        item_dict["removed"] = item_dict["digital"] = False
+
+        if "Page Not Found" not in self.browser.title and not is_digital:
+            self.log.debug("Slowly scrolling to bottom of item page")
             brws.execute_script(
                 """
                 var hlo_wh = window.innerHeight/2;
@@ -269,7 +313,8 @@ class AmazonScraper(BaseScraper):
             self.log.debug(
                 "Saving item %s HTML to %s", item_id, item_html_filename
             )
-            self.save_page_to_file(item_html_filename)
+
+            self.write(item_html_filename, self.browser.page_source, html=True)
             self.log.debug("View and preload all item images")
 
             img_btns = brws.find_elements(
@@ -306,43 +351,30 @@ class AmazonScraper(BaseScraper):
                 brws.find_element(By.ID, "dp"),
             )
             time.sleep(1)
-            self.log.debug("Printing page to PDF")
-            brws.execute_script("window.print();")
-            self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
-            item_pdf_file = (
-                order_cache_dir / Path(f"{order_id}-item-{item_id}.pdf")
-            ).resolve()
-            order["items"][item_id]["pdf"] = str(
-                Path(item_pdf_file).relative_to(self.cache["BASE"])
+        elif is_digital:
+            self.log.debug(
+                "Item %s is digital, we do not parse item page, only save",
+                item_id,
             )
-            self.move_file(self.PDF_TEMP_FILENAME, item_pdf_file)
-            self.log.debug("PDF moved to cache")
+            item_dict["digital"] = True
+        else:
+            self.log.debug("Item page for %s has been removed", item_id)
+            item_dict["removed"] = True
 
-            brws.close()
-            self.log.debug("Closed page for item %s", item_id)
-
-        time.sleep(10)
-        self.log.debug("Opening order page again")
-        brws.switch_to.window(order_handle)
-
-        # brws.get(curr_url)
-
-        # We "open" the Invoice popup before saving HTML
-        # so it is in the DOM
-        try:
-            wait2.until(
-                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
-                "Timeout waiting for Invoice",
-            ).click()
-        except TimeoutException:
-            # It may not be there if we have only order summary
-            pass
-        fname = self.ORDER_FILENAME_TEMPLATE.format(
-            order_id=order_id, ext="html"
+        self.log.debug("Printing page to PDF")
+        brws.execute_script("window.print();")
+        self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+        item_pdf_file = (
+            order_cache_dir / Path(f"{order_id}-item-{item_id}.pdf")
+        ).resolve()
+        item_dict["pdf"] = str(
+            Path(item_pdf_file).relative_to(self.cache["BASE"])
         )
-        self.write(fname, brws.page_source, html=True)
-        self.log.debug("Saved order page HTML to file")
-        return order
+        self.move_file(self.PDF_TEMP_FILENAME, item_pdf_file)
+        self.log.debug("PDF moved to cache")
+
+        brws.close()
+        self.log.debug("Closed page for item %s", item_id)
 
     def save_order_attachements(
         self, order_id, order_cache_dir, attachement_dict
@@ -490,53 +522,66 @@ class AmazonScraper(BaseScraper):
         brws = self.browser
         self.log.debug("Hide fluff, ads, etc")
         elemets_to_hide: List[WebElement] = []
+
+        for element_xpath in [
+            (
+                "//table[@id='productDetails_warranty_support_sections']"
+                "/parent::div/parent::div"
+            ),
+            (
+                "//table[@id='productDetails_feedback_sections']"
+                "/parent::div/parent::div"
+            ),
+        ]:
+            elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
+
+        for element_id in [
+            "aplusBrandStory_feature_div",
+            "ask-btf_feature_div",
+            "customer-reviews_feature_div",
+            "discovery-and-inspiration_feature_div",
+            "dp-ads-center-promo_feature_div",
+            "HLCXComparisonWidget_feature_div",
+            "navFooter",
+            "navbar",
+            "orderInformationGroup",
+            "productAlert_feature_div",
+            "promotions_feature_div",
+            "rhf-container",
+            "rhf-frame",
+            "rightCol",
+            "sellYoursHere_feature_div",
+            "similarities_feature_div",
+            "value-pick-ac",
+            "valuePick_feature_div",
+        ]:
+            elemets_to_hide += brws.find_elements(By.ID, element_id)
+
+        for css_selector in [
+            "div.a-carousel-container",
+            "div.a-carousel-header-row",
+            "div.a-carousel-row",
+            "div.ad",
+            "div.adchoices-container",
+            "div.copilot-secure-display",
+            "div.outOfStock",
+            "div.ssf-background",  # share-button, gived weird artefacts on PDF
+            "div.widgetContentContainer",
+        ]:
+            elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
+
         for element in [
-            (
-                By.XPATH,
-                (
-                    "//table[@id='productDetails_warranty_support_sections']"
-                    "/parent::div/parent::div"
-                ),
-            ),
-            (
-                By.XPATH,
-                (
-                    "//table[@id='productDetails_feedback_sections']"
-                    "/parent::div/parent::div"
-                ),
-            ),
-            (By.CSS_SELECTOR, "div.a-carousel-row"),
-            (By.CSS_SELECTOR, "div.a-carousel-header-row"),
-            (By.CSS_SELECTOR, "div.a-carousel-container"),
-            (By.CSS_SELECTOR, "div.widgetContentContainer"),
-            (By.CSS_SELECTOR, "div.adchoices-container"),
-            (By.CSS_SELECTOR, "div.ad"),
-            (By.CSS_SELECTOR, "div.copilot-secure-display"),
-            (By.CSS_SELECTOR, "div.outOfStock"),
-            # share-button, gived weird artefacts on PDF
-            (By.CSS_SELECTOR, "div.ssf-background"),
-            (By.ID, "discovery-and-inspiration_feature_div"),
-            (By.ID, "promotions_feature_div"),
-            (By.ID, "HLCXComparisonWidget_feature_div"),
-            (By.ID, "aplusBrandStory_feature_div"),
-            (By.ID, "value-pick-ac"),
-            (By.ID, "valuePick_feature_div"),
-            (By.ID, "orderInformationGroup"),
-            (By.ID, "navFooter"),
-            (By.ID, "navbar"),
-            (By.ID, "similarities_feature_div"),
-            (By.ID, "dp-ads-center-promo_feature_div"),
-            (By.ID, "ask-btf_feature_div"),
-            (By.ID, "customer-reviews_feature_div"),
-            (By.ID, "rhf-container"),
-            (By.ID, "rhf-frame"),
-            (By.ID, "productAlert_feature_div"),
-            (By.ID, "sellYoursHere_feature_div"),
-            (By.ID, "rightCol"),
             (By.TAG_NAME, "hr"),
             (By.TAG_NAME, "iframe"),
         ]:
             elemets_to_hide += brws.find_elements(element[0], element[1])
+        try:
+            center_col = brws.find_element(
+                By.CSS_SELECTOR, "div.centerColAlign"
+            )
+        except NoSuchElementException:
+            # co.jp?
+            center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
         brws.execute_script(
             """
                 // remove spam/ad elements
@@ -550,7 +595,7 @@ class AmazonScraper(BaseScraper):
                 arguments[3].scrollIntoView()
                 """,
             elemets_to_hide,
-            brws.find_element(By.CSS_SELECTOR, "div.centerColAlign"),
+            center_col,
             brws.find_element(By.TAG_NAME, "html"),
             brws.find_element(By.ID, "leftCol"),
         )
@@ -740,7 +785,7 @@ class AmazonScraper(BaseScraper):
             "Saving cache to %s and appending to html list", cache_file
         )
         self.rand_sleep()
-        return self.save_page_to_file(cache_file)
+        return self.write(cache_file, self.browser.page_source, html=True)
 
     def load_order_lists_html(self) -> Dict[int, str]:  # FIN
         """
@@ -755,14 +800,14 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Looking for %s", ", ".join(str(x) for x in self.YEARS))
         missing_years = self.YEARS.copy()
         json_cache = []
-        if self.cache_orderlist:
+        if self.do_cache_orderlist:
             self.log.debug("Checking orderlist caches")
             for year in self.YEARS:
                 self.log.debug(
                     "Looking for cache of %s", str(year).capitalize()
                 )
                 found_year = False
-                if self.has_json(BaseScraper.Part.ORDER_ITEM, year=year):
+                if self.has_json(BaseScraper.Part.ORDER_LIST, year=year):
                     self.log.debug(
                         "%s already has json", str(year).capitalize()
                     )
@@ -820,7 +865,7 @@ class AmazonScraper(BaseScraper):
             json_filename = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(
                 year=year
             )
-            self.write(json_filename, order_lists[year], json=True)
+            self.write(json_filename, order_lists[year], to_json=True)
             self.log.debug("Saved order list %s to JSON", year)
 
     # Function primarily using Selenium to scrape websites
@@ -866,12 +911,12 @@ class AmazonScraper(BaseScraper):
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
-            username = (
+            amz_username = (
                 input(f"Enter Amazon.{self.TLD} username: ")
                 if not settings.SCRAPER_AMZ_USERNAME
                 else settings.SCRAPER_AMZ_USERNAME
             )
-            password = (
+            amz_password = (
                 getpass(f"Enter Amazon.{self.TLD} password: ")
                 if not settings.SCRAPER_AMZ_PASSWORD
                 else settings.SCRAPER_AMZ_PASSWORD
@@ -889,7 +934,7 @@ class AmazonScraper(BaseScraper):
                 username = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_email"))
                 )
-                username.send_keys(username)
+                username.send_keys(amz_username)
                 self.rand_sleep()
                 wait.until(
                     EC.element_to_be_clickable(((By.ID, "continue")))
@@ -898,7 +943,7 @@ class AmazonScraper(BaseScraper):
                 password = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_password"))
                 )
-                password.send_keys(password)
+                password.send_keys(amz_password)
                 self.rand_sleep()
                 remember = wait.until(
                     EC.presence_of_element_located((By.NAME, "rememberMe"))
@@ -925,48 +970,6 @@ class AmazonScraper(BaseScraper):
         self.log.info("Login to Amazon was probably successful.")
 
     # Init / Utility Functions
-
-    def setup_cache(self):
-        # pylint: disable=invalid-name
-        self.cache: Dict[str, Path] = {
-            "BASE": (
-                Path(settings.SCRAPER_CACHE_BASE)
-                / Path(f'amazon_{self.TLD.replace(".","_")}')
-            ).resolve()
-        }
-        self.cache.update(
-            {
-                "ORDER_LISTS": (
-                    self.cache["BASE"] / Path("order_lists")
-                ).resolve(),
-                "ORDERS": (self.cache["BASE"] / Path("orders")).resolve(),
-            }
-        )
-
-        for name, path in self.cache.items():
-            self.log.debug("Cache folder %s: %s", name, path)
-            self.makedir(path)
-
-        self.PDF_TEMP_FOLDER: Path = self.cache["BASE"] / Path("temporary-pdf/")
-        self.makedir(self.PDF_TEMP_FOLDER)
-
-        self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path(
-            "temporary-pdf.pdf"
-        )
-
-        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"]
-            / Path("order-list-{year}-{start_index}.html")
-        )
-        self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json")
-        )
-        self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/order-{order_id}.{ext}")
-        )
-        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
-        )
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
         years = list()
