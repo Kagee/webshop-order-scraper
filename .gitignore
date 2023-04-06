@@ -11,3 +11,4 @@ tls/*
 geckodriver.log
 hlo/settings/logging.py
 *.log
+*.un~
