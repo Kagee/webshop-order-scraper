@@ -1,6 +1,5 @@
 import base64
 import datetime
-import json
 import math
 import os
 import re
@@ -22,7 +21,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 from .base import BaseScraper
-
 
 class AmazonScraper(BaseScraper):
     TLD: Final[str] = "test"
@@ -101,7 +99,7 @@ class AmazonScraper(BaseScraper):
 
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
-            order_lists[year] = self.order_list_json(year, read=True)
+            order_lists[year] = self.read_json(BaseScraper.Part.ORDER_LIST, year=year)
             for order_id in sorted(order_lists[year]):
                 if order_id.startswith("D01"):
                     self.log.info(
@@ -718,7 +716,7 @@ class AmazonScraper(BaseScraper):
                     "Looking for cache of %s", str(year).capitalize()
                 )
                 found_year = False
-                if self.order_list_json(year):
+                if self.has_json(BaseScraper.Part.ORDER_ITEM, year=year):
                     self.log.debug(
                         "%s already has json", str(year).capitalize()
                     )
@@ -1027,22 +1025,10 @@ class AmazonScraper(BaseScraper):
             )
         return tld
 
-    def order_list_json(self, year, read=False) -> Dict:
-        fname = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(year=year)
-        if self.can_read(fname):
-            if not read:
-                return True
-            with open(fname, "r", encoding="utf-8") as json_file:
-                return json.load(json_file)
-        return {}
-
-    def order_json(self, order_id, read=False) -> Dict:
-        fname = self.ORDER_FILENAME_TEMPLATE.format(
-            order_id=order_id, ext="html"
-        )
-        if self.can_read(fname):
-            if not read:
-                return True
-            with open(fname, "r", encoding="utf-8") as json_file:
-                return json.load(json_file)
-        return None
+    def _part_to_filename(self, part: BaseScraper.Part, **kwargs):
+        if part == BaseScraper.Part.ORDER_LIST:
+            return self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(**kwargs)
+        elif part == BaseScraper.Part.ORDER_DETAILS:
+            return self.ORDER_FILENAME_TEMPLATE.format(**kwargs)
+        elif part == BaseScraper.Part.ORDER_ITEM:
+            return self.ORDER_ITEM_FILENAME_TEMPLATE.format(**kwargs)

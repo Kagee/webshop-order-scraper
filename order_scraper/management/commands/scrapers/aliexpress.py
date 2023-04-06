@@ -950,3 +950,7 @@ class AliExpressScraper(BaseScraper):
             "order-list.html"
         )
         self.PDF_TEMP_FILENAME = self.cache["BASE"] / Path("temporary-pdf.pdf")
+
+    def _part_to_filename(self, _, **__):
+        # Not used here yet
+        return None

@@ -4,6 +4,7 @@ import pprint
 import random
 import re
 import time
+from enum import Enum
 from logging import Logger
 from pathlib import Path
 from typing import Any, Dict, Union
@@ -17,7 +18,8 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
-from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
+from webdriver_manager.firefox import \
+    GeckoDriverManager as FirefoxDriverManager
 
 
 class BaseScraper(object):
@@ -34,6 +36,12 @@ class BaseScraper(object):
     LOGIN_PAGE_RE = r".+login.example.com.*"
     PDF_TEMP_FILENAME: str
     PDF_TEMP_FOLDER: str
+
+    class Part(Enum):
+        ORDER_LIST = 1
+        ORDER_DETAILS = 2
+        ORDER_ITEM = 3
+
 
     def __init__(self, command: BaseCommand, options: Dict):
         self.command = command
@@ -171,6 +179,17 @@ class BaseScraper(object):
     def browser_login(self, url):
         raise NotImplementedError("Child does not implement browser_login()")
 
+    def _part_to_filename(self, part: Part, **kwargs):
+        raise NotImplementedError("Child does not implement _part_to_filename(...)")
+
+    def has_json(self, part: Part, **kwargs) -> bool:
+        return self.can_read(self._part_to_filename(part, **kwargs))
+
+    def read_json(self, part: Part, **kwargs) -> Any:
+        if not self.has_json(part, **kwargs):
+            return {}
+        return self.read(self._part_to_filename(part, **kwargs), json = True)
+
     def pprint(self, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
 
@@ -218,9 +237,15 @@ class BaseScraper(object):
         with open(path, "w", encoding="utf-8") as file:
             file.write(content)
 
-    def read(self, path: Union[Path, str]):
+    def read(self, path: Union[Path, str], json = False, html = False) -> Any:
         with open(path, "r", encoding="utf-8") as file:
-            return file.read()
+            contents = file.read()
+            if json:
+                json.load(contents)
+            elif html:
+                fromstring(contents)
+            else:
+                return contents
 
     def wait_for_stable_file(self, filename: Union[Path, str]):
         size_stable = False
