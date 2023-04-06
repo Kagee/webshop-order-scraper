@@ -31,23 +31,34 @@ class TryOutScraper(BaseScraper):
                     "d3wg%2Caps%2C97&sr=8-1&th=1"
         url = "https://www.amazon.de/-/en/gp/product/B07ZD41WFZ"
         self.remove(self.PDF_TEMP_FILENAME)
-        url_trigger_login = "https://www.amazon.de/-/en/gp/css/order-history"
-        self.browser_visit_page(url_trigger_login, True)
+
+        # HTTP 404
+        url = ("https://www.amazon.de/-/en/gp/product"
+            "/B094188BRZ/ref=ppx_od_dt_b_asin_title_s00?ie=UTF8&psc=1") 
+        self.remove(self.PDF_TEMP_FILENAME)
+        #url_trigger_login = "https://www.amazon.de/-/en/gp/css/order-history"
+        #self.browser_visit_page(url_trigger_login, True)
         self.browser_visit_page(url, False)
-        self.browser_cleanup_item_page()
-        self.browser.execute_script(
-        """
-        arguments[0].style.paddingBottom=0
-        arguments[1].classList.remove("a-ember");
-        """,
-        self.browser.find_element(By.TAG_NAME, "body"),
-        self.browser.find_element(By.TAG_NAME, "html"))
-        html_filename = self.cache['BASE'] / Path("login.html")
-        with open(html_filename, "w", encoding="utf-8") as html_file:
-                html_file.write(tostring(fromstring(self.browser.page_source)).decode("utf-8"))
-        self.browser.execute_script('window.print();')
+        print("Page Not Found" in self.browser.title)
+        #self.browser_cleanup_item_page()
+
+        #url_trigger_login = "https://www.amazon.de/-/en/gp/css/order-history"
+        #self.browser_visit_page(url_trigger_login, True)
+        #self.browser_visit_page(url, False)
+        #self.browser_cleanup_item_page()
+        #self.browser.execute_script(
+        #"""
+        #arguments[0].style.paddingBottom=0
+        #arguments[1].classList.remove("a-ember");
+        #""",
+        #self.browser.find_element(By.TAG_NAME, "body"),
+        #self.browser.find_element(By.TAG_NAME, "html"))
+        #html_filename = self.cache['BASE'] / Path("login.html")
+        #with open(html_filename, "w", encoding="utf-8") as html_file:
+        #        html_file.write(tostring(fromstring(self.browser.page_source)).decode("utf-8"))
+        #self.browser.execute_script('window.print();')
         #time.sleep(30)
-        #self.browser_safe_quit()
+        self.browser_safe_quit()
 
     def browser_cleanup_item_page(self):
         brws = self.browser
