@@ -395,8 +395,6 @@ class AmazonScraper(BaseScraper):
         elemets_to_hide: List[WebElement] = []
         for element in [
                 (By.XPATH,
-                 "//div[contains(@class, 'ComparisonWidget')]"),
-                (By.XPATH,
                  "//table[@id='productDetails_warranty_support_sections']"
                  "/parent::div/parent::div"),
                 (By.XPATH,
@@ -412,6 +410,7 @@ class AmazonScraper(BaseScraper):
                 (By.CSS_SELECTOR, "div.outOfStock"),
                  # share-button, gived weird artefacts on PDF
                 (By.CSS_SELECTOR, "div.ssf-background"),
+                (By.ID, "HLCXComparisonWidget_feature_div"),
                 (By.ID, "aplusBrandStory_feature_div"),
                 (By.ID, "value-pick-ac"),
                 (By.ID, "valuePick_feature_div"),
