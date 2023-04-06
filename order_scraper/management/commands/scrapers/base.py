@@ -18,8 +18,7 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
-from webdriver_manager.firefox import \
-    GeckoDriverManager as FirefoxDriverManager
+from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 
 
 class BaseScraper(object):
@@ -41,7 +40,6 @@ class BaseScraper(object):
         ORDER_LIST = 1
         ORDER_DETAILS = 2
         ORDER_ITEM = 3
-
 
     def __init__(self, command: BaseCommand, options: Dict):
         self.command = command
@@ -85,7 +83,9 @@ class BaseScraper(object):
                 browser (WebDriver): the configured and initialized browser
         """
         if self.browser_status != "created":
-            self.log.info("Using Selenium webdriver_manager to download webdriver binary")
+            self.log.info(
+                "Using Selenium webdriver_manager to download webdriver binary"
+            )
             service = FirefoxService(
                 executable_path=FirefoxDriverManager().install()
             )
@@ -180,7 +180,9 @@ class BaseScraper(object):
         raise NotImplementedError("Child does not implement browser_login()")
 
     def _part_to_filename(self, part: Part, **kwargs):
-        raise NotImplementedError("Child does not implement _part_to_filename(...)")
+        raise NotImplementedError(
+            "Child does not implement _part_to_filename(...)"
+        )
 
     def has_json(self, part: Part, **kwargs) -> bool:
         return self.can_read(self._part_to_filename(part, **kwargs))
@@ -188,7 +190,7 @@ class BaseScraper(object):
     def read_json(self, part: Part, **kwargs) -> Any:
         if not self.has_json(part, **kwargs):
             return {}
-        return self.read(self._part_to_filename(part, **kwargs), json = True)
+        return self.read(self._part_to_filename(part, **kwargs), json=True)
 
     def pprint(self, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
@@ -227,17 +229,24 @@ class BaseScraper(object):
         return os.access(path, os.R_OK)
 
     def write(
-        self, path: Union[Path, str], content: Any, json=False, binary=False
+        self,
+        path: Union[Path, str],
+        content: Any,
+        json=False,
+        binary=False,
+        html=False,
     ):
         write_mode = "w"
         if binary:
             write_mode += "b"
         if json:
             content = json.dumps(content, indent=4, cls=DjangoJSONEncoder)
+        if html:
+            content = tostring(fromstring(content)).decode("utf-8")
         with open(path, "w", encoding="utf-8") as file:
             file.write(content)
 
-    def read(self, path: Union[Path, str], json = False, html = False) -> Any:
+    def read(self, path: Union[Path, str], json=False, html=False) -> Any:
         with open(path, "r", encoding="utf-8") as file:
             contents = file.read()
             if json:
@@ -248,6 +257,9 @@ class BaseScraper(object):
                 return contents
 
     def wait_for_stable_file(self, filename: Union[Path, str]):
+        while not self.can_read(filename):
+            self.log.debug("File does not exist yet: %s", filename.name)
+            time.sleep(1)
         size_stable = False
         counter = 10
         while not size_stable:

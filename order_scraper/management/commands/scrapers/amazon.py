@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -21,6 +20,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 from .base import BaseScraper
+
 
 class AmazonScraper(BaseScraper):
     TLD: Final[str] = "test"
@@ -76,13 +76,21 @@ class AmazonScraper(BaseScraper):
             "-/en/gp/product/{item_id}/?ie=UTF8"
         )
 
+    def load_order_lists_from_json(self):
+        order_lists = {}
+        for year in self.YEARS:
+            order_lists[year] = sorted(
+                self.read_json(BaseScraper.Part.ORDER_LIST, year=year)
+            )
+        return sorted(order_lists)
+
     def command_scrape(self) -> None:
         order_lists_html = self.load_order_lists_html()
         order_lists = self.lxml_parse_order_lists_html(order_lists_html)
         self.save_order_lists_to_json(order_lists)
-        order_lists: Dict[str, Dict] = {}
-        counter = 0
+        order_lists = self.load_order_lists_from_json()
 
+        counter = 0
         if settings.SCRAPER_AMZ_ORDERS_SKIP:
             self.log.debug(
                 "Skipping scraping order IDs: %s",
@@ -99,8 +107,7 @@ class AmazonScraper(BaseScraper):
 
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
-            order_lists[year] = self.read_json(BaseScraper.Part.ORDER_LIST, year=year)
-            for order_id in sorted(order_lists[year]):
+            for order_id in order_lists[year]:
                 if order_id.startswith("D01"):
                     self.log.info(
                         (
@@ -126,169 +133,57 @@ class AmazonScraper(BaseScraper):
                             settings.SCRAPER_ALI_ORDERS_MAX,
                         )
                         break
+                json_cache = self.ORDER_FILENAME_TEMPLATE.format(
+                    order_id=order_id, ext="json"
+                )
+                if self.can_read(json_cache):
+                    pass
                 self.parse_order(order_id, order_lists[year][order_id])
 
         # self.browser_safe_quit()
 
     def parse_order(self, order_id: Dict, order: Dict):
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
-        html_cache = self.ORDER_FILENAME_TEMPLATE.format(
-            order_id=order_id, ext="html"
+        html_cache = Path(
+            self.ORDER_FILENAME_TEMPLATE.format(order_id=order_id, ext="html")
         )
+
         self.makedir(order_cache_dir)
 
         if self.can_read(html_cache):
             self.log.debug("Found HTML cache for order %s", order_id)
+            self.lxml_scrape_order(order_id, html_cache)
         else:
             self.log.debug("Did not find HTML cache for order %s", order_id)
             order.update(self.browser_scrape_order(order_id, order_cache_dir))
         self.pprint(order)
 
+    def lxml_scrape_order(self, order_id, html_cache_filename: Path):
+        # TODO: Scrape order with LXML
+        self.log.debug(
+            (
+                "We want to scrape order id %s with "
+                "LXML, but not impemented yet (%s)"
+            ),
+            order_id,
+            html_cache_filename.name,
+        )
+
     def browser_scrape_order(
         self, order_id: str, order_cache_dir: Path
     ) -> Dict:
+        # TODO: Refactor browser_scrape_order
         order = {}
         curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
         self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
         brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
         wait2 = WebDriverWait(brws, 2)
-        invoice_a = (
-            "//a[contains(@class, 'a-popover-trigger')]"
-            "/span[contains(text(), 'Invoice')]/ancestor::a"
-        )
-        order_summary_a = (
-            "//span[contains(@class, 'a-button')]"
-            "/a[contains(text(), 'Order Summary')]"
-        )
-        # Need to wait a tiny bit for the JS
-        # connected to this link to load
-        time.sleep(2)
-        try:
-            wait2.until(
-                EC.presence_of_element_located((By.XPATH, invoice_a)),
-                "Timeout waiting for Invoice",
-            ).click()
-            self.log.debug("Found Invoice button")
-            time.sleep(1)
-            # then this should appear
-            invoice_wrapper: WebElement = wait2.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//div[contains(@class, 'a-popover-wrapper')]")
-                ),
-                "Timeout waiting for invoice wrapper",
-            )
-            elements_to_loop: List[WebElement] = invoice_wrapper.find_elements(
-                By.TAG_NAME, "a"
-            )
-        except TimeoutException:
-            self.log.debug(
-                "Timeout waiting for Invoice, maybe only have Order Summary"
-            )
-            elements_to_loop: List[WebElement] = [
-                wait2.until(
-                    EC.presence_of_element_located((By.XPATH, order_summary_a)),
-                    "Timeout waiting for Order Summary button",
-                )
-            ]
 
-        order_handle = brws.current_window_handle
         order["attachements"] = []
-        self.log.debug("Downloading attachements")
-
-        for invoice_item in elements_to_loop:
-            text = (
-                invoice_item.text.replace("\r\n", " ")
-                .replace("\r", "")
-                .replace("\n", " ")
-            )
-            self.log.debug("Attachement '%s'", text)
-            href = invoice_item.get_attribute("href")
-            attachement = {"text": text, "href": href}
-
-            text_filename_safe = base64.urlsafe_b64encode(
-                text.encode("utf-8")
-            ).decode("utf-8")
-
-            attachement_file = (
-                order_cache_dir
-                / Path(f"{order_id}-attachement-{text_filename_safe}.pdf")
-            ).resolve()
-
-            if self.can_read(attachement_file):
-                attachement["file"] = str(
-                    Path(attachement_file).relative_to(self.cache["BASE"])
-                )  # keep this
-                order["attachements"].append(attachement)
-                self.log.debug("We already have this file saved")
-                continue
-            order_summary = re.match(r".+summary/print.+", href)
-            download_pdf = re.match(r".+/download/.+\.pdf", href)
-            contact_link = re.match(r".+contact/contact.+", href)
-            invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
-
-            if order_summary:
-                if self.can_read(self.PDF_TEMP_FILENAME):
-                    # Remove old random temp
-                    os.remove(self.PDF_TEMP_FILENAME)
-                brws.switch_to.new_window()
-                brws.get(href)
-                self.log.debug(
-                    "This is the order summary. Open, print to PDF, close."
-                )
-                self.browser.execute_script("window.print();")
-                while not self.can_read(self.PDF_TEMP_FILENAME):
-                    self.log.debug("PDF file does not exist yet")
-                    time.sleep(1)
-                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
-                attachement["file"] = str(
-                    Path(attachement_file).relative_to(self.cache["BASE"])
-                )  # keep this
-                self.move_file(self.PDF_TEMP_FILENAME, attachement_file)
-                brws.close()
-            elif download_pdf:
-                self.log.debug("This is a invoice PDF.")
-                for pdf in self.PDF_TEMP_FOLDER.glob("*.pdf"):
-                    # Remove old/random PDFs
-                    os.remove(pdf)
-                brws.switch_to.new_window()
-                # Can't use .get(...) here, since Selenium appears to
-                # be confused by the fact that Firefox downloads the PDF
-                brws.execute_script(
-                    """
-                    setTimeout(() => {
-                        document.location.href = arguments[0];
-                    }, "500");
-                    """,
-                    href,
-                )
-                self.log.debug("Opened pdf")
-                ## Look for PDF in folder
-                pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
-                while not pdf:
-                    pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
-                    time.sleep(3)
-                # We have a PDF, move it to  a proper name
-                self.wait_for_stable_file(pdf[0])
-                attachement["file"] = str(
-                    Path(attachement_file).relative_to(self.cache["BASE"])
-                )  # keep this
-                self.move_file(pdf[0], attachement_file)
-                brws.close()
-            elif contact_link or invoice_unavailable:
-                self.log.warning(
-                    "Contact or lnvoice unavailable link, nothing useful to"
-                    " save"
-                )
-            else:
-                self.log.warning(
-                    self.command.style.WARNING(
-                        "Unknown attachement, not saving: %s, %s"
-                    ),
-                    text,
-                    href,
-                )
-            order["attachements"].append(attachement)
-            brws.switch_to.window(order_handle)
+        order_handle = brws.current_window_handle
+        invoice_a_xpath = self.save_order_attachements(
+            order_id, order_cache_dir, order["attachements"]
+        )
 
         # Finished "scraping", save HTML to disk
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
@@ -407,9 +302,6 @@ class AmazonScraper(BaseScraper):
             time.sleep(1)
             self.log.debug("Printing page to PDF")
             brws.execute_script("window.print();")
-            while not self.can_read(self.PDF_TEMP_FILENAME):
-                self.log.debug("PDF file does not exist yet")
-                time.sleep(1)
             self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
             item_pdf_file = (
                 order_cache_dir / Path(f"{order_id}-item-{item_id}.pdf")
@@ -426,19 +318,167 @@ class AmazonScraper(BaseScraper):
         time.sleep(10)
         self.log.debug("Opening order page again")
         brws.switch_to.window(order_handle)
+
         # brws.get(curr_url)
-        wait2.until(
-            EC.presence_of_element_located((By.XPATH, invoice_a)),
-            "Timeout waiting for Invoice",
-        ).click()
+
+        # We "open" the Invoice popup before saving HTML
+        # so it is in the DOM
+        try:
+            wait2.until(
+                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
+                "Timeout waiting for Invoice",
+            ).click()
+        except TimeoutException:
+            # It may not be there if we have only order summary
+            pass
         fname = self.ORDER_FILENAME_TEMPLATE.format(
             order_id=order_id, ext="html"
         )
-        with open(fname, "w", encoding="utf-8") as html_file:
-            order_html = fromstring(brws.page_source)
-            html_file.write(tostring(order_html).decode("utf-8"))
-            self.log.debug("Saved order page HTML to file")
+        self.write(fname, brws.page_source, html=True)
+        self.log.debug("Saved order page HTML to file")
         return order
+
+    def save_order_attachements(
+        self, order_id, order_cache_dir, attachement_dict
+    ):
+        brws = self.browser
+        wait2 = WebDriverWait(brws, 2)
+        order_handle = brws.current_window_handle
+        invoice_a_xpath = (
+            "//a[contains(@class, 'a-popover-trigger')]"
+            "/span[contains(text(), 'Invoice')]/ancestor::a"
+        )
+        order_summary_a_xpath = (
+            "//span[contains(@class, 'a-button')]"
+            "/a[contains(text(), 'Order Summary')]"
+        )
+        # Need to wait a tiny bit for the JS
+        # connected to this link to load
+        time.sleep(2)
+        try:
+            wait2.until(
+                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
+                "Timeout waiting for Invoice",
+            ).click()
+            self.log.debug("Found Invoice button")
+            time.sleep(1)
+            # then this should appear
+            invoice_wrapper: WebElement = wait2.until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//div[contains(@class, 'a-popover-wrapper')]")
+                ),
+                "Timeout waiting for invoice wrapper",
+            )
+            elements_to_loop: List[WebElement] = invoice_wrapper.find_elements(
+                By.TAG_NAME, "a"
+            )
+        except TimeoutException:
+            self.log.debug(
+                "Timeout waiting for Invoice, maybe only have Order Summary"
+            )
+            elements_to_loop: List[WebElement] = [
+                wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, order_summary_a_xpath)
+                    ),
+                    "Timeout waiting for Order Summary button",
+                )
+            ]
+        self.log.debug("Looping and possibly downloading attachements")
+
+        for invoice_item in elements_to_loop:
+            text = (
+                invoice_item.text.replace("\r\n", " ")
+                .replace("\r", "")
+                .replace("\n", " ")
+            )
+            self.log.debug("Attachement '%s'", text)
+            href = invoice_item.get_attribute("href")
+            attachement = {"text": text, "href": href}
+
+            text_filename_safe = base64.urlsafe_b64encode(
+                text.encode("utf-8")
+            ).decode("utf-8")
+
+            attachement_file = (
+                order_cache_dir
+                / Path(f"{order_id}-attachement-{text_filename_safe}.pdf")
+            ).resolve()
+
+            if self.can_read(attachement_file):
+                attachement["file"] = str(
+                    attachement_file.relative_to(self.cache["BASE"])
+                )
+                attachement_dict.append(attachement)
+                self.log.debug("We already have the file for '%s' saved", text)
+                continue
+
+            order_summary = re.match(r".+summary/print.+", href)
+            download_pdf = re.match(r".+/download/.+\.pdf", href)
+            contact_link = re.match(r".+contact/contact.+", href)
+            invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
+
+            if order_summary:
+                if self.can_read(self.PDF_TEMP_FILENAME):
+                    # Remove old random temp
+                    os.remove(self.PDF_TEMP_FILENAME)
+                brws.switch_to.new_window()
+                brws.get(href)
+                self.log.debug(
+                    "This is the order summary. Open, print to PDF, close."
+                )
+                self.browser.execute_script("window.print();")
+                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+                attachement["file"] = str(
+                    Path(attachement_file).relative_to(self.cache["BASE"])
+                )  # keep this
+                self.move_file(self.PDF_TEMP_FILENAME, attachement_file)
+                brws.close()
+            elif download_pdf:
+                self.log.debug("This is a invoice PDF.")
+                for pdf in self.PDF_TEMP_FOLDER.glob("*.pdf"):
+                    # Remove old/random PDFs
+                    os.remove(pdf)
+                brws.switch_to.new_window()
+                # Can't use .get(...) here, since Selenium appears to
+                # be confused by the fact that Firefox downloads the PDF
+                brws.execute_script(
+                    """
+                    setTimeout(() => {
+                        document.location.href = arguments[0];
+                    }, "500");
+                    """,
+                    href,
+                )
+                self.log.debug("Opened pdf")
+                ## Look for PDF in folder
+                pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
+                while not pdf:
+                    pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
+                    time.sleep(3)
+                # We have a PDF, move it to  a proper name
+                self.wait_for_stable_file(pdf[0])
+                attachement["file"] = str(
+                    Path(attachement_file).relative_to(self.cache["BASE"])
+                )  # keep this
+                self.move_file(pdf[0], attachement_file)
+                brws.close()
+            elif contact_link or invoice_unavailable:
+                self.log.warning(
+                    "Contact or lnvoice unavailable link, nothing useful to"
+                    " save"
+                )
+            else:
+                self.log.warning(
+                    self.command.style.WARNING(
+                        "Unknown attachement, not saving: %s, %s"
+                    ),
+                    text,
+                    href,
+                )
+            attachement_dict.append(attachement)
+            brws.switch_to.window(order_handle)
+        return invoice_a_xpath
 
     def browser_cleanup_item_page(self) -> None:
         brws = self.browser
@@ -820,12 +860,12 @@ class AmazonScraper(BaseScraper):
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
-            self.username = (
+            username = (
                 input(f"Enter Amazon.{self.TLD} username: ")
                 if not settings.SCRAPER_AMZ_USERNAME
                 else settings.SCRAPER_AMZ_USERNAME
             )
-            self.password = (
+            password = (
                 getpass(f"Enter Amazon.{self.TLD} password: ")
                 if not settings.SCRAPER_AMZ_PASSWORD
                 else settings.SCRAPER_AMZ_PASSWORD
@@ -843,7 +883,7 @@ class AmazonScraper(BaseScraper):
                 username = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_email"))
                 )
-                username.send_keys(self.username)
+                username.send_keys(username)
                 self.rand_sleep()
                 wait.until(
                     EC.element_to_be_clickable(((By.ID, "continue")))
@@ -852,7 +892,7 @@ class AmazonScraper(BaseScraper):
                 password = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_password"))
                 )
-                password.send_keys(self.password)
+                password.send_keys(password)
                 self.rand_sleep()
                 remember = wait.until(
                     EC.presence_of_element_located((By.NAME, "rememberMe"))
