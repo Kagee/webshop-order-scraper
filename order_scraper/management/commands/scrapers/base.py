@@ -10,6 +10,7 @@ from typing import Any, Dict, Union
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium import webdriver
@@ -76,6 +77,7 @@ class BaseScraper(object):
                 browser (WebDriver): the configured and initialized browser
         """
         if self.browser_status != "created":
+            self.log.info("Using Selenium webdriver_manager to download webdriver binary")
             service = FirefoxService(
                 executable_path=FirefoxDriverManager().install()
             )
@@ -179,9 +181,15 @@ class BaseScraper(object):
         time.sleep(random.randint(min_seconds, max_seconds))
 
     def move_file(self, old_path, new_path, remove_old=True):
-        if remove_old and os.access(new_path, os.R_OK):
-            os.remove(new_path)
-        os.rename(old_path, new_path)
+        if self.can_read(new_path):
+            if remove_old:
+                self.remove(new_path)
+                os.rename(old_path, new_path)
+            else:
+                self.log.info(
+                    "Not overriding existing file: %s",
+                    Path(new_path).name,
+                )
 
     def makedir(self, path: Union[Path, str]) -> None:
         try:
@@ -198,6 +206,21 @@ class BaseScraper(object):
 
     def can_read(self, path: Union[Path, str]):
         return os.access(path, os.R_OK)
+
+    def write(
+        self, path: Union[Path, str], content: Any, json=False, binary=False
+    ):
+        write_mode = "w"
+        if binary:
+            write_mode += "b"
+        if json:
+            content = json.dumps(content, indent=4, cls=DjangoJSONEncoder)
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(content)
+
+    def read(self, path: Union[Path, str]):
+        with open(path, "r", encoding="utf-8") as file:
+            return file.read()
 
     def wait_for_stable_file(self, filename: Union[Path, str]):
         size_stable = False

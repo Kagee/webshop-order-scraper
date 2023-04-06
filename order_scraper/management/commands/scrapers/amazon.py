@@ -13,7 +13,6 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -550,9 +549,9 @@ class AmazonScraper(BaseScraper):
         if empty_order_list:
             # Empty order list, shotcut and save
             self.log.info("No orders on %s", year)
-            order_list_html[
-                (year, start_index)
-            ] = self.save_order_list_cache_html_file(year, start_index)
+            order_list_html[(year, start_index)] = (
+                self.save_order_list_cache_html_file(year, start_index)
+            )
             return False
 
         # Non-empty order page
@@ -582,9 +581,9 @@ class AmazonScraper(BaseScraper):
             next_button_works = True
         except NoSuchElementException:
             pass
-        order_list_html[
-            (year, start_index)
-        ] = self.save_order_list_cache_html_file(year, start_index)
+        order_list_html[(year, start_index)] = (
+            self.save_order_list_cache_html_file(year, start_index)
+        )
         if num_orders <= 10:
             self.log.debug("This order list (%s) has only one page", year)
             if found_next_button:
@@ -640,17 +639,17 @@ class AmazonScraper(BaseScraper):
 
                             matches_dict = matches.groupdict().copy()
                             if matches.group("date1"):
-                                matches_dict[
-                                    "date"
-                                ] = datetime.datetime.strptime(
-                                    matches.group("date1"), "%d %B %Y"
+                                matches_dict["date"] = (
+                                    datetime.datetime.strptime(
+                                        matches.group("date1"), "%d %B %Y"
+                                    )
                                 )
 
                             elif matches.group("date2"):
-                                matches_dict[
-                                    "date"
-                                ] = datetime.datetime.strptime(
-                                    matches.group("date2"), "%B %d, %Y"
+                                matches_dict["date"] = (
+                                    datetime.datetime.strptime(
+                                        matches.group("date2"), "%B %d, %Y"
+                                    )
                                 )
 
                             del matches_dict["date1"]
@@ -665,13 +664,13 @@ class AmazonScraper(BaseScraper):
                                 "items": {}
                             }
 
-                        order_lists[year][value_matches["id"]][
-                            "total"
-                        ] = value_matches["total"]
+                        order_lists[year][value_matches["id"]]["total"] = (
+                            value_matches["total"]
+                        )
 
-                        order_lists[year][value_matches["id"]][
-                            "date"
-                        ] = value_matches["date"]
+                        order_lists[year][value_matches["id"]]["date"] = (
+                            value_matches["date"]
+                        )
                         self.log.info(
                             "Order ID %s, %s, %s",
                             value_matches["id"],
@@ -727,23 +726,24 @@ class AmazonScraper(BaseScraper):
                     start_index = 0
                     more_pages_this_year = True
                     while more_pages_this_year:
-                        html_file = (
+                        html_filename = (
                             self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
                                 year=year, start_index=start_index
                             )
                         )
-                        self.log.debug("Looking for cache in: %s", html_file)
-                        if self.can_read(html_file):
+                        self.log.debug(
+                            "Looking for cache in: %s", html_filename
+                        )
+                        if self.can_read(html_filename):
                             found_year = True
                             self.log.debug(
                                 "Found cache for %s, index %s",
                                 year,
                                 start_index,
                             )
-                            with open(html_file, "r", encoding="utf-8") as olf:
-                                order_list_html[
-                                    (year, start_index)
-                                ] = fromstring(olf.read())
+                            order_list_html[(year, start_index)] = fromstring(
+                                self.read(html_filename)
+                            )
                             start_index += 10
                         else:
                             more_pages_this_year = False
@@ -771,13 +771,11 @@ class AmazonScraper(BaseScraper):
 
     def save_order_lists_to_json(self, order_lists: Dict) -> None:
         for year in order_lists:
-            json_file = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(year=year)
-            with open(json_file, "w", encoding="utf-8") as jsonfile:
-                json_string = json.dumps(
-                    order_lists[year], indent=4, cls=DjangoJSONEncoder
-                )
-                jsonfile.write(json_string)
-                self.log.debug("Saved %s", json_file)
+            json_filename = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(
+                year=year
+            )
+            self.write(json_filename, order_lists[year], json=True)
+            self.log.debug("Saved order list %s to JSON", year)
 
     # Function primarily using Selenium to scrape websites
     def browser_scrape_order_lists(self, years: List):
