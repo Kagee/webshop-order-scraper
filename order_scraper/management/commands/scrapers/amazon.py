@@ -303,6 +303,10 @@ class AmazonScraper(BaseScraper):
             brws.switch_to.new_window()
             self.log.debug("Opening item page for %s", item_id)
             brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
+            if "Page Not Found" in self.browser.title:
+                self.log.debug("Item page for %s has been removed", item_id)
+                order['items'][item_id]['was_404'] = True
+                continue
 
             self.log.debug("Slowly scrolling to bottom of page")
             brws.execute_script(
