@@ -48,3 +48,4 @@ disable = [
 line-length = 80
 target-version = ['py39']
 experimental-string-processing = true
+preview = true
