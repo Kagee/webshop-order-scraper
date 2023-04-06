@@ -471,6 +471,8 @@ class AmazonScraper(BaseScraper):
             (By.CSS_SELECTOR, "div.outOfStock"),
             # share-button, gived weird artefacts on PDF
             (By.CSS_SELECTOR, "div.ssf-background"),
+            (By.ID, "discovery-and-inspiration_feature_div"),
+            (By.ID, "promotions_feature_div"),
             (By.ID, "HLCXComparisonWidget_feature_div"),
             (By.ID, "aplusBrandStory_feature_div"),
             (By.ID, "value-pick-ac"),
