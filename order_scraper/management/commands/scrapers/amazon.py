@@ -55,21 +55,27 @@ class AmazonScraper(BaseScraper):
             options['not_archived'])
 
         self.LOGIN_PAGE_RE = fr'^https://www\.amazon\.{self.TLD}/ap/signin'
+
+        self.setup_templates()
+        self.setup_cache()
+
+    def setup_templates(self):
+        # pylint: disable=invalid-name
+        # URL Templates
         self.ORDER_LIST_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/gp/css/order-history?'
                 'orderFilter=year-{year}&startIndex={start_index}')
         self.ORDER_LIST_ARCHIVED_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/gp/your-account/order-history'
                 '?&orderFilter=archived&startIndex={start_index}')
-        # The double {{order_id}} is intentional
+
         self.ORDER_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/'
             'gp/your-account/order-details/?ie=UTF8&orderID={order_id}')
+
         self.ITEM_URL_TEMPLATE = \
             (f'https://www.amazon.{self.TLD}/'
             '-/en/gp/product/{item_id}/?ie=UTF8')
-
-        self.setup_cache()
 
     def command_scrape(self) -> None:
         order_lists_html = self.load_order_lists_html()
@@ -292,7 +298,6 @@ class AmazonScraper(BaseScraper):
                         .relative_to(self.cache['BASE'])) # keep this
 
         for item_id in order['items']:
-
             self.log.debug("New tab")
             brws.switch_to.window(order_handle)
             brws.switch_to.new_window()
@@ -320,7 +325,14 @@ class AmazonScraper(BaseScraper):
             time.sleep(11)
 
             self.browser_cleanup_item_page()
-
+            item_html_filename = \
+                 self.ORDER_ITEM_FILENAME_TEMPLATE.format(
+                order_id=order_id,
+                item_id=item_id,
+                ext="html")
+            self.log.debug("Saving item %s HTML to %s", 
+                           item_id, item_html_filename)
+            self.save_page_to_file(item_html_filename)
             self.log.debug("View and preload all item images")
 
             img_btns = brws.find_elements(
@@ -389,7 +401,7 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Saved order page HTML to file")
         return order
 
-    def browser_cleanup_item_page(self):
+    def browser_cleanup_item_page(self) -> None:
         brws = self.browser
         self.log.debug("Hide fluff, ads, etc")
         elemets_to_hide: List[WebElement] = []
@@ -449,7 +461,6 @@ class AmazonScraper(BaseScraper):
                 brws.find_element(By.ID, 'leftCol'),
                 )
         time.sleep(2)
-
 
     def browser_scrape_individual_order_list_page(self, year, start_index, order_list_html):
         '''
@@ -601,11 +612,9 @@ class AmazonScraper(BaseScraper):
         json_file = \
                 self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(year=year)
         # If we are saving a new HTML cache, invalidate possible json
-        try:
-            os.remove(json_file)
+        if self.remove(json_file):
             self.log.debug("Removed json cache for %s", year)
-        except FileNotFoundError:
-            pass
+
         cache_file = self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
             year=year,
             start_index=start_index
@@ -684,9 +693,6 @@ class AmazonScraper(BaseScraper):
                 self.log.debug("Saved %s", json_file)
 
     # Function primarily using Selenium to scrape websites
-
-
-
     def browser_scrape_order_lists(self, years: List):
         '''
         Uses Selenium to visit, load, save and then
@@ -803,6 +809,8 @@ class AmazonScraper(BaseScraper):
             str(self.cache["ORDER_LISTS"] / Path("order-list-{year}.json"))
         self.ORDER_FILENAME_TEMPLATE: Path = \
             str(self.cache["ORDERS"] / Path("{order_id}/order-{order_id}.{ext}"))
+        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = \
+            str(self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}"))
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
         years = list()

@@ -167,11 +167,12 @@ class BaseScraper(object):
         except FileExistsError:
             pass
 
-    def remove(self, path: Union[Path, str]) -> None:
+    def remove(self, path: Union[Path, str]) -> bool:
         try:
             os.remove(path)
+            return True
         except FileNotFoundError:
-            pass
+            return False
 
     def can_read(self, path: Union[Path, str]):
         return os.access(path, os.R_OK)
