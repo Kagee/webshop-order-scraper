@@ -7,7 +7,7 @@ import time
 from enum import Enum
 from logging import Logger
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, Final, Union
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -32,7 +32,7 @@ class BaseScraper(object):
     log: Logger
     command: BaseCommand
     options: Dict
-    LOGIN_PAGE_RE = r".+login.example.com.*"
+    LOGIN_PAGE_RE: Final[str] = r".+login.example.com.*"
     PDF_TEMP_FILENAME: str
     PDF_TEMP_FOLDER: str
 
@@ -41,13 +41,19 @@ class BaseScraper(object):
         ORDER_DETAILS = 2
         ORDER_ITEM = 3
 
-    def __init__(self, command: BaseCommand, options: Dict):
+    def __init__(
+        self,
+        command: BaseCommand,
+        options: Dict,
+        logname: str,
+        login_page_re: str,
+    ):
+        self.log = self.setup_logger(logname)
         self.command = command
         self.options = options
-        try:
-            os.makedirs(Path(settings.SCRAPER_CACHE_BASE))
-        except FileExistsError:
-            pass
+        # pylint: disable=invalid-name
+        self.LOGIN_PAGE_RE = login_page_re
+        self.makedir(Path(settings.SCRAPER_CACHE_BASE))
 
     def setup_logger(self, logname: str) -> Logger:
         log = logging.getLogger(logname)
