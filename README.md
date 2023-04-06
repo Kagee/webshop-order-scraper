@@ -62,6 +62,15 @@ python manage.py migrate
 ````
 
 ## Windows 101
+For PDF files in A4:
+* Printers and scanners
+* Microsoft print to PDF
+* Manage
+* Printer properties
+* Preferences
+* Advanced...
+* Paper Size: A4
+
 CMD:
 ````
 cd /some/folder
