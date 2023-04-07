@@ -120,13 +120,14 @@ class BaseScraper(object):
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_file", True
             )
-
-            # URL at top of pagde
-            options.set_preference("print.print_headercenter", "&U")
+            # Hide all printing metadata so it is easier to use
+            # pdf2text
+            # URL at top of page &U
+            options.set_preference("print.print_headercenter", "")
             options.set_preference("print.print_headerleft", "")
             options.set_preference("print.print_headerright", "")
-            # Page X of Y and date & time on bottom of page
-            options.set_preference("print.print_footercenter", "&PT - &D")
+            # Page X of Y and date & time on bottom of page &PT - &D
+            options.set_preference("print.print_footercenter", "")
             options.set_preference("print.print_footerleft", "")
             options.set_preference("print.print_footerright", "")
 
