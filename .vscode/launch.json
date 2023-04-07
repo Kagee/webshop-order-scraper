@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Scrape Ali",
+            "name": "Ali",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -20,57 +20,7 @@
             "justMyCode": true
         },
         {
-            "name": "Scrape Ali (nocache)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "aliexpress",
-                "-v",
-                "3"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.de 17,23",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon",
-                "--cache-orderlist",
-                "-v",
-                "3",
-                "-y",
-                "2017,2023",
-                "--not-archived"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.de",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}${pathSeparator}manage.py",
-            "args": [
-                "scrape",
-                "amazon",
-                "--cache-orderlist",
-                "-v",
-                "3",
-                "-y",
-                "2017,2023",
-                "--not-archived"
-            ],
-            "django": true,
-            "justMyCode": true
-        },
-        {
-            "name": "Scrape Amazon.de 2011+",
+            "name": "Amazon.de 2011+",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -87,7 +37,7 @@
             "justMyCode": true
         },
         {
-            "name": "Scrape Amazon.co.uk",
+            "name": "Amazon.co.uk 2011+",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -99,12 +49,14 @@
                 "co.uk",
                 "-v",
                 "3",
+                "--start-year",
+                "2011"
             ],
             "django": true,
             "justMyCode": true
         },
         {
-            "name": "Scrape Amazon.com",
+            "name": "Amazon.com 2018",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -116,7 +68,8 @@
                 "--cache-orderlist",
                 "-v",
                 "3",
-                // "--year",
+                "--year",
+                "2018"
                 // 2018 => 2 orders, 1 page (1 gift)
 
             ],
@@ -124,7 +77,7 @@
             "justMyCode": true
         },
         {
-            "name": "Scrape Amazon.co.jp",
+            "name": "Amazon.co.jp 2022+",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",

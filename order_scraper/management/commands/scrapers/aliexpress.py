@@ -634,12 +634,12 @@ class AliExpressScraper(BaseScraper):
                 self.browser.execute_script("window.print();")
                 # Do some read- and size change tests
                 # to try to detect when printing is complete
-                while not self.can_read(self.PDF_TEMP_FILENAME):
+                while not self.can_read(self.cache["PDF_TEMP"]):
                     self.log.debug("PDF file does not exist yet")
                     time.sleep(1)
-                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+                self.wait_for_stable_file(self.cache["PDF_TEMP"])
                 self.move_file(
-                    self.PDF_TEMP_FILENAME,
+                    self.cache["PDF_TEMP"],
                     order["items"][item_sku_id]["snapshot"]["pdf"],
                 )
                 self.write(

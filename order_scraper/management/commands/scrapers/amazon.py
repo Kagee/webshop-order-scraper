@@ -104,14 +104,13 @@ class AmazonScraper(BaseScraper):
             self.log.debug(
                 "Scraping only order IDs: %s", self.SCRAPER_AMZ_ORDERS
             )
-
+        count = 0
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
-            count = 0
             for order_id in order_lists[year]:
+                count += 1
                 if self.skip_order(order_id, count):
                     continue
-                count += 1
                 self.parse_order(order_id, order_lists[year][order_id])
                 self.pprint(order_lists[year][order_id])
                 # Write order to json here?
@@ -196,8 +195,8 @@ class AmazonScraper(BaseScraper):
 
         order["attachements"] = []
         order_handle = brws.current_window_handle
-        invoice_a_xpath = self.save_order_attachements(
-            order_id, order_cache_dir, order["attachements"]
+        invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
+            self.save_order_attachements(order_cache_dir, order["attachements"])
         )
 
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
@@ -251,18 +250,37 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Opening order page again")
         brws.switch_to.window(order_handle)
 
-        # brws.get(curr_url)
-
         # We "open" the Invoice popup before saving HTML
         # so it is in the DOM
         try:
-            wait2.until(
-                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
-                "Timeout waiting for Invoice",
-            ).click()
-        except TimeoutException:
-            # It may not be there if we have only order summary
-            pass
+            brws.find_element(By.XPATH, order_summary_a_xpath)
+            # If we found this, there is not Invoice link
+        except NoSuchElementException:
+            # We should expect to find a invoice link or wrapper
+            try:
+                brws.find_element(By.XPATH, invoice_wrapper_div_xpath)
+            except NoSuchElementException:
+                # Invoice wrapper is not open, need to open it
+                try:
+                    wait2.until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, invoice_a_xpath)
+                        ),
+                        "Timeout waiting for Invoice button",
+                    ).click()
+                    wait2.until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, invoice_wrapper_div_xpath)
+                        ),
+                        "Timeout waiting for Invoice popup",
+                    )
+                except TimeoutException:
+                    # pylint: disable=raise-missing-from
+                    raise CommandError(
+                        "Invoice popup did not open as expected, or did not"
+                        " find invoice link. We need this open to save it to"
+                        " HTML cache."
+                    )
         self.write(
             self._part_to_filename(
                 PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
@@ -370,22 +388,20 @@ class AmazonScraper(BaseScraper):
 
         self.log.debug("Printing page to PDF")
         brws.execute_script("window.print();")
-        self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+        self.wait_for_stable_file(self.cache["PDF_TEMP"])
         item_pdf_file = (
             order_cache_dir / Path(f"item-{item_id}.pdf")
         ).resolve()
         item_dict["pdf"] = str(
             Path(item_pdf_file).relative_to(self.cache["BASE"])
         )
-        self.move_file(self.PDF_TEMP_FILENAME, item_pdf_file)
+        self.move_file(self.cache["PDF_TEMP"], item_pdf_file)
         self.log.debug("PDF moved to cache")
 
         brws.close()
         self.log.debug("Closed page for item %s", item_id)
 
-    def save_order_attachements(
-        self, order_id, order_cache_dir, attachement_dict
-    ):
+    def save_order_attachements(self, order_cache_dir, attachement_dict):
         brws = self.browser
         wait2 = WebDriverWait(brws, 2)
         order_handle = brws.current_window_handle
@@ -396,6 +412,9 @@ class AmazonScraper(BaseScraper):
         order_summary_a_xpath = (
             "//span[contains(@class, 'a-button')]"
             "/a[contains(text(), 'Order Summary')]"
+        )
+        invoice_wrapper_div_xpath = (
+            "//div[contains(@class, 'a-popover-wrapper')]"
         )
         # Need to wait a tiny bit for the JS
         # connected to this link to load
@@ -410,7 +429,7 @@ class AmazonScraper(BaseScraper):
             # then this should appear
             invoice_wrapper: WebElement = wait2.until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//div[contains(@class, 'a-popover-wrapper')]")
+                    (By.XPATH, invoice_wrapper_div_xpath)
                 ),
                 "Timeout waiting for invoice wrapper",
             )
@@ -437,7 +456,7 @@ class AmazonScraper(BaseScraper):
                 .replace("\r", "")
                 .replace("\n", " ")
             )
-            self.log.debug("Attachement '%s'", text)
+            self.log.debug("Found attachement with name '%s'", text)
             href = invoice_item.get_attribute("href")
             attachement = {"text": text, "href": href}
 
@@ -464,22 +483,22 @@ class AmazonScraper(BaseScraper):
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
 
             if order_summary:
-                self.remove(self.PDF_TEMP_FILENAME)
+                self.remove(self.cache["PDF_TEMP"])
                 brws.switch_to.new_window()
                 brws.get(href)
                 self.log.debug(
-                    "This is the order summary. Open, print to PDF, close."
+                    "Found order summary."
                 )
                 self.browser.execute_script("window.print();")
-                self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
+                self.wait_for_stable_file(self.cache["PDF_TEMP"])
                 attachement["file"] = str(
                     Path(attachement_file).relative_to(self.cache["BASE"])
                 )  # keep this
-                self.move_file(self.PDF_TEMP_FILENAME, attachement_file)
+                self.move_file(self.cache["PDF_TEMP"], attachement_file)
                 brws.close()
             elif download_pdf:
                 self.log.debug("This is a invoice PDF.")
-                for pdf in self.PDF_TEMP_FOLDER.glob("*.pdf"):
+                for pdf in self.cache["TEMP"].glob("*.pdf"):
                     # Remove old/random PDFs
                     os.remove(pdf)
                 self.log.debug(
@@ -497,9 +516,9 @@ class AmazonScraper(BaseScraper):
                     href,
                 )
                 ## Look for PDF in folder
-                pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
+                pdf = list(self.cache["TEMP"].glob("*.pdf"))
                 while not pdf:
-                    pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
+                    pdf = list(self.cache["TEMP"].glob("*.pdf"))
                     time.sleep(3)
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
@@ -523,7 +542,7 @@ class AmazonScraper(BaseScraper):
                 )
             attachement_dict.append(attachement)
             brws.switch_to.window(order_handle)
-        return invoice_a_xpath
+        return invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath
 
     def browser_cleanup_item_page(self) -> None:
         brws = self.browser
