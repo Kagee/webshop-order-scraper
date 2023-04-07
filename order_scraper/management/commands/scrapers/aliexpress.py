@@ -628,12 +628,10 @@ class AliExpressScraper(BaseScraper):
                 self.log.debug("Found snapshot tab")
                 self.browser_cleanup_item_page()
                 time.sleep(2)
-                self.remove(self.PDF_TEMP_FILENAME)
+                self.remove(self.cache["PDF_TEMP"])
 
                 self.log.debug("Trying to print to PDF")
                 self.browser.execute_script("window.print();")
-                # self.write(self.PDF_TEMP_FILENAME, self.browser.print_page(),binary=True, from_base64=True)
-                # print()
                 # Do some read- and size change tests
                 # to try to detect when printing is complete
                 while not self.can_read(self.PDF_TEMP_FILENAME):

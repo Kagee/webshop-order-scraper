@@ -19,7 +19,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from .base import BaseScraper
+from .base import BaseScraper, PagePart
 
 
 class AmazonScraper(BaseScraper):
@@ -85,7 +85,7 @@ class AmazonScraper(BaseScraper):
         order_lists = {}
         for year in self.YEARS:
             order_lists[year] = self.read_json(
-                BaseScraper.Part.ORDER_LIST, year=year
+                PagePart.ORDER_LIST_JSON, year=year
             )
         return order_lists
 
@@ -145,8 +145,8 @@ class AmazonScraper(BaseScraper):
                 return True
 
     def parse_order(self, order_id: Dict, order_id_dict: Dict):
-        order_json_filename = self.ORDER_FILENAME_TEMPLATE.format(
-            order_id=order_id, ext="json"
+        order_json_filename = self._part_to_filename(
+            PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
         if self.can_read(order_json_filename):
             # TODO: Enable order loading from json when ready
@@ -157,7 +157,9 @@ class AmazonScraper(BaseScraper):
 
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
         html_cache = Path(
-            self.ORDER_FILENAME_TEMPLATE.format(order_id=order_id, ext="html")
+            self._part_to_filename(
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
+            )
         )
 
         self.makedir(order_cache_dir)
@@ -230,7 +232,7 @@ class AmazonScraper(BaseScraper):
                 high_res_thumb_url = thumb.get_attribute("data-a-hires")
                 ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
                 item_thumb_file = (
-                    order_cache_dir / Path(f"item-thumb-{item_id}{ext}")
+                    order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
                 ).resolve()
 
                 urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
@@ -261,10 +263,13 @@ class AmazonScraper(BaseScraper):
         except TimeoutException:
             # It may not be there if we have only order summary
             pass
-        fname = self.ORDER_FILENAME_TEMPLATE.format(
-            order_id=order_id, ext="html"
+        self.write(
+            self._part_to_filename(
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
+            ),
+            brws.page_source,
+            html=True,
         )
-        self.write(fname, brws.page_source, html=True)
         self.log.debug("Saved order page HTML to file")
         return order
 
@@ -305,9 +310,13 @@ class AmazonScraper(BaseScraper):
             time.sleep(11)
 
             self.browser_cleanup_item_page()
-            item_html_filename = self.ORDER_ITEM_FILENAME_TEMPLATE.format(
-                order_id=order_id, item_id=item_id, ext="html"
+            item_html_filename = self._part_to_filename(
+                PagePart.ORDER_ITEM,
+                order_id=order_id,
+                item_id=item_id,
+                ext="html",
             )
+
             self.log.debug(
                 "Saving item %s HTML to %s", item_id, item_html_filename
             )
@@ -363,7 +372,7 @@ class AmazonScraper(BaseScraper):
         brws.execute_script("window.print();")
         self.wait_for_stable_file(self.PDF_TEMP_FILENAME)
         item_pdf_file = (
-            order_cache_dir / Path(f"{order_id}-item-{item_id}.pdf")
+            order_cache_dir / Path(f"item-{item_id}.pdf")
         ).resolve()
         item_dict["pdf"] = str(
             Path(item_pdf_file).relative_to(self.cache["BASE"])
@@ -437,7 +446,8 @@ class AmazonScraper(BaseScraper):
             ).decode("utf-8")
 
             attachement_file = (
-                order_cache_dir / Path(f"attachement-{text_filename_safe}.pdf")
+                order_cache_dir
+                / Path(f"order-attachement-{text_filename_safe}.pdf")
             ).resolve()
 
             if self.can_read(attachement_file):
@@ -454,9 +464,7 @@ class AmazonScraper(BaseScraper):
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
 
             if order_summary:
-                if self.can_read(self.PDF_TEMP_FILENAME):
-                    # Remove old random temp
-                    os.remove(self.PDF_TEMP_FILENAME)
+                self.remove(self.PDF_TEMP_FILENAME)
                 brws.switch_to.new_window()
                 brws.get(href)
                 self.log.debug(
@@ -474,6 +482,9 @@ class AmazonScraper(BaseScraper):
                 for pdf in self.PDF_TEMP_FOLDER.glob("*.pdf"):
                     # Remove old/random PDFs
                     os.remove(pdf)
+                self.log.debug(
+                    "Opening PDF, waiting for it to download in background"
+                )
                 brws.switch_to.new_window()
                 # Can't use .get(...) here, since Selenium appears to
                 # be confused by the fact that Firefox downloads the PDF
@@ -485,7 +496,6 @@ class AmazonScraper(BaseScraper):
                     """,
                     href,
                 )
-                self.log.debug("Opened pdf")
                 ## Look for PDF in folder
                 pdf = list(self.PDF_TEMP_FOLDER.glob("*.pdf"))
                 while not pdf:
@@ -770,13 +780,12 @@ class AmazonScraper(BaseScraper):
         return order_lists
 
     def save_order_list_cache_html_file(self, year, start_index):
-        json_file = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(year=year)
+        json_file = self._part_to_filename(PagePart.ORDER_LIST_JSON, year=year)
         # If we are saving a new HTML cache, invalidate possible json
         if self.remove(json_file):
             self.log.debug("Removed json cache for %s", year)
-
-        cache_file = self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
-            year=year, start_index=start_index
+        cache_file = self._part_to_filename(
+            PagePart.ORDER_LIST_HTML, year=year, start_index=start_index
         )
         self.log.info(
             "Saving cache to %s and appending to html list", cache_file
@@ -804,7 +813,7 @@ class AmazonScraper(BaseScraper):
                     "Looking for cache of %s", str(year).capitalize()
                 )
                 found_year = False
-                if self.has_json(BaseScraper.Part.ORDER_LIST, year=year):
+                if self.has_json(PagePart.ORDER_LIST_JSON, year=year):
                     self.log.debug(
                         "%s already has json", str(year).capitalize()
                     )
@@ -814,10 +823,10 @@ class AmazonScraper(BaseScraper):
                     start_index = 0
                     more_pages_this_year = True
                     while more_pages_this_year:
-                        html_filename = (
-                            self.ORDER_LIST_HTML_FILENAME_TEMPLATE.format(
-                                year=year, start_index=start_index
-                            )
+                        html_filename = self._part_to_filename(
+                            PagePart.ORDER_LIST_HTML,
+                            year=year,
+                            start_index=start_index,
                         )
                         self.log.debug(
                             "Looking for cache in: %s", html_filename
@@ -859,8 +868,8 @@ class AmazonScraper(BaseScraper):
 
     def save_order_lists_to_json(self, order_lists: Dict) -> None:
         for year in order_lists:
-            json_filename = self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(
-                year=year
+            json_filename = self._part_to_filename(
+                PagePart.ORDER_LIST_JSON, year=year
             )
             self.write(json_filename, order_lists[year], to_json=True)
             self.log.debug("Saved order list %s to JSON", year)
@@ -1071,10 +1080,14 @@ class AmazonScraper(BaseScraper):
             )
         return tld
 
-    def _part_to_filename(self, part: BaseScraper.Part, **kwargs):
-        if part == BaseScraper.Part.ORDER_LIST:
-            return self.ORDER_LIST_JSON_FILENAME_TEMPLATE.format(**kwargs)
-        elif part == BaseScraper.Part.ORDER_DETAILS:
-            return self.ORDER_FILENAME_TEMPLATE.format(**kwargs)
-        elif part == BaseScraper.Part.ORDER_ITEM:
-            return self.ORDER_ITEM_FILENAME_TEMPLATE.format(**kwargs)
+    def _part_to_filename(self, part: PagePart, **kwargs):
+        template: str
+        if part == PagePart.ORDER_LIST_JSON:
+            template = self.ORDER_LIST_JSON_FILENAME_TEMPLATE
+        elif part == PagePart.ORDER_LIST_HTML:
+            template = self.ORDER_LIST_HTML_FILENAME_TEMPLATE
+        elif part == PagePart.ORDER_DETAILS:
+            template = self.ORDER_FILENAME_TEMPLATE
+        elif part == PagePart.ORDER_ITEM:
+            template = self.ORDER_ITEM_FILENAME_TEMPLATE
+        return Path(template.format(**kwargs))

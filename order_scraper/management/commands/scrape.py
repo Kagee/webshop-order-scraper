@@ -1,6 +1,6 @@
 import datetime
 
-from django.core.management.base import (BaseCommand, CommandError,
+from django.core.management.base import (BaseCommand,
                                          no_translations)
 
 from .scrapers.aliexpress import AliExpressScraper
@@ -63,6 +63,12 @@ class Command(BaseCommand):
                 help="Use file for order list. Will not detect new orders with this."
                 )
 
+        scraper.add_argument(
+                '-l',
+                '--leave-browser',
+                action='store_true',
+                help="Leave browser window open after scraping."
+                )
         # Internal hack to get command-spesific options on top
         parser._action_groups.reverse() # pylint: disable=protected-access
 

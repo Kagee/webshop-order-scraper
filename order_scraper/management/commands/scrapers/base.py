@@ -23,6 +23,13 @@ from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 
 
+class PagePart(Enum):
+    ORDER_LIST_JSON = 1
+    ORDER_LIST_HTML = 2
+    ORDER_DETAILS = 3
+    ORDER_ITEM = 4
+
+
 class BaseScraper(object):
     browser: webdriver.Firefox
     browser_status: str = "no-created"
@@ -30,18 +37,10 @@ class BaseScraper(object):
     username: str
     password: str
     cache: Dict[str, Path]
-    pdf_temp_file: Path
     log: Logger
     command: BaseCommand
     options: Dict
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
-    PDF_TEMP_FILENAME: str
-    PDF_TEMP_FOLDER: str
-
-    class Part(Enum):
-        ORDER_LIST = 1
-        ORDER_DETAILS = 2
-        ORDER_ITEM = 3
 
     def __init__(
         self,
@@ -80,18 +79,15 @@ class BaseScraper(object):
             {
                 "ORDER_LISTS": self.cache["BASE"] / Path("order_lists"),
                 "ORDERS": self.cache["BASE"] / Path("orders"),
+                "TEMP": self.cache["BASE"] / Path("temporary"),
             }
         )
         for name, path in self.cache.items():
             self.log.debug("Cache folder %s: %s", name, path)
             self.makedir(path)
 
-        # pylint: disable=invalid-name
-        self.PDF_TEMP_FOLDER: Path = self.cache["BASE"] / Path("temporary-pdf/")
-        self.makedir(self.PDF_TEMP_FOLDER)
-
-        self.PDF_TEMP_FILENAME: Path = self.PDF_TEMP_FOLDER / Path(
-            "temporary-pdf.pdf"
+        self.cache.update(
+            {"PDF_TEMP": self.cache["TEMP"] / "temporary-pdf.pdf"}
         )
 
     def browser_get_instance(self):
@@ -144,18 +140,16 @@ class BaseScraper(object):
             )
             options.set_preference("browser.download.alwaysOpenPanel", False)
             options.set_preference(
-                "browser.download.dir", str(self.PDF_TEMP_FOLDER)
+                "browser.download.dir", str(self.cache["TEMP"])
             )
             options.set_preference(
                 "browser.helperApps.neverAsk.saveToDisk", "application/pdf"
             )
             options.set_preference("pdfjs.disabled", True)
-            self.log.debug(
-                "PDF temporary file is %s", str(self.PDF_TEMP_FOLDER)
-            )
+            self.log.debug("PDF temporary file is %s", str(self.cache["TEMP"]))
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_filename",
-                str(self.PDF_TEMP_FILENAME),
+                str(self.cache["PDF_TEMP"]),
             )
             options.set_preference(
                 f"print.printer_{ printer_name }.show_print_progress", True
@@ -211,15 +205,15 @@ class BaseScraper(object):
     def browser_login(self, url):
         raise NotImplementedError("Child does not implement browser_login()")
 
-    def _part_to_filename(self, part: Part, **kwargs):
+    def _part_to_filename(self, part: PagePart, **kwargs):
         raise NotImplementedError(
             "Child does not implement _part_to_filename(...)"
         )
 
-    def has_json(self, part: Part, **kwargs) -> bool:
+    def has_json(self, part: PagePart, **kwargs) -> bool:
         return self.can_read(self._part_to_filename(part, **kwargs))
 
-    def read_json(self, part: Part, **kwargs) -> Any:
+    def read_json(self, part: PagePart, **kwargs) -> Any:
         if not self.has_json(part, **kwargs):
             return {}
         return self.read(self._part_to_filename(part, **kwargs), from_json=True)
@@ -282,9 +276,9 @@ class BaseScraper(object):
             write_mode += "b"
             kwargs = {}
         else:
-            with open(
+            with open(  # pylint: disable=unspecified-encoding
                 path, write_mode, **kwargs
-            ) as file:  # pylint: disable=unspecified-encoding
+            ) as file:
                 file.write(content)
         if html:
             return html_element
