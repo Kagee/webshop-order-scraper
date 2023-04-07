@@ -74,5 +74,3 @@ class Command(BaseCommand):
             AmazonScraper(self, options).command_scrape()
         elif options['webshop'] == "tryout":
             TryOutScraper(self, options).command_scrape()
-        else:
-            raise CommandError("Unknown webshop: {options['webshop']}")

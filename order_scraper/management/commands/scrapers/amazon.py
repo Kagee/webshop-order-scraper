@@ -27,12 +27,11 @@ class AmazonScraper(BaseScraper):
     YEARS: Final[List]
     # Xpath to individual order item parent element
     ORDER_CARD_XPATH: Final[str] = "//div[contains(@class, 'js-order-card')]"
-    years: list
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
-        self.do_cache_orderlist = options["cache_orderlist"]
         # pylint: disable=invalid-name
+        self.DO_CACHE_ORDERLIST = options["cache_orderlist"]
         self.TLD = self.check_tld(options["tld"])
         self.LOGIN_PAGE_RE = rf"^https://www\.amazon\.{self.TLD}/ap/signin"
         self.SCRAPER_AMZ_ORDERS = (
@@ -231,8 +230,7 @@ class AmazonScraper(BaseScraper):
                 high_res_thumb_url = thumb.get_attribute("data-a-hires")
                 ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
                 item_thumb_file = (
-                    order_cache_dir
-                    / Path(f"{order_id}-item-thumb-{item_id}{ext}")
+                    order_cache_dir / Path(f"item-thumb-{item_id}{ext}")
                 ).resolve()
 
                 urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
@@ -439,8 +437,7 @@ class AmazonScraper(BaseScraper):
             ).decode("utf-8")
 
             attachement_file = (
-                order_cache_dir
-                / Path(f"{order_id}-attachement-{text_filename_safe}.pdf")
+                order_cache_dir / Path(f"attachement-{text_filename_safe}.pdf")
             ).resolve()
 
             if self.can_read(attachement_file):
@@ -800,7 +797,7 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Looking for %s", ", ".join(str(x) for x in self.YEARS))
         missing_years = self.YEARS.copy()
         json_cache = []
-        if self.do_cache_orderlist:
+        if self.DO_CACHE_ORDERLIST:
             self.log.debug("Checking orderlist caches")
             for year in self.YEARS:
                 self.log.debug(

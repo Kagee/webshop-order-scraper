@@ -125,12 +125,14 @@ class BaseScraper(object):
                 f"print.printer_{ printer_name }.print_to_file", True
             )
 
-            options.set_preference(f"print.print_headercenter", "&U")
-            options.set_preference(f"print.print_headerleft", "")
-            options.set_preference(f"print.print_headerright", "")
-            options.set_preference(f"print.print_footercenter", "&PT - &D")
-            options.set_preference(f"print.print_footerleft", "")
-            options.set_preference(f"print.print_footerright", "")
+            # URL at top of pagde
+            options.set_preference("print.print_headercenter", "&U")
+            options.set_preference("print.print_headerleft", "")
+            options.set_preference("print.print_headerright", "")
+            # Page X of Y and date & time on bottom of page
+            options.set_preference("print.print_footercenter", "&PT - &D")
+            options.set_preference("print.print_footerleft", "")
+            options.set_preference("print.print_footerright", "")
 
             options.set_preference("browser.download.folderList", 2)
             options.set_preference(
@@ -280,7 +282,9 @@ class BaseScraper(object):
             write_mode += "b"
             kwargs = {}
         else:
-            with open(path, write_mode, **kwargs) as file:
+            with open(
+                path, write_mode, **kwargs
+            ) as file:  # pylint: disable=unspecified-encoding
                 file.write(content)
         if html:
             return html_element
