@@ -1,5 +1,5 @@
 # homelab-organizer
-1. ~Web app for organizing stuff in your homelab.~ (not yet, have to finish 1. first)
+1. ~Web app for organizing stuff in your homelab.~ (not yet, have to finish 2. first)
 2. Command line scraper for orders and item info from webshop(s)
 
 ## Requirements
