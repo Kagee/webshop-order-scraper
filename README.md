@@ -1,17 +1,21 @@
 # homelab-organizer
-1. Web app for organizing stuff in your homelab.
+1. ~Web app for organizing stuff in your homelab.~ (not yet, have to finish 1. first)
 2. Command line scraper for orders and item info from webshop(s)
 
 ## Requirements
-Python 3.9 or later
+Python 3.9 or later. Should support both Linux and Windows. 
+
+Requires Firefox installed, not from snap (see instructions).
 
 ## Logging / output
-You can control logging by creating `hlo/settings/logging.py`
+You can control logging by overriding `LOGGING` by creating a `hlo/settings/logging.py`
 
-Look in `hlo/settings/django.py` for example
+Look in `hlo/settings/django.py` for an example `LOGGING` [dictConfig](https://docs.python.org/3/library/logging.config.html)
+
+Be aware that the Django command --verbosity argument will override the loglevel you set.
 
 ## Scraping of webshops
-This requires Firefox. Firefox installed as a snap on Ubuntu is not supported. To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubuntu.co.uk/2022/04/how-to-install-firefox-deb-apt-ubuntu-22-04) article for omg!ubuntu.
+Requires Firfox. Chrome is to difficult to print to PDF from. Firefox installed as a snap on Ubuntu is not supported. To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubuntu.co.uk/2022/04/how-to-install-firefox-deb-apt-ubuntu-22-04) article for omg!ubuntu.
 
 ### Aliexpress
 Scrapes order list, item info and details to JSON, and saves a PDF copy of the Aliexpress item snapshot.
@@ -40,7 +44,7 @@ python manage.py scrape amazon --cache-orderlist
 python manage.py scrape amazon --cache-orderlist --year 2021,2023 --not-archived --tld es
 
 # Scrape all orders on amazon.co.jp from 2011 onwards, including archived orders
-python manage.py scrape amazon --cache-orderlist --start-year 2011 --tld co.jp
+python manage.py scrape amazon --cache-orderlist --start-year 2022 --tld co.jp
 
 # See help for details
 python manage.py scrape --help
@@ -52,7 +56,7 @@ Terminal:
 cd /some/folder
 git clone https://github.com/Kagee/homelab-organizer.git
 cd homelab-organizer
-python3.9 -m venv ./venv
+python3.9 -m venv ./venv # or newer
 source ./venv/bin/activate
 python -m pip install -U pip
 pip install -r requirements-dev.txt
@@ -76,7 +80,7 @@ CMD:
 cd /some/folder
 git clone https://github.com/Kagee/homelab-organizer.git # or Github Desktop
 cd homelab-organizer
-python3.9 -m venv ./venv
+python3.9 -m venv ./venv # or newer
 venv\Scripts\activate
 python -m pip install -U pip
 pip install -r requirements-dev.txt
