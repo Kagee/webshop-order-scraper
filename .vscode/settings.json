@@ -2,4 +2,13 @@
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
     "git.enabled": false,
+    "files.exclude": {
+        "venv/": true,
+        "tls/": true,
+        ".mypy_cache/": true,
+        "*.log": true,
+        "*.sqlite3": true,
+        "manage.py": true,
+        "LICENSE": true,
+    }
 }
