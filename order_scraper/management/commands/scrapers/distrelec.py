@@ -70,7 +70,8 @@ class DistrelecScraper(BaseScraper):
         if settings.HLO_SCRAPER_DEC_MANUAL_LOGIN:
             self.log.debug(
                 self.command.style.ERROR(
-                    f"Please log in to {self.DOMAIN} and press enter when ready."
+                    f"Please log in to {self.DOMAIN} and press enter when"
+                    " ready."
                 )
             )
             input()
@@ -98,9 +99,10 @@ class DistrelecScraper(BaseScraper):
         # first row: div.row-holder div.row-holder__item div.date/number/by/invoice/staus (span.value/total -> (span.currency + text() )
         # second row:
         #   <a href="/my-account/order-history/order-details/1006705511" class="mat-button mat-button--action-red">
-        #https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511
-        #https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/xls/ (direct download)
-        #https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/csv/ (direct download)
+        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511
+        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/xls/ (direct download)
+        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/csv/ (direct download)
+
     def browser_login2(self, _):
         """
         Uses Selenium to log in Amazon.

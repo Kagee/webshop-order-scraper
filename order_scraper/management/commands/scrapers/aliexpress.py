@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any, Dict, Final, List
 
 from django.conf import settings
-
-# This is used in a Django command
 from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html import HtmlElement

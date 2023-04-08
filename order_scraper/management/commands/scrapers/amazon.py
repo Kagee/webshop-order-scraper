@@ -486,9 +486,7 @@ class AmazonScraper(BaseScraper):
                 self.remove(self.cache["PDF_TEMP"])
                 brws.switch_to.new_window()
                 brws.get(href)
-                self.log.debug(
-                    "Found order summary."
-                )
+                self.log.debug("Found order summary.")
                 self.browser.execute_script("window.print();")
                 self.wait_for_stable_file(self.cache["PDF_TEMP"])
                 attachement["file"] = str(
