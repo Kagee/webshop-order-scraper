@@ -40,8 +40,11 @@ class DistrelecScraper(BaseScraper):
         # url_trigger_login = "https://www.amazon.de/-/en/gp/css/order-history"
         # self.browser_visit_page(url_trigger_login, True)
         # https://www.elfadistrelec.no/my-account/order-history
+        # url = "https://www.elfadistrelec.no/login"
+        # TODO: Override browser_visit_page so user can complete puzzle when required
         self.browser_visit_page(url, False)
-
+        # What happened?
+        # This request was blocked by our security service
         # time.sleep(30)
         self.browser_safe_quit()
 
@@ -80,6 +83,9 @@ class DistrelecScraper(BaseScraper):
             input()
         else:
             brws = self.browser
+
+            # dev id ensNotifyBanner => div class accept-btn-container click
+            # id captcha-box -> tell user to fix
             dec_username = (
                 input(f"Enter {self.DOMAIN} username: ")
                 if not settings.SCRAPER_DEC_USERNAME
