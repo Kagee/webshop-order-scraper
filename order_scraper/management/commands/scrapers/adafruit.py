@@ -84,6 +84,40 @@ class AdafruitScraper(BaseScraper):
         orders = self.combine_orders_items(self.parse_order_csv())
         self.pprint(orders)
 
+    def browser_cleanup_item_page(self) -> None:
+        """
+        remove:
+        div.header-wrap
+        nav.breadcrumbs
+        footer#siteFooter
+        div.instant-search-container
+        div.parts_last_bought csselector or xpath parent::parent::div <-
+        div.parts_last_bought x2?
+        section#related-products
+        section#distributors
+        div#___ratingbadge_0
+        div.gallery-thumbnails
+        div#prod-rightnav
+
+        tags:
+        iframe
+
+        div.main => set margin right/left = 0
+
+        div class fluid-width-video-wrapper => iframe src => text
+        ^ set p parent of fluid-width-video-wrapper text to iframe src
+        <p><img src="https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png" style="height: 4em;">
+    <x-large><a href="https://www.youtube.com/embed/k6CcMdjNafw?start=355">https://www.youtube.com/embed/k6CcMdjNafw?start=355</a></x-large></p>
+        delete fluid-width-video-wrapper
+
+
+        section.product-image-gallery.slideshow-gallery:
+        div.gallery-slides-block img.src
+
+        PDF er ikke tekst - mye bruk av relative?
+        """
+        pass
+
     def browser_login(self, _):
         return False
 
