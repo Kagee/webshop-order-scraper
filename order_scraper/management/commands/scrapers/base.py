@@ -331,6 +331,7 @@ class BaseScraper(object):
                 )
         self.log.debug("File %s appears stable.", filename)
 
+
 class HLOEncoder(DjangoJSONEncoder):
     def default(self, obj):
         if isinstance(obj, Path):

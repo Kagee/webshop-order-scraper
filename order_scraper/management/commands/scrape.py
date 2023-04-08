@@ -6,6 +6,7 @@ from django.core.management.base import (BaseCommand,
 from .scrapers.aliexpress import AliExpressScraper
 from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
+from .scrapers.adafruit import AdafruitScraper
 from .scrapers.tryout import TryOutScraper
 
 class Command(BaseCommand):
@@ -62,6 +63,7 @@ class Command(BaseCommand):
                     "aliexpress",
                     "amazon",
                     "distrelec",
+                    "adafruit",
                     "tryout"
                     ],
                 help="The online webshop to scrape orders from. (REQUIRED)"
@@ -91,5 +93,7 @@ class Command(BaseCommand):
             AmazonScraper(self, options).command_scrape()
         elif options['webshop'] == "distrelec":
             DistrelecScraper(self, options).command_scrape()
+        elif options['webshop'] == "adafruit":
+            AdafruitScraper(self, options).command_scrape()
         elif options['webshop'] == "tryout":
             TryOutScraper(self, options).command_scrape()

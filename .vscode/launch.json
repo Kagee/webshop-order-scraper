@@ -113,6 +113,20 @@
             "justMyCode": true
         },
         {
+            "name": "Adafruit",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "adafruit",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
             "name": "--help",
             "type": "python",
             "request": "launch",
