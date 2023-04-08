@@ -187,7 +187,8 @@ class AliExpressScraper(BaseScraper):
             ) or order["id"] in settings.SCRAPER_ALI_ORDERS_SKIP:
                 self.log.info("Skipping order ID %s", order["id"])
                 continue
-
+            order_cache_dir = self.cache["ORDERS"] / order["id"]
+            self.makedir(order_cache_dir)
             json_filename = self.ORDER_FILENAME_TEMPLATE.format(
                 order_id=order["id"], ext="json"
             )
@@ -286,13 +287,13 @@ class AliExpressScraper(BaseScraper):
             )[0]
         shipper_div = html.xpath('//span[contains(@class, "title-eclp")]')[0]
         tracking["shipper"] = (
-            shipper_div.text.strip() if shipper_div else "Unknown"
+            shipper_div.text.strip() if shipper_div is not None else "Unknown"
         )
         status_div = html.xpath('//div[contains(@class, "status-title-text")]')[
             0
         ]
         tracking["status"] = (
-            status_div.text.strip() if status_div else "Unknown"
+            status_div.text.strip() if status_div is not None else "Unknown"
         )
         addr = []
         for p_element in html.xpath(
@@ -1004,7 +1005,7 @@ class AliExpressScraper(BaseScraper):
             self.cache["ORDERS"] / "{order_id}/order.{ext}"
         )
         self.TRACKING_HTML_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / "tracking-{order_id}.html"
+            self.cache["ORDERS"] / "{order_id}/tracking.html"
         )
 
         self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
