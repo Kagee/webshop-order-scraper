@@ -230,12 +230,19 @@ class AmazonScraper(BaseScraper):
                     By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]"
                 )
                 high_res_thumb_url = thumb.get_attribute("data-a-hires")
-                ext = os.path.splitext(urlparse(high_res_thumb_url).path)[1]
+                # _AC_UY300_SX300_
+                # 1. Autocrop
+                # 2. Resize Y to 300px
+                # 3. Scale X so no larger than 300px
+                large_image_src = re.sub(
+                    r"(.+\._)[^\.]*(_\.+)", r"\1AC_UY300_SX300\2", high_res_thumb_url
+                )
+                ext = os.path.splitext(urlparse(large_image_src).path)[1]
                 item_thumb_file = (
                     order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
                 ).resolve()
 
-                urllib.request.urlretrieve(high_res_thumb_url, item_thumb_file)
+                urllib.request.urlretrieve(large_image_src, item_thumb_file)
                 order["items"][item_id]["thumbnail"] = str(
                     Path(item_thumb_file).relative_to(self.cache["BASE"])
                 )  # keep this
@@ -363,30 +370,51 @@ class AmazonScraper(BaseScraper):
         brws = self.browser
         self.log.debug("View and preload all item images")
 
+        img_btns = brws.find_elements(
+            By.XPATH, "//li[contains(@class,'imageThumbnail')]"
+        )
+
+        # This will add the attribute data-old-hires for
+        # those images that have high-res versions
+        for img_btn in img_btns:
+            time.sleep(1)
+            img_btn.click()
+        if len(img_btns):
+            img_btns[0].click()
+
         img_urls = []
         for image in brws.find_elements(
-            By.XPATH,
-            "//li[contains(@class,'image')][contains(@class,'item')]//img",
+            By.CSS_SELECTOR,
+            "li.image.item div.imgTagWrapper img",
         ):
-            src = image.get_attribute("src")
-            dst = re.sub(r"(.*_AC)[^\.]*(\..*)", r"\1\2", src)
-            print(src, dst)
-            img_urls.append(dst)
+            image_src = image.get_attribute("data-old-hires")
+            if image_src:
+                large_image_src = image_src
+            else:
+                image_src = image.get_attribute("src")
+                # No highres, get as big a image as possible
+                # Remove all resize etc, leave ayto crop
+                large_image_src = re.sub(
+                    r"(.+\._)[^\.]*(_\.+)", r"\1AC\2", image_src
+                )
+            #print("Small:", image_src)
+            #print("Large: ", large_image_src)
+            img_urls.append(large_image_src)
 
         self.log.debug("Include all item images on bottom of page")
+        self.log.debug("Adding the following images: %s", img_urls)
         image_main: WebElement
         try:
-            image_main =  brws.find_element(By.ID, 'imgBlkFront')
+            image_main = brws.find_element(By.ID, "imgBlkFront")
         except NoSuchElementException:
-            image_main =  brws.find_element(By.ID, 'landingImage')
+            image_main = brws.find_element(By.ID, "landingImage")
         self.browser.execute_script(
             """
-                console.log(arguments[0])
-                console.log(arguments[1])
                 for (let i = 0; i < arguments[0].length; i++) {
                     var img = document.createElement('img');
                     img.src = arguments[0][i];
                     arguments[1].appendChild(img);
+                    console.log("Appending " + img)
                 }
                 // Removeing these somehow stops main image
                 // from overflowing the text in PDF
@@ -408,13 +436,12 @@ class AmazonScraper(BaseScraper):
             "/span[contains(text(), 'Invoice')]/ancestor::a"
         )
         order_summary_a_xpath = (
-            "//span[contains(@class, 'a-button')]"
-            "/a[contains(text(), 'Order Summary')]"
+            "//span[contains(@class, 'a-button')]//a[contains(@href, 'summary/print.html')]"
         )
+
         invoice_wrapper_div_xpath = (
             "//div[contains(@class, 'a-popover-wrapper')]"
         )
-
         # Need to wait a tiny bit for the JS
         # connected to this link to load
         time.sleep(2)
