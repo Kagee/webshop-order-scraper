@@ -1,3 +1,4 @@
+# pylint: disable=unused-import
 import os
 import re
 import time
@@ -13,7 +14,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from .base import BaseScraper
+from .base import BaseScraper, PagePart
 
 
 # Scraper for trying out code for other scrapers
@@ -22,6 +23,9 @@ class TryOutScraper(BaseScraper):
         super().__init__(command, options, __name__)
         self.LOGIN_PAGE_RE = r"^https://www\.amazon\.de/ap/signin"
         self.setup_cache("tryout")
+
+    def part_to_filename(self, part: PagePart, **kwargs):
+        return None
 
     def command_scrape(self):
         url = "https://hild1.no/"

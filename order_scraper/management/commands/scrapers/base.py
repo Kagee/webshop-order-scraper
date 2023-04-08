@@ -210,18 +210,18 @@ class BaseScraper(object):
     def browser_login(self, url):
         raise NotImplementedError("Child does not implement browser_login()")
 
-    def _part_to_filename(self, part: PagePart, **kwargs):
+    def part_to_filename(self, part: PagePart, **kwargs):
         raise NotImplementedError(
             "Child does not implement _part_to_filename(...)"
         )
 
     def has_json(self, part: PagePart, **kwargs) -> bool:
-        return self.can_read(self._part_to_filename(part, **kwargs))
+        return self.can_read(self.part_to_filename(part, **kwargs))
 
     def read_json(self, part: PagePart, **kwargs) -> Any:
         if not self.has_json(part, **kwargs):
             return {}
-        return self.read(self._part_to_filename(part, **kwargs), from_json=True)
+        return self.read(self.part_to_filename(part, **kwargs), from_json=True)
 
     def pprint(self, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)

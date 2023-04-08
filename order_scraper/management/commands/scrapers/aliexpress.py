@@ -1009,6 +1009,6 @@ class AliExpressScraper(BaseScraper):
 
         self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
 
-    def _part_to_filename(self, _, **__):
+    def part_to_filename(self, _, **__):
         # Not used here yet
         return None

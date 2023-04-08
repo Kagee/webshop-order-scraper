@@ -108,9 +108,9 @@ class AmazonScraper(BaseScraper):
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
             for order_id in order_lists[year]:
-                count += 1
                 if self.skip_order(order_id, count):
                     continue
+                count += 1
                 self.parse_order(order_id, order_lists[year][order_id])
                 self.pprint(order_lists[year][order_id])
                 # Write order to json here?
@@ -144,7 +144,7 @@ class AmazonScraper(BaseScraper):
                 return True
 
     def parse_order(self, order_id: Dict, order_id_dict: Dict):
-        order_json_filename = self._part_to_filename(
+        order_json_filename = self.part_to_filename(
             PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
         if self.can_read(order_json_filename):
@@ -156,7 +156,7 @@ class AmazonScraper(BaseScraper):
 
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
         html_cache = Path(
-            self._part_to_filename(
+            self.part_to_filename(
                 PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
             )
         )
@@ -206,6 +206,7 @@ class AmazonScraper(BaseScraper):
             order["items"] = {}
 
         self.log.debug("Scraping item IDs and thumbnails")
+
         for item in brws.find_elements(
             By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div"
         ):
@@ -282,7 +283,7 @@ class AmazonScraper(BaseScraper):
                         " HTML cache."
                     )
         self.write(
-            self._part_to_filename(
+            self.part_to_filename(
                 PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
             ),
             brws.page_source,
@@ -328,7 +329,7 @@ class AmazonScraper(BaseScraper):
             time.sleep(11)
 
             self.browser_cleanup_item_page()
-            item_html_filename = self._part_to_filename(
+            item_html_filename = self.part_to_filename(
                 PagePart.ORDER_ITEM,
                 order_id=order_id,
                 item_id=item_id,
@@ -416,38 +417,47 @@ class AmazonScraper(BaseScraper):
         invoice_wrapper_div_xpath = (
             "//div[contains(@class, 'a-popover-wrapper')]"
         )
+
         # Need to wait a tiny bit for the JS
         # connected to this link to load
         time.sleep(2)
+        elements_to_loop: List[WebElement] = None
         try:
-            wait2.until(
-                EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
-                "Timeout waiting for Invoice",
-            ).click()
-            self.log.debug("Found Invoice button")
-            time.sleep(1)
-            # then this should appear
-            invoice_wrapper: WebElement = wait2.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, invoice_wrapper_div_xpath)
-                ),
-                "Timeout waiting for invoice wrapper",
-            )
-            elements_to_loop: List[WebElement] = invoice_wrapper.find_elements(
-                By.TAG_NAME, "a"
-            )
-        except TimeoutException:
-            self.log.debug(
-                "Timeout waiting for Invoice, maybe only have Order Summary"
-            )
             elements_to_loop: List[WebElement] = [
-                wait2.until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, order_summary_a_xpath)
-                    ),
-                    "Timeout waiting for Order Summary button",
-                )
+                brws.find_element(By.XPATH, order_summary_a_xpath)
             ]
+        except NoSuchElementException:
+            pass
+        if not elements_to_loop:
+            try:
+                wait2.until(
+                    EC.presence_of_element_located((By.XPATH, invoice_a_xpath)),
+                    "Timeout waiting for Invoice",
+                ).click()
+                self.log.debug("Found Invoice button")
+                time.sleep(1)
+                # then this should appear
+                invoice_wrapper: WebElement = wait2.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, invoice_wrapper_div_xpath)
+                    ),
+                    "Timeout waiting for invoice wrapper",
+                )
+                elements_to_loop: List[WebElement] = (
+                    invoice_wrapper.find_elements(By.TAG_NAME, "a")
+                )
+            except (TimeoutException, NoSuchElementException):
+                pass
+        if not elements_to_loop:
+            self.log.debug(
+                "We found no order summary, invoices or other attachementes to"
+                " save. This is possibly a bug."
+            )
+            raise CommandError(
+                "We found no order summary, invoices or other attachementes to"
+                " save. This is possibly a bug."
+            )
+
         self.log.debug("Looping and possibly downloading attachements")
 
         for invoice_item in elements_to_loop:
@@ -465,8 +475,7 @@ class AmazonScraper(BaseScraper):
             ).decode("utf-8")
 
             attachement_file = (
-                order_cache_dir
-                / Path(f"order-attachement-{text_filename_safe}.pdf")
+                order_cache_dir / Path(f"attachement-{text_filename_safe}.pdf")
             ).resolve()
 
             if self.can_read(attachement_file):
@@ -477,7 +486,9 @@ class AmazonScraper(BaseScraper):
                 self.log.debug("We already have the file for '%s' saved", text)
                 continue
 
-            order_summary = re.match(r".+summary/print.+", href)
+            order_summary = re.match(
+                r".+(summary/print|order-summary\.html.+print).+", href
+            )
             download_pdf = re.match(r".+/download/.+\.pdf", href)
             contact_link = re.match(r".+contact/contact.+", href)
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
@@ -799,11 +810,11 @@ class AmazonScraper(BaseScraper):
         return order_lists
 
     def save_order_list_cache_html_file(self, year, start_index):
-        json_file = self._part_to_filename(PagePart.ORDER_LIST_JSON, year=year)
+        json_file = self.part_to_filename(PagePart.ORDER_LIST_JSON, year=year)
         # If we are saving a new HTML cache, invalidate possible json
         if self.remove(json_file):
             self.log.debug("Removed json cache for %s", year)
-        cache_file = self._part_to_filename(
+        cache_file = self.part_to_filename(
             PagePart.ORDER_LIST_HTML, year=year, start_index=start_index
         )
         self.log.info(
@@ -842,7 +853,7 @@ class AmazonScraper(BaseScraper):
                     start_index = 0
                     more_pages_this_year = True
                     while more_pages_this_year:
-                        html_filename = self._part_to_filename(
+                        html_filename = self.part_to_filename(
                             PagePart.ORDER_LIST_HTML,
                             year=year,
                             start_index=start_index,
@@ -887,7 +898,7 @@ class AmazonScraper(BaseScraper):
 
     def save_order_lists_to_json(self, order_lists: Dict) -> None:
         for year in order_lists:
-            json_filename = self._part_to_filename(
+            json_filename = self.part_to_filename(
                 PagePart.ORDER_LIST_JSON, year=year
             )
             self.write(json_filename, order_lists[year], to_json=True)
@@ -1099,7 +1110,7 @@ class AmazonScraper(BaseScraper):
             )
         return tld
 
-    def _part_to_filename(self, part: PagePart, **kwargs):
+    def part_to_filename(self, part: PagePart, **kwargs):
         template: str
         if part == PagePart.ORDER_LIST_JSON:
             template = self.ORDER_LIST_JSON_FILENAME_TEMPLATE

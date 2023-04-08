@@ -1,3 +1,4 @@
+# pylint: disable=unused-import
 import os
 import re
 import time
@@ -27,13 +28,13 @@ class DistrelecScraper(BaseScraper):
         self.setup_cache(self.DOMAIN)
         self.setup_templates()
 
-    def _part_to_filename(self, part: PagePart, **kwargs):
+    def part_to_filename(self, part: PagePart, **kwargs):
         return None
 
     def command_scrape(self):
         url = self.ORDER_LIST_URL_TEMPLATE
 
-        # self.remove(self.cache["PDF_TEMP"])
+        # self.remove(self.cache["PDF_TEMP_FILENAME"])
         # url_trigger_login = "https://www.amazon.de/-/en/gp/css/order-history"
         # self.browser_visit_page(url_trigger_login, True)
         # https://www.elfadistrelec.no/my-account/order-history
