@@ -1,7 +1,7 @@
 {
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
-    "git.enabled": false,
+    "git.enabled": true,
     "files.exclude": {
         "venv/": true,
         "tls/": true,

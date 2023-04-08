@@ -87,7 +87,7 @@ class BaseScraper(object):
             self.makedir(path)
 
         self.cache.update(
-            {"PDF_TEMP": self.cache["TEMP"] / "temporary-pdf.pdf"}
+            {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary-pdf.pdf"}
         )
 
     def browser_get_instance(self):
@@ -147,10 +147,9 @@ class BaseScraper(object):
                 "browser.helperApps.neverAsk.saveToDisk", "application/pdf"
             )
             options.set_preference("pdfjs.disabled", True)
-            self.log.debug("PDF temporary file is %s", str(self.cache["TEMP"]))
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_filename",
-                str(self.cache["PDF_TEMP"]),
+                str(self.cache["PDF_TEMP_FILENAME"]),
             )
             options.set_preference(
                 f"print.printer_{ printer_name }.show_print_progress", True

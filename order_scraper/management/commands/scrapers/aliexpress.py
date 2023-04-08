@@ -626,18 +626,18 @@ class AliExpressScraper(BaseScraper):
                 self.log.debug("Found snapshot tab")
                 self.browser_cleanup_item_page()
                 time.sleep(2)
-                self.remove(self.cache["PDF_TEMP"])
+                self.remove(self.cache["PDF_TEMP_FILENAME"])
 
                 self.log.debug("Trying to print to PDF")
                 self.browser.execute_script("window.print();")
                 # Do some read- and size change tests
                 # to try to detect when printing is complete
-                while not self.can_read(self.cache["PDF_TEMP"]):
+                while not self.can_read(self.cache["PDF_TEMP_FILENAME"]):
                     self.log.debug("PDF file does not exist yet")
                     time.sleep(1)
-                self.wait_for_stable_file(self.cache["PDF_TEMP"])
+                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
                 self.move_file(
-                    self.cache["PDF_TEMP"],
+                    self.cache["PDF_TEMP_FILENAME"],
                     order["items"][item_sku_id]["snapshot"]["pdf"],
                 )
                 self.write(

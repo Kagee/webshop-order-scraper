@@ -388,14 +388,14 @@ class AmazonScraper(BaseScraper):
 
         self.log.debug("Printing page to PDF")
         brws.execute_script("window.print();")
-        self.wait_for_stable_file(self.cache["PDF_TEMP"])
+        self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
         item_pdf_file = (
             order_cache_dir / Path(f"item-{item_id}.pdf")
         ).resolve()
         item_dict["pdf"] = str(
             Path(item_pdf_file).relative_to(self.cache["BASE"])
         )
-        self.move_file(self.cache["PDF_TEMP"], item_pdf_file)
+        self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
         self.log.debug("PDF moved to cache")
 
         brws.close()
@@ -483,16 +483,18 @@ class AmazonScraper(BaseScraper):
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
 
             if order_summary:
-                self.remove(self.cache["PDF_TEMP"])
+                self.remove(self.cache["PDF_TEMP_FILENAME"])
                 brws.switch_to.new_window()
                 brws.get(href)
                 self.log.debug("Found order summary.")
                 self.browser.execute_script("window.print();")
-                self.wait_for_stable_file(self.cache["PDF_TEMP"])
+                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
                 attachement["file"] = str(
                     Path(attachement_file).relative_to(self.cache["BASE"])
                 )  # keep this
-                self.move_file(self.cache["PDF_TEMP"], attachement_file)
+                self.move_file(
+                    self.cache["PDF_TEMP_FILENAME"], attachement_file
+                )
                 brws.close()
             elif download_pdf:
                 self.log.debug("This is a invoice PDF.")
