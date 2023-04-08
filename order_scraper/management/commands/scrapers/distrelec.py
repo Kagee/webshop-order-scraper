@@ -1,13 +1,15 @@
 # pylint: disable=unused-import
+from getpass import getpass
 import os
 import re
 import time
 from pathlib import Path
 from typing import Dict, List
+
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
-from django.conf import settings
-from django.core.management.base import BaseCommand
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -77,10 +79,44 @@ class DistrelecScraper(BaseScraper):
             )
             input()
         else:
-            pass
-        # input id j_password
-        # input id j_username
-        # button type submit, class either of b-login js-login-button
+            brws = self.browser
+            dec_username = (
+                input(f"Enter {self.DOMAIN} username: ")
+                if not settings.SCRAPER_DEC_USERNAME
+                else settings.SCRAPER_DEC_USERNAME
+            )
+            dec_password = (
+                getpass(f"Enter {self.DOMAIN} password: ")
+                if not settings.SCRAPER_DEC_PASSWORD
+                else settings.SCRAPER_DEC_PASSWORD
+            )
+            username = brws.find_element(By.ID, 'j_username')
+            password = brws.find_element(By.ID, 'j_password')
+            self.rand_sleep()
+            username.send_keys(dec_username)
+            self.rand_sleep()
+            password.send_keys(dec_password)
+            # button type submit, class either of ...
+            submit = brws.find_element(By.CSS_SELECTOR, 'button.b-login.js-login-button')
+            self.rand_sleep()
+            submit.click()
+            try:
+                WebDriverWait(brws, 10).until_not(
+                    EC.url_matches(self.LOGIN_PAGE_RE)
+                )
+            except TimeoutException:
+                self.log.error("Login to %s was not successful.", self.DOMAIN)
+                self.log.error(
+                    "If you want to continue, fix the login, and then press enter."
+                )
+                input()
+                if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+                    # pylint: disable=raise-missing-from
+                    raise CommandError(
+                        f"Login to {self.DOMAIN} was not successful, "
+                        "even after user interaction."
+                    )
+        self.log.info("Login to %s was successful.", self.DOMAIN)
 
         # tag nav class mod-servicenav
         # span class language
@@ -97,12 +133,17 @@ class DistrelecScraper(BaseScraper):
 
         # each item in container -> div.row-holder
         #  -> two row-holder__item
-        # first row: div.row-holder div.row-holder__item div.date/number/by/invoice/staus (span.value/total -> (span.currency + text() )
+        # first row: div.row-holder div.row-holder__item
+        #  div.date/number/by/invoice/staus (span.value/total -> (span.currency + text() )
         # second row:
-        #   <a href="/my-account/order-history/order-details/1006705511" class="mat-button mat-button--action-red">
-        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511
-        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/xls/ (direct download)
-        # https://www.elfadistrelec.no/my-account/order-history/order-details/1006705511/download/csv/ (direct download)
+        #   <a href="/my-account/order-history/order-details/1006705511"
+        # class="mat-button mat-button--action-red">
+        # https://www.elfadistrelec.no/my-account/
+        # order-history/order-details/1006705511
+        # https://www.elfadistrelec.no/my-account/
+        # order-history/order-details/1006705511/download/xls/ (direct download)
+        # https://www.elfadistrelec.no/my-account/
+        # order-history/order-details/1006705511/download/csv/ (direct download)
 
     def browser_login2(self, _):
         """
