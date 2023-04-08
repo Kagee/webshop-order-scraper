@@ -33,3 +33,8 @@ SCRAPER_AMZ_ORDERS = {
 # Strip any whitespace
 SCRAPER_AMZ_ORDERS_SKIP = [x.strip() for x in env.list('SCRAPER_AMZ_ORDERS_SKIP', default=[])]
 
+
+# Config for scraper dec command
+SCRAPER_DEC_MANUAL_LOGIN = env.bool('SCRAPER_DEC_MANUAL_LOGIN', False)
+SCRAPER_DEC_USERNAME: str = env('SCRAPER_DEC_USERNAME', default=None)
+SCRAPER_DEC_PASSWORD: str = env('SCRAPER_DEC_PASSWORD', default=None)

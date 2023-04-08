@@ -5,6 +5,7 @@ from django.core.management.base import (BaseCommand,
 
 from .scrapers.aliexpress import AliExpressScraper
 from .scrapers.amazon import AmazonScraper
+from .scrapers.distrelec import DistrelecScraper
 from .scrapers.tryout import TryOutScraper
 
 class Command(BaseCommand):
@@ -13,6 +14,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         # Creation order is backwards to trick help-print-order
+        dec = parser.add_argument_group('distrelec-spesific scraper options')
+        dec.add_argument(
+                '-d',
+                '--domain',
+                type=str.lower,
+                default='de',
+                help="What domain to scrape. Default `www.elfadistrelec.no`"
+                )
+
         amz = parser.add_argument_group('amazon-spesific scraper options')
         amz.add_argument(
             "-y",
@@ -51,6 +61,7 @@ class Command(BaseCommand):
                 choices=[
                     "aliexpress",
                     "amazon",
+                    "distrelec",
                     "tryout"
                     ],
                 help="The online webshop to scrape orders from. (REQUIRED)"
@@ -78,5 +89,7 @@ class Command(BaseCommand):
             AliExpressScraper(self, options).command_scrape()
         elif options['webshop'] == "amazon":
             AmazonScraper(self, options).command_scrape()
+        elif options['webshop'] == "distrelec":
+            DistrelecScraper(self, options).command_scrape()
         elif options['webshop'] == "tryout":
             TryOutScraper(self, options).command_scrape()

@@ -96,6 +96,24 @@
             "justMyCode": true
         },
         {
+            "name": "Scrape elfadistrelec.no",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "distrelec",
+                "--cache-orderlist",
+                "-v",
+                "3",
+                "--leave-browser",
+                "--domain",
+                "www.elfadistrelec.no"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
             "name": "--help",
             "type": "python",
             "request": "launch",
