@@ -90,14 +90,16 @@ class DistrelecScraper(BaseScraper):
                 if not settings.SCRAPER_DEC_PASSWORD
                 else settings.SCRAPER_DEC_PASSWORD
             )
-            username = brws.find_element(By.ID, 'j_username')
-            password = brws.find_element(By.ID, 'j_password')
+            username = brws.find_element(By.ID, "j_username")
+            password = brws.find_element(By.ID, "j_password")
             self.rand_sleep()
             username.send_keys(dec_username)
             self.rand_sleep()
             password.send_keys(dec_password)
             # button type submit, class either of ...
-            submit = brws.find_element(By.CSS_SELECTOR, 'button.b-login.js-login-button')
+            submit = brws.find_element(
+                By.CSS_SELECTOR, "button.b-login.js-login-button"
+            )
             self.rand_sleep()
             submit.click()
             try:
@@ -107,7 +109,8 @@ class DistrelecScraper(BaseScraper):
             except TimeoutException:
                 self.log.error("Login to %s was not successful.", self.DOMAIN)
                 self.log.error(
-                    "If you want to continue, fix the login, and then press enter."
+                    "If you want to continue, fix the login, and then press"
+                    " enter."
                 )
                 input()
                 if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
