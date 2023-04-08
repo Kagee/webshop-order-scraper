@@ -273,7 +273,7 @@ class BaseScraper(object):
         if from_base64:
             content = base64.b64decode(content)
         if to_json:
-            content = json.dumps(content, indent=4, cls=DjangoJSONEncoder)
+            content = json.dumps(content, indent=4, cls=HLOEncoder)
         if html:
             html_element = fromstring(content)
             content = tostring(html_element).decode("utf-8")
@@ -330,3 +330,9 @@ class BaseScraper(object):
                     " stabilized."
                 )
         self.log.debug("File %s appears stable.", filename)
+
+class HLOEncoder(DjangoJSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Path):
+            return str(obj)
+        return super().default(obj)

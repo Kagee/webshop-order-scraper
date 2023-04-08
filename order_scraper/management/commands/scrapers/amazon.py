@@ -235,7 +235,9 @@ class AmazonScraper(BaseScraper):
                 # 2. Resize Y to 300px
                 # 3. Scale X so no larger than 300px
                 large_image_src = re.sub(
-                    r"(.+\._)[^\.]*(_\.+)", r"\1AC_UY300_SX300\2", high_res_thumb_url
+                    r"(.+\._)[^\.]*(_\.+)",
+                    r"\1AC_UY300_SX300\2",
+                    high_res_thumb_url,
                 )
                 ext = os.path.splitext(urlparse(large_image_src).path)[1]
                 item_thumb_file = (
@@ -332,7 +334,28 @@ class AmazonScraper(BaseScraper):
 
             # Javascript above happens async
             time.sleep(11)
-
+            try:
+                brws.find_element(
+                    By.XPATH,
+                    (
+                        "//div[@id = 'productOverview_feature_div']"
+                        "//span[contains(@class, 'a-expander-prompt')]"
+                        "[contains(text(), 'See more')]"
+                    ),
+                ).click()
+            except NoSuchElementException:
+                pass
+            try:
+                brws.find_element(
+                    By.XPATH,
+                    (
+                        "//div[@id = 'bookDescription_feature_div']"
+                        "//span[contains(@class, 'a-expander-prompt')]"
+                        "[contains(text(), 'Read more')]"
+                    ),
+                ).click()
+            except NoSuchElementException:
+                pass
             self.browser_cleanup_item_page()
             item_html_filename = self.part_to_filename(
                 PagePart.ORDER_ITEM,
@@ -353,6 +376,7 @@ class AmazonScraper(BaseScraper):
 
         self.log.debug("Printing page to PDF")
         brws.execute_script("window.print();")
+
         self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
         item_pdf_file = (
             order_cache_dir / Path(f"item-{item_id}.pdf")
@@ -397,17 +421,32 @@ class AmazonScraper(BaseScraper):
                 large_image_src = re.sub(
                     r"(.+\._)[^\.]*(_\.+)", r"\1AC\2", image_src
                 )
-            #print("Small:", image_src)
-            #print("Large: ", large_image_src)
+            # print("Small:", image_src)
+            # print("Large: ", large_image_src)
             img_urls.append(large_image_src)
 
         self.log.debug("Include all item images on bottom of page")
-        self.log.debug("Adding the following images: %s", img_urls)
         image_main: WebElement
         try:
             image_main = brws.find_element(By.ID, "imgBlkFront")
         except NoSuchElementException:
             image_main = brws.find_element(By.ID, "landingImage")
+        expanded_content = []
+        try:
+            expanded_content += brws.find_elements(
+                By.CSS_SELECTOR, ".a-expander-content"
+            )
+        except NoSuchElementException:
+            self.log.debug("No expanded content found")
+            # pass
+        try:
+            expanded_content += brws.find_elements(
+                By.CSS_SELECTOR, ".a-expander-partial-collapse-container"
+            )
+        except NoSuchElementException:
+            self.log.debug("No expanded content found")
+            # pass
+
         self.browser.execute_script(
             """
                 for (let i = 0; i < arguments[0].length; i++) {
@@ -419,11 +458,18 @@ class AmazonScraper(BaseScraper):
                 // Removeing these somehow stops main image
                 // from overflowing the text in PDF
                 arguments[2].style.removeProperty("max-height") 
-                arguments[2].style.removeProperty("max-width")  
+                arguments[2].style.removeProperty("max-width")
+
+                console.log("expanded_content")
+                console.log(arguments[3])
+                for (let i = 0; i < arguments[3].length; i++) {
+                    arguments[3][i].style.position = "static"
+                }
                 """,
             img_urls,
             brws.find_element(By.ID, "dp"),
             image_main,
+            expanded_content,
         )
         time.sleep(1)
 
@@ -436,7 +482,8 @@ class AmazonScraper(BaseScraper):
             "/span[contains(text(), 'Invoice')]/ancestor::a"
         )
         order_summary_a_xpath = (
-            "//span[contains(@class, 'a-button')]//a[contains(@href, 'summary/print.html')]"
+            "//span[contains(@class, 'a-button')]//a[contains(@href,"
+            " 'summary/print.html')]"
         )
 
         invoice_wrapper_div_xpath = (
@@ -513,10 +560,11 @@ class AmazonScraper(BaseScraper):
             order_summary = re.match(
                 r".+(summary/print|order-summary\.html.+print).+", href
             )
-            download_pdf = re.match(r".+/download/.+\.pdf", href)
+            download_pdf = re.match(
+                r".+(/download/.+\.pdf|generated_invoices.+\.pdf.+)", href
+            )
             contact_link = re.match(r".+contact/contact.+", href)
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
-
             if order_summary:
                 self.remove(self.cache["PDF_TEMP_FILENAME"])
                 brws.switch_to.new_window()
@@ -532,7 +580,7 @@ class AmazonScraper(BaseScraper):
                 )
                 brws.close()
             elif download_pdf:
-                self.log.debug("This is a invoice PDF.")
+                self.log.debug("This is a invoice/warranty/p-slip PDF.")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
                     # Remove old/random PDFs
                     os.remove(pdf)
@@ -622,6 +670,21 @@ class AmazonScraper(BaseScraper):
             "accessories-and-compatible-products_feature_div",
             "ad-display-center-1_feature_div",
             "seo-related-keywords-pages_feature_div",
+            "issuancePriceblockAmabot_feature_div",
+            "b2bUpsell_feature_div",
+            "merchByAmazonBranding_feature_div",
+            "alternativeOfferEligibilityMessaging_feature_div",
+            "followTheAuthor_feature_div",
+            "moreAboutTheAuthorCard_feature_div",
+            "showing-breadcrumbs_div",
+            "gridgetWrapper",
+            "gringottsPersistentWidget_feature_div",
+            "va-related-videos-widget_feature_div",
+            "nav-top",
+            "skiplink",
+            "wayfinding-breadcrumbs_container",
+            "tp-inline-twister-dim-values-container",
+            "poToggleButton",
         ]:
             elemets_to_hide += brws.find_elements(By.ID, element_id)
 
@@ -638,6 +701,8 @@ class AmazonScraper(BaseScraper):
             # share-button, gives weird artefacts on PDF (co.jp)
             "div.ssf-background-float",
             "div.widgetContentContainer",
+            "div.vse-vwdp-video-block-wrapper",
+            "div#variation_style_name ul",
         ]:
             elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
 
@@ -1038,7 +1103,7 @@ class AmazonScraper(BaseScraper):
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.error("Login to Amazon was not successful.")
             self.log.error(
-                "If you want to continue, fix the login, and the press enter."
+                "If you want to continue, fix the login, and then press enter."
             )
             input()
             if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
