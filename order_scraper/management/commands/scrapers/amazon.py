@@ -298,16 +298,15 @@ class AmazonScraper(BaseScraper):
         item_dict: Dict,
         order_id: str,
         order_cache_dir: Path,
-        is_digital: bool = False,
     ):
         # TODO: Finish process_item_page
         brws = self.browser
         self.log.debug("New tab for item %s", item_id)
         brws.switch_to.new_window()
         brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
-        item_dict["removed"] = item_dict["digital"] = False
+        item_dict["removed"] = False
 
-        if "Page Not Found" not in self.browser.title and not is_digital:
+        if "Page Not Found" not in self.browser.title:
             self.log.debug("Slowly scrolling to bottom of item page")
             brws.execute_script(
                 """
@@ -317,11 +316,10 @@ class AmazonScraper(BaseScraper):
                     window.scrollTo(0,hlo_wh*hlo_count)
                     hlo_count = hlo_count + 1;
                     console.log(hlo_count)
-                    if (hlo_count > 20) {
+                    if (hlo_count > 40) {
                         clearInterval(intervalID);
                     }
-                }, 500);
-
+                }, 250);
                 """,
             )
 
@@ -341,48 +339,7 @@ class AmazonScraper(BaseScraper):
             )
 
             self.write(item_html_filename, self.browser.page_source, html=True)
-            self.log.debug("View and preload all item images")
-
-            img_btns = brws.find_elements(
-                By.XPATH, "//li[contains(@class,'imageThumbnail')]"
-            )
-
-            for img_btn in img_btns:
-                time.sleep(1)
-                img_btn.click()
-            if len(img_btns):
-                img_btns[0].click()
-
-            images = brws.find_elements(
-                By.XPATH,
-                "//li[contains(@class,'image')][contains(@class,'item')]//img",
-            )
-            img_urls = []
-            for image in images:
-                highres = image.get_attribute("data-old-hires")
-                if highres:
-                    img_urls.append(highres)
-
-            self.log.debug("Include all item images on bottom of page")
-            self.browser.execute_script(
-                """
-                for (let i = 0; i < arguments[0].length; i++) {
-                    var img = document.createElement('img');
-                    img.src = arguments[0][i];
-                    arguments[1].appendChild(img);
-                    console.log(arguments[0][i])
-                }
-                """,
-                img_urls,
-                brws.find_element(By.ID, "dp"),
-            )
-            time.sleep(1)
-        elif is_digital:
-            self.log.debug(
-                "Item %s is digital, we do not parse item page, only save",
-                item_id,
-            )
-            item_dict["digital"] = True
+            self.append_thumnails_to_item_html()
         else:
             self.log.debug("Item page for %s has been removed", item_id)
             item_dict["removed"] = True
@@ -401,6 +358,46 @@ class AmazonScraper(BaseScraper):
 
         brws.close()
         self.log.debug("Closed page for item %s", item_id)
+
+    def append_thumnails_to_item_html(self):
+        brws = self.browser
+        self.log.debug("View and preload all item images")
+
+        img_urls = []
+        for image in brws.find_elements(
+            By.XPATH,
+            "//li[contains(@class,'image')][contains(@class,'item')]//img",
+        ):
+            src = image.get_attribute("src")
+            dst = re.sub(r"(.*_AC)[^\.]*(\..*)", r"\1\2", src)
+            print(src, dst)
+            img_urls.append(dst)
+
+        self.log.debug("Include all item images on bottom of page")
+        image_main: WebElement
+        try:
+            image_main =  brws.find_element(By.ID, 'imgBlkFront')
+        except NoSuchElementException:
+            image_main =  brws.find_element(By.ID, 'landingImage')
+        self.browser.execute_script(
+            """
+                console.log(arguments[0])
+                console.log(arguments[1])
+                for (let i = 0; i < arguments[0].length; i++) {
+                    var img = document.createElement('img');
+                    img.src = arguments[0][i];
+                    arguments[1].appendChild(img);
+                }
+                // Removeing these somehow stops main image
+                // from overflowing the text in PDF
+                arguments[2].style.removeProperty("max-height") 
+                arguments[2].style.removeProperty("max-width")  
+                """,
+            img_urls,
+            brws.find_element(By.ID, "dp"),
+            image_main,
+        )
+        time.sleep(1)
 
     def save_order_attachements(self, order_cache_dir, attachement_dict):
         brws = self.browser
@@ -591,6 +588,13 @@ class AmazonScraper(BaseScraper):
             "similarities_feature_div",
             "value-pick-ac",
             "valuePick_feature_div",
+            "sponsoredProducts2_feature_div",
+            "sims-themis-sponsored-products-2_feature_div",
+            "climatePledgeFriendlyBTF_feature_div",
+            "aplusSustainabilityStory_feature_div",
+            "accessories-and-compatible-products_feature_div",
+            "ad-display-center-1_feature_div",
+            "seo-related-keywords-pages_feature_div",
         ]:
             elemets_to_hide += brws.find_elements(By.ID, element_id)
 
@@ -602,7 +606,10 @@ class AmazonScraper(BaseScraper):
             "div.adchoices-container",
             "div.copilot-secure-display",
             "div.outOfStock",
-            "div.ssf-background",  # share-button, gived weird artefacts on PDF
+            # share-button, gives weird artefacts on PDF
+            "div.ssf-background",
+            # share-button, gives weird artefacts on PDF (co.jp)
+            "div.ssf-background-float",
             "div.widgetContentContainer",
         ]:
             elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
@@ -1002,8 +1009,17 @@ class AmazonScraper(BaseScraper):
                     "because we could not find a expected element.."
                 )
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
-            raise CommandError("Login to Amazon was not successful.")
-        self.log.info("Login to Amazon was probably successful.")
+            self.log.error("Login to Amazon was not successful.")
+            self.log.error(
+                "If you want to continue, fix the login, and the press enter."
+            )
+            input()
+            if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+                raise CommandError(
+                    "Login to Amazon was not successful, even after user"
+                    " interaction."
+                )
+        self.log.info("Login to Amazon was successful.")
 
     # Init / Utility Functions
 
