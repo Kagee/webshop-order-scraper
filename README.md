@@ -95,5 +95,9 @@ For steadfast bug fixing, having orders that totally scramble my scraping, and c
 [![neslekkim](https://github.com/neslekkim.png/?size=50) <br>
 neslekkim](https://github.com/neslekkim)
 
+# Why
+* Am i not using `webdriver.print_page` to get a PDF?
+  * In testing it created redonkulously large PDFs. We are talkin 40-60 MB when printing via Mozilla/Microsoft printers created sub 10MB PDFs
+
 # Notes and ideas
 * https://rk.edu.pl/en/fulltext-search-sqlite-and-django-app/
