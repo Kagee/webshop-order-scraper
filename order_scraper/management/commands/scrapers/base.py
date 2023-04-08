@@ -321,7 +321,7 @@ class BaseScraper(object):
                 sz1,
                 sz2,
                 sz3,
-                filename,
+                Path(filename).name,
             )
             counter -= 1
             if counter == 0:
