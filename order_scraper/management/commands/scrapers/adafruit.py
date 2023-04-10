@@ -26,9 +26,6 @@ class AdafruitScraper(BaseScraper):
         self.setup_cache("adafruit")
         self.setup_templates()
 
-    def part_to_filename(self, part: PagePart, **kwargs):
-        return None
-
     def usage(self):
         print(f"""
     USAGE:
@@ -78,6 +75,8 @@ class AdafruitScraper(BaseScraper):
         max_items = settings.SCRAPER_ADA_ITEMS_MAX + 1
         counter = 0
         for order_id, order in orders.items():
+            order_dir = self.cache["ORDERS"] / order_id
+            self.makedir(order_dir)
             for item_id, item in order["items"].items():
                 counter += 1
                 if max_items > 0:
@@ -90,52 +89,211 @@ class AdafruitScraper(BaseScraper):
                     elif counter > max_items:
                         continue
                 item_url = self.ITEM_URL_TEMPLATE.format(item_id=item_id)
-                self.log.debug("Visitin item url %s", item_url)
-                brws = self.browser_visit_page(item_url)
-                # self.pprint(item)
+                self.log.debug("Visiting item url %s", item_url)
+                self.browser = self.browser_visit_page(item_url)
+                # if .all-guides-link -> visit in new tab
+                # scrape guides:
+                # div.info a.title -> name + url
 
-    def browser_cleanup_item_page(self) -> None:
-        """
-            remove:
-            div.header-wrap
-            nav.breadcrumbs
-            footer#siteFooter
-            div.instant-search-container
-            div.parts_last_bought csselector or xpath parent::parent::div <-
-            div.parts_last_bought x2?
-            section#related-products
-            section#distributors
-            div#___ratingbadge_0
-            div.gallery-thumbnails
-            div#prod-rightnav
+                self.browser_redesign_page()
 
-            tags:
-            iframe
+                self.browser_cleanup_page(
+                    css_selectors=[
+                        "div.header-wrap",
+                        "nav.breadcrumbs",
+                        "footer#siteFooter",
+                        "div.instant-search-container",
+                        "div.parts_last_bought",
+                        "section#related-products",
+                        "section#distributors",
+                        "section#learndiv",
+                        "#___ratingbadge_0",
+                        # "div.gallery-thumbnails",
+                        "div#prod-rightnav",
+                        "div#prod-stock",
+                        "div#prod-stock-mobile",
+                        "div.gallery-arrow",
+                    ],
+                    # element_tuples=[(By.TAG_NAME, "iframe")],
+                )
+                self.remove(self.cache["PDF_TEMP_FILENAME"])
+                self.browser.execute_script("window.print();")
+                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+                pdf_filename = self.part_to_filename(
+                    PagePart.ORDER_ITEM,
+                    order_id=order_id,
+                    item_id=item_id,
+                    ext="pdf",
+                )
+                self.move_file(self.cache["PDF_TEMP_FILENAME"], pdf_filename)
+                item["pdf"] = str(
+                    Path(pdf_filename).relative_to(self.cache["BASE"])
+                )
 
-            div.main => set margin right/left = 0
+                html_filename = self.part_to_filename(
+                    PagePart.ORDER_ITEM,
+                    order_id=order_id,
+                    item_id=item_id,
+                    ext="html",
+                )
+                item["html"] = str(
+                    Path(html_filename).relative_to(self.cache["BASE"])
+                )
+                self.write(html_filename, self.browser.page_source, html=True)
 
-            div class fluid-width-video-wrapper => iframe src => text
-            ^ set p parent of fluid-width-video-wrapper text to iframe src
-            <p><img src="https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png" style="height: 4em;">
-        <x-large><a href="https://www.youtube.com/embed/k6CcMdjNafw?start=355">https://www.youtube.com/embed/k6CcMdjNafw?start=355</a></x-large></p>
-            delete fluid-width-video-wrapper
+                self.pprint(item)
 
+    def browser_redesign_page(self):
+        brws = self.browser
 
-            section.product-image-gallery.slideshow-gallery:
-            div.gallery-slides-block img.src
+        guide_link: WebElement = self.find_element(
+            By.CSS_SELECTOR, "a.all-guides-link"
+        )
+        guide_links_tuple: List[(str, str)] = []
+        if guide_link:
+            order_handle = brws.current_window_handle
+            href = guide_link.get_attribute("href")
+            brws.switch_to.new_window()
+            brws.get(href)
+            guide_links: List[WebElement] = self.find_elements(
+                By.CSS_SELECTOR, "a.title"
+            )
+            for link in guide_links:
+                guide_links_tuple.append(
+                    (link.text, link.get_attribute("href"))
+                )
 
-            PDF er ikke tekst - mye bruk av relative?
-        """
-        pass
+            brws.close()
+            brws.switch_to.window(order_handle)
 
-    def browser_detect_handle_interrupt(self) -> None:
+        self.log.debug("Preload slides for all images, return to first")
+        img_buttons: List[WebElement] = self.find_elements(
+            By.CSS_SELECTOR, "button.gallery-thumbnail.indicator-image"
+        )
+        if img_buttons:
+            for img_button in img_buttons:
+                img_button.click()
+                time.sleep(0.5)
+            img_buttons[0].click()
+
+        brws.execute_script(
+            """
+                // Adafruit has some THICK margins when printing
+                let s = document.createElement('style');
+                s.type = "text/css";
+                s.innerHTML = `
+                    @page {
+                        margin: .5cm
+                    }
+                    `;
+                s.media = "print";
+                document.head.appendChild(s);
+
+                // Funny fonts block text-selection in PDF
+                document.querySelectorAll('*')\
+                .forEach(function(e){
+                    e.style.fontFamily = "sans-serif";
+                });
+
+                main_div = document.querySelector("iframe");
+                main_div.style.marginLeft = "0";
+                main_div.style.marginRight = "0";
+                main_div.style.paddingTop = "0";
+                document.querySelectorAll('.container')\
+                .forEach(function(e){
+                    e.style.maxWidth = "unset";
+                })
+             
+                document.querySelectorAll("button.gallery-thumbnail")\
+                .forEach(function(e){
+                    e.style.background = "unset";
+                    e.style.border = "unset";
+                })
+                let div_learn = document.querySelector("div#tab-learn-content")
+                if (div_learn) {
+                    while (div_learn.firstChild) {
+                        div_learn.removeChild(div_learn.lastChild);
+                    }
+                    let ul = document.createElement("ul");
+                    arguments[0].forEach(function(e){
+                        let li = document.createElement("li");
+                        let a = document.createElement("a");
+                        a.href = e[1];
+                        a.appendChild(document.createTextNode(e[0]));
+                        li.appendChild(a);
+                        //li.appendChild(document.createTextNode(" (" + e[1] + ")"));
+                        ul.appendChild(li);
+                    })
+                    div_learn.appendChild(ul);
+                }
+
+                // Make link to text + url
+                document.querySelectorAll('a')\
+                .forEach(function(e){
+                    url = e.href;
+                    text = e.textContent;
+                    //e.parentNode.insertBefore(document.createTextNode(" (" + url + ")"), e.nextSibling);
+                    e.parentNode.replaceChild(document.createTextNode("[" + text + "](" + url + ")"), e);
+                })
+
+                // Convert Youtube vide players
+                // to image and link
+                document.querySelectorAll("div.fluid-width-video-wrapper")\
+                .forEach(function(e){
+                    ifrm = e.querySelector("iframe");
+                    url = ifrm.src.replace("embed/","");
+                    title = ifrm.title;
+                    // Delete all children
+                    while (e.firstChild) {
+                        e.removeChild(e.lastChild);
+                    }
+                    let img = document.createElement("img");
+                    let p = document.createElement("p");
+                    img.src = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+                    img.style.height = "4em";
+                    img.style.marginRight = "1em";
+                    p.appendChild(img);
+                    p.appendChild(document.createTextNode("["+ title +"](" + url+ ")"));
+                    e.appendChild(p);
+                    e.className = "";
+                    e.style = "";
+                });
+
+                // Append all previously preloaded images to bottom of page
+                document.querySelectorAll("div.gallery-slide img")\
+                .forEach(function(e){
+                    let img = document.createElement("img");
+                    let div = document.createElement("div");
+                    img.src = e.src;
+                    img.style.width="90%";
+                    div.style.pageBreakInside = "avoid";
+                    div.style.margin = "auto";
+                    div.appendChild(img);
+                    document.body.appendChild(div);
+                });
+                document.querySelector("div.gallery-thumbnails").remove()
+                """,
+            guide_links_tuple,
+        )
+        time.sleep(2)
+
+    def browser_detect_handle_interrupt(self, url):
         pass
 
     def browser_login(self, _):
         return False
+
+    def part_to_filename(self, part: PagePart, **kwargs):
+        template: str
+        if part == PagePart.ORDER_ITEM:
+            template = self.ORDER_ITEM_FILENAME_TEMPLATE
+        return Path(template.format(**kwargs))
 
     def setup_templates(self):
         # pylint: disable=invalid-name
         self.ORDERS_CSV = self.cache["BASE"] / "order_history.csv"
         self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"
         self.ITEM_URL_TEMPLATE = "https://www.adafruit.com/product/{item_id}"
+        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+        )
