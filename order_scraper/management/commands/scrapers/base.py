@@ -304,7 +304,7 @@ class BaseScraper(object):
         kwargs = {"encoding": "utf-8"}
         write_mode = "w"
         if from_base64:
-            content = base64.b64decode(content)
+            content = base64.b64decode(content, validate=True)
         if to_json:
             content = json.dumps(content, indent=4, cls=HLOEncoder)
         if html:
@@ -313,11 +313,10 @@ class BaseScraper(object):
         if binary:
             write_mode += "b"
             kwargs = {}
-        else:
-            with open(  # pylint: disable=unspecified-encoding
-                path, write_mode, **kwargs
-            ) as file:
-                file.write(content)
+        with open(  # pylint: disable=unspecified-encoding
+            path, write_mode, **kwargs
+        ) as file:
+            file.write(content)
         if html:
             return html_element
         return content
