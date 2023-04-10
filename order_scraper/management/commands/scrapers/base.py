@@ -179,7 +179,7 @@ class BaseScraper(object):
             pass
 
     def browser_visit_page(
-        self, url: str, goto_url_after_login: bool, do_login=True
+        self, url: str, goto_url_after_login: bool = True, do_login: bool = True
     ):
         """
         Instructs the browser to visit url.
@@ -192,7 +192,7 @@ class BaseScraper(object):
         """
         self.browser = self.browser_get_instance()
         self.browser.get(url)
-
+        self.browser_detect_handle_interrupt(url)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             if not do_login:
                 self.log.critical(
@@ -207,8 +207,11 @@ class BaseScraper(object):
                 )
         return self.browser
 
-    def browser_login(self, url):
+    def browser_login(self, target_url):
         raise NotImplementedError("Child does not implement browser_login()")
+
+    def browser_detect_handle_interrupt(self, url) -> None:
+        pass
 
     def part_to_filename(self, part: PagePart, **kwargs):
         raise NotImplementedError(
