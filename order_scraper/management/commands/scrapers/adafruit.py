@@ -59,6 +59,7 @@ class AdafruitScraper(BaseScraper):
             if "items" not in orders[order_id]:
                 orders[order_id]["items"] = {}
             item_id = item["product id"]
+            item["product name"] = re.sub(r"  +", " ", item["product name"])
             del item["product id"]
             orders[order_id]["items"][item_id] = item
         return orders
@@ -72,9 +73,18 @@ class AdafruitScraper(BaseScraper):
             raise CommandError("Could not find products_history.csv")
 
         orders = self.combine_orders_items(self.parse_order_csv())
+        self.browser_save_item_info(orders)
+        for order_id, order in orders.items():
+            order_json_filename = self.part_to_filename(
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
+            )
+            self.write(order_json_filename, {order_id: order}, to_json=True)
+
+    def browser_save_item_info(self, orders):
         max_items = settings.SCRAPER_ADA_ITEMS_MAX + 1
         counter = 0
         for order_id, order in orders.items():
+            self.log.info("Working on order %s", order_id)
             order_dir = self.cache["ORDERS"] / order_id
             self.makedir(order_dir)
             for item_id, item in order["items"].items():
@@ -103,10 +113,52 @@ class AdafruitScraper(BaseScraper):
                         continue
                 item_url = self.ITEM_URL_TEMPLATE.format(item_id=item_id)
                 self.log.debug("Visiting item url %s", item_url)
+
+                pdf_filename = self.part_to_filename(
+                    PagePart.ORDER_ITEM,
+                    order_id=order_id,
+                    item_id=item_id,
+                    ext="pdf",
+                )
+                item["pdf"] = str(
+                    Path(pdf_filename).relative_to(self.cache["BASE"])
+                )
+                html_filename = self.part_to_filename(
+                    PagePart.ORDER_ITEM,
+                    order_id=order_id,
+                    item_id=item_id,
+                    ext="html",
+                )
+                item["html"] = str(
+                    Path(html_filename).relative_to(self.cache["BASE"])
+                )
+                png_filename = self.part_to_filename(
+                    PagePart.ORDER_ITEM,
+                    order_id=order_id,
+                    item_id=item_id,
+                    ext="png",
+                )
+                item["png"] = str(
+                    Path(png_filename).relative_to(self.cache["BASE"])
+                )
+                if (
+                    self.can_read(pdf_filename)
+                    and self.can_read(html_filename)
+                    and self.can_read(png_filename)
+                ):
+                    self.log.debug(
+                        "PDF, HTML and PNG found, will not rescrape."
+                    )
+                    continue
+
                 self.browser = self.browser_visit_page(item_url)
 
                 item["removed"] = "Page Not Found" in self.browser.title
-                if not item["removed"]:
+                if item["removed"]:
+                    del item["pdf"]
+                    del item["html"]
+                    del item["png"]
+                else:
                     self.browser_redesign_page()
 
                     self.browser_cleanup_page(
@@ -128,39 +180,29 @@ class AdafruitScraper(BaseScraper):
                         ],
                         # element_tuples=[(By.TAG_NAME, "iframe")],
                     )
-                    # input("enter to continue")
+
+                    self.log.debug("Writing thumb to %s", png_filename)
+                    thumb = self.find_element(By.CSS_SELECTOR, "img#Slide1")
+                    self.write(
+                        png_filename,
+                        thumb.screenshot_as_base64,
+                        from_base64=True,
+                        binary=True,
+                    )
+
                     self.remove(self.cache["PDF_TEMP_FILENAME"])
                     self.browser.execute_script("window.print();")
                     self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-                    pdf_filename = self.part_to_filename(
-                        PagePart.ORDER_ITEM,
-                        order_id=order_id,
-                        item_id=item_id,
-                        ext="pdf",
-                    )
+
                     self.move_file(
                         self.cache["PDF_TEMP_FILENAME"], pdf_filename
                     )
-                    item["pdf"] = str(
-                        Path(pdf_filename).relative_to(self.cache["BASE"])
-                    )
 
-                    html_filename = self.part_to_filename(
-                        PagePart.ORDER_ITEM,
-                        order_id=order_id,
-                        item_id=item_id,
-                        ext="html",
-                    )
-                    item["html"] = str(
-                        Path(html_filename).relative_to(self.cache["BASE"])
-                    )
                     self.write(
                         html_filename, self.browser.page_source, html=True
                     )
 
-                self.pprint(item)
-
-    def browser_redesign_page(self):
+    def browser_redesign_page(self) -> None:
         brws = self.browser
 
         guide_link: WebElement = self.find_element(
@@ -254,7 +296,6 @@ class AdafruitScraper(BaseScraper):
                         a.href = e[1];
                         a.appendChild(document.createTextNode(e[0]));
                         li.appendChild(a);
-                        //li.appendChild(document.createTextNode(" (" + e[1] + ")"));
                         ul.appendChild(li);
                     })
                     div_learn.appendChild(ul);
@@ -265,11 +306,13 @@ class AdafruitScraper(BaseScraper):
                 .forEach(function(e){
                     url = e.href;
                     text = e.textContent;
-                    //e.parentNode.insertBefore(document.createTextNode(" (" + url + ")"), e.nextSibling);
-                    e.parentNode.replaceChild(document.createTextNode("[" + text + "](" + url + ")"), e);
+                    e.parentNode.replaceChild(
+                        document.createTextNode("[" + text + "](" + url + ")"),
+                        e
+                        );
                 })
 
-                // Convert Youtube vide players
+                // Convert Youtube video players
                 // to image and link
                 document.querySelectorAll("div.fluid-width-video-wrapper")\
                 .forEach(function(e){
@@ -318,7 +361,9 @@ class AdafruitScraper(BaseScraper):
 
     def part_to_filename(self, part: PagePart, **kwargs):
         template: str
-        if part == PagePart.ORDER_ITEM:
+        if part == PagePart.ORDER_DETAILS:
+            template = self.ORDER_FILENAME_TEMPLATE
+        elif part == PagePart.ORDER_ITEM:
             template = self.ORDER_ITEM_FILENAME_TEMPLATE
         return Path(template.format(**kwargs))
 
@@ -327,6 +372,9 @@ class AdafruitScraper(BaseScraper):
         self.ORDERS_CSV = self.cache["BASE"] / "order_history.csv"
         self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"
         self.ITEM_URL_TEMPLATE = "https://www.adafruit.com/product/{item_id}"
+        self.ORDER_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
+        )
         self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
             self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
         )
