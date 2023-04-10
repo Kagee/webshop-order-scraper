@@ -9,7 +9,7 @@ import time
 from enum import Enum
 from logging import Logger
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -17,9 +17,14 @@ from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import (
+    WebDriverException,
+    NoSuchElementException,
+)
+from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.remote.webelement import WebElement
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 
 
@@ -89,6 +94,22 @@ class BaseScraper(object):
         self.cache.update(
             {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary-pdf.pdf"}
         )
+
+    def find_element(
+        self, by: str, value: Union[str, None]
+    ) -> Union[WebElement, None]:
+        try:
+            return self.browser.find_element(by, value)
+        except NoSuchElementException:
+            return None
+
+    def find_elements(
+        self, by: str, value: Union[str, None]
+    ) -> Union[WebElement, None]:
+        try:
+            return self.browser.find_elements(by, value)
+        except NoSuchElementException:
+            return []
 
     def browser_get_instance(self):
         """
@@ -179,7 +200,11 @@ class BaseScraper(object):
             pass
 
     def browser_visit_page(
-        self, url: str, goto_url_after_login: bool = True, do_login: bool = True
+        self,
+        url: str,
+        goto_url_after_login: bool = True,
+        do_login: bool = True,
+        default_login_detect: bool = True,
     ):
         """
         Instructs the browser to visit url.
@@ -192,7 +217,13 @@ class BaseScraper(object):
         """
         self.browser = self.browser_get_instance()
         self.browser.get(url)
-        self.browser_detect_handle_interrupt(url)
+        if default_login_detect:
+            self.browser_login_required(url, goto_url_after_login, do_login)
+        else:
+            self.browser_detect_handle_interrupt(url)
+        return self.browser
+
+    def browser_login_required(self, url, goto_url_after_login, do_login):
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             if not do_login:
                 self.log.critical(
@@ -205,7 +236,6 @@ class BaseScraper(object):
                 self.browser_visit_page(
                     url, goto_url_after_login, do_login=False
                 )
-        return self.browser
 
     def browser_login(self, target_url):
         raise NotImplementedError("Child does not implement browser_login()")
@@ -235,7 +265,7 @@ class BaseScraper(object):
         """
         time.sleep(random.randint(min_seconds, max_seconds))
 
-    def move_file(self, old_path, new_path, overwrite=True):
+    def move_file(self, old_path: Path, new_path: Path, overwrite: bool = True):
         if not overwrite and self.can_read(new_path):
             self.log.info(
                 "Not overriding existing file: %s",
@@ -334,9 +364,50 @@ class BaseScraper(object):
                 )
         self.log.debug("File %s appears stable.", filename)
 
+    def browser_cleanup_page(
+        self,
+        xpaths: List = [],
+        ids: List = [],
+        css_selectors: List = [],
+        element_tuples: List = [],
+    ) -> None:
+        if not len(xpaths + ids + css_selectors + element_tuples):
+            self.log.debug(
+                "browser_cleanup_page called, but no cleanup defined"
+            )
+            return
+
+        brws = self.browser
+        self.log.debug("Hiding elements (fluff, ads, etc.) using Javscript")
+        elemets_to_hide: List[WebElement] = []
+
+        for element_xpath in xpaths:
+            elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
+
+        for element_id in ids:
+            elemets_to_hide += brws.find_elements(By.ID, element_id)
+
+        for css_selector in css_selectors:
+            elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
+
+        for element_tuple in element_tuples:
+            elemets_to_hide += brws.find_elements(
+                By.CSS_SELECTOR, element_tuple
+            )
+
+        brws.execute_script(
+            """
+                // remove spam/ad elements
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].remove()
+                }
+                """,
+            elemets_to_hide,
+        )
+
 
 class HLOEncoder(DjangoJSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Path):
-            return str(obj)
-        return super().default(obj)
+    def default(self, o):
+        if isinstance(o, Path):
+            return str(o)
+        return super().default(o)
