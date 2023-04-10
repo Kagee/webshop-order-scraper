@@ -78,7 +78,20 @@ class AdafruitScraper(BaseScraper):
             order_dir = self.cache["ORDERS"] / order_id
             self.makedir(order_dir)
             for item_id, item in order["items"].items():
+                self.log.debug("Parsing item id %s", item_id)
                 counter += 1
+                if (
+                    settings.SCRAPER_ADA_ITEMS
+                    and item_id not in settings.SCRAPER_ADA_ITEMS
+                ):
+                    self.log.debug(
+                        (
+                            "Skipping item id %s because it is not in"
+                            " SCRAPER_ADA_ITEMS"
+                        ),
+                        item_id,
+                    )
+                    continue
                 if max_items > 0:
                     if counter == max_items:
                         self.log.debug(
@@ -91,55 +104,59 @@ class AdafruitScraper(BaseScraper):
                 item_url = self.ITEM_URL_TEMPLATE.format(item_id=item_id)
                 self.log.debug("Visiting item url %s", item_url)
                 self.browser = self.browser_visit_page(item_url)
-                # if .all-guides-link -> visit in new tab
-                # scrape guides:
-                # div.info a.title -> name + url
 
-                self.browser_redesign_page()
+                item["removed"] = "Page Not Found" in self.browser.title
+                if not item["removed"]:
+                    self.browser_redesign_page()
 
-                self.browser_cleanup_page(
-                    css_selectors=[
-                        "div.header-wrap",
-                        "nav.breadcrumbs",
-                        "footer#siteFooter",
-                        "div.instant-search-container",
-                        "div.parts_last_bought",
-                        "section#related-products",
-                        "section#distributors",
-                        "section#learndiv",
-                        "#___ratingbadge_0",
-                        # "div.gallery-thumbnails",
-                        "div#prod-rightnav",
-                        "div#prod-stock",
-                        "div#prod-stock-mobile",
-                        "div.gallery-arrow",
-                    ],
-                    # element_tuples=[(By.TAG_NAME, "iframe")],
-                )
-                self.remove(self.cache["PDF_TEMP_FILENAME"])
-                self.browser.execute_script("window.print();")
-                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-                pdf_filename = self.part_to_filename(
-                    PagePart.ORDER_ITEM,
-                    order_id=order_id,
-                    item_id=item_id,
-                    ext="pdf",
-                )
-                self.move_file(self.cache["PDF_TEMP_FILENAME"], pdf_filename)
-                item["pdf"] = str(
-                    Path(pdf_filename).relative_to(self.cache["BASE"])
-                )
+                    self.browser_cleanup_page(
+                        css_selectors=[
+                            "div.header-wrap",
+                            "nav.breadcrumbs",
+                            "footer#siteFooter",
+                            "div.instant-search-container",
+                            "div.parts_last_bought",
+                            "section#related-products",
+                            "section#distributors",
+                            "section#learndiv",
+                            "#___ratingbadge_0",
+                            # "div.gallery-thumbnails",
+                            "div#prod-rightnav",
+                            "div#prod-stock",
+                            "div#prod-stock-mobile",
+                            "div.gallery-arrow",
+                        ],
+                        # element_tuples=[(By.TAG_NAME, "iframe")],
+                    )
+                    # input("enter to continue")
+                    self.remove(self.cache["PDF_TEMP_FILENAME"])
+                    self.browser.execute_script("window.print();")
+                    self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+                    pdf_filename = self.part_to_filename(
+                        PagePart.ORDER_ITEM,
+                        order_id=order_id,
+                        item_id=item_id,
+                        ext="pdf",
+                    )
+                    self.move_file(
+                        self.cache["PDF_TEMP_FILENAME"], pdf_filename
+                    )
+                    item["pdf"] = str(
+                        Path(pdf_filename).relative_to(self.cache["BASE"])
+                    )
 
-                html_filename = self.part_to_filename(
-                    PagePart.ORDER_ITEM,
-                    order_id=order_id,
-                    item_id=item_id,
-                    ext="html",
-                )
-                item["html"] = str(
-                    Path(html_filename).relative_to(self.cache["BASE"])
-                )
-                self.write(html_filename, self.browser.page_source, html=True)
+                    html_filename = self.part_to_filename(
+                        PagePart.ORDER_ITEM,
+                        order_id=order_id,
+                        item_id=item_id,
+                        ext="html",
+                    )
+                    item["html"] = str(
+                        Path(html_filename).relative_to(self.cache["BASE"])
+                    )
+                    self.write(
+                        html_filename, self.browser.page_source, html=True
+                    )
 
                 self.pprint(item)
 
@@ -149,7 +166,21 @@ class AdafruitScraper(BaseScraper):
         guide_link: WebElement = self.find_element(
             By.CSS_SELECTOR, "a.all-guides-link"
         )
-        guide_links_tuple: List[(str, str)] = []
+        guide_links_tuple: Dict[str, str] = {}
+        for guide in self.find_elements(
+            By.CSS_SELECTOR,
+            "div.product-info-tutorial div.product-info-tutorials-text",
+        ):
+            title: WebElement = guide.find_element(
+                By.CSS_SELECTOR, " div.product-info-added-tutorial-title a"
+            )
+            tagline: WebElement = guide.find_element(
+                By.CSS_SELECTOR, "div.product-info-tutorials-tagline"
+            )
+            guide_links_tuple[title.get_attribute("href")] = (
+                title.text + ". " + tagline.text
+            )
+
         if guide_link:
             order_handle = brws.current_window_handle
             href = guide_link.get_attribute("href")
@@ -159,12 +190,14 @@ class AdafruitScraper(BaseScraper):
                 By.CSS_SELECTOR, "a.title"
             )
             for link in guide_links:
-                guide_links_tuple.append(
-                    (link.text, link.get_attribute("href"))
-                )
+                if link.get_attribute("href") not in guide_links_tuple:
+                    guide_links_tuple[link.get_attribute("href")] = link.text
 
             brws.close()
             brws.switch_to.window(order_handle)
+        guide_links_tuple = [
+            (text, href) for href, text in guide_links_tuple.items()
+        ]
 
         self.log.debug("Preload slides for all images, return to first")
         img_buttons: List[WebElement] = self.find_elements(
