@@ -8,26 +8,19 @@ from django.db import models
 class Attachement(models.Model):
     ATTACHEMENT_TYPE_CHOICES = [
         ("datasheet", "Datasheet"),
-        ("item_pdf", "Item PDF"),
-        ("item_pdf", "Item HTML"),
+        ("item_pdf", "Scraped Item PDF"),
+        ("item_pdf", "Scraped Item HTML"),
         ("item_thumnail", "Thumbnail"),
-        ("other", "Other"),
-        ("unknown", "Unknown"),
-    ]
-    ATTACHEMENT_FILETYPE_CHOICES = [
-        ("pdf", "PDF"),
-        ("jpg", "JPG"),
-        ("png", "PNG"),
-        ("txt", "Plain text"),
-        ("html", "HTML"),
         ("other", "Other"),
         ("unknown", "Unknown"),
     ]
     name = models.CharField(max_length=50)
     type = models.CharField(max_length=50, choices=ATTACHEMENT_TYPE_CHOICES)
     url = models.CharField(max_length=50)
-    file = models.CharField(max_length=50)
-    filetype = models.CharField(max_length=50, choices=ATTACHEMENT_FILETYPE_CHOICES)
+    file =  models.FileField(upload_to='', storage=None)
+    # Detected mimetype?
+    filetype = models.CharField(max_length=50, blank=True)
+    # GenericForeignKey so Attachement can be used by "any" model
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey()
