@@ -13,3 +13,4 @@ hlo/settings/logging.py
 *.log
 *.un~
 .idea
+storage/

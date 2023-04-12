@@ -1,7 +1,8 @@
-# from django.shortcuts import render
-from django.http import HttpResponse
+from django.views.generic.list import ListView
+
+from .models.order import Order
 
 
-# Create your views here.
-def index(request):  # pylint: disable=unused-argument
-    return HttpResponse("Hello. This is the scraper index page")
+class OrderListView(ListView):
+    model = Order
+    paginate_by = 2
