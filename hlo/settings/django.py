@@ -115,7 +115,6 @@ INSTALLED_APPS: List[str] = [
 
 INSTALLED_APPS += env.list("INSTALLED_APPS", default=[])
 
-
 MIDDLEWARE: List[str] = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -130,9 +129,22 @@ ROOT_URLCONF: str = "hlo.urls"
 
 TEMPLATES: List[Dict[str, Any]] = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "DIRS": [
+            (Path(BASE_DIR, "templates")),
+        ],
         "APP_DIRS": True,
+        "OPTIONS": {},
+    },
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        # FIXME: This will not work for long, maybe ask in #django
+        "DIRS": [
+            "venv/lib/python3.11/site-packages/django/contrib/admin/templates",
+            "venv/lib/python3.10/site-packages/django/contrib/admin/templates",
+            "venv/lib/python3.9/site-packages/django/contrib/admin/templates",
+        ],
+        "APP_DIRS": False,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
