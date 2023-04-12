@@ -2,7 +2,7 @@ import os
 import os.path
 from pathlib import Path
 
-from .django import env
+from .django import env, BASE_DIR
 
 # Config for scraper command
 SCRAPER_CACHE_BASE: str = Path(

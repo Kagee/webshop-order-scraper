@@ -10,5 +10,7 @@
         "*.sqlite3": true,
         "manage.py": true,
         "LICENSE": true,
-    }
+    },
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true,
 }

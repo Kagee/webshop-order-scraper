@@ -1,0 +1,3 @@
+#! /bin/bash
+[ -z "$VIRTUAL_ENV" ] && source ./venv/bin/activate
+while true; do ./manage.py runserver ; sleep 3 ; done
