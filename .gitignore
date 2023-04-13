@@ -11,7 +11,7 @@ tls/*
 geckodriver.log
 hlo/settings/logging.py
 *.log
-*.un~
+*~
 .idea
 storage/
 */migrations/*
