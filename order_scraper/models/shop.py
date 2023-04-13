@@ -28,6 +28,15 @@ class Shop(models.Model):
         blank=True,
     )
 
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "branch_name"],
+                name="unique_shop_name_branch_name",
+            )
+        ]
+
     def save(self, *args, **kwargs):
         if not self.branch_name:
             self.branch_name = self.name

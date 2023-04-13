@@ -8,6 +8,7 @@ from .scrapers.distrelec import DistrelecScraper
 from .scrapers.adafruit import AdafruitScraper
 from .scrapers.tryout import TryOutScraper
 from ...models.shop import Shop
+import logging
 
 
 class Command(BaseCommand):
@@ -60,6 +61,7 @@ class Command(BaseCommand):
         scraper.add_argument(
             "webshop",
             type=str.lower,
+            nargs="?",
             choices=["aliexpress", "amazon", "distrelec", "adafruit", "tryout"],
             help="The online webshop to scrape orders from. (REQUIRED)",
         )
@@ -80,6 +82,14 @@ class Command(BaseCommand):
             help="Leave browser window open after scraping.",
         )
         scraper.add_argument(
+            "--init-shops",
+            action="store_true",
+            help=(
+                "Initialize database with some data. "
+                "Can be used to update data."
+            ),
+        )
+        scraper.add_argument(
             "--load-to-db",
             action="store_true",
             help="Load all currently parsed data to DB.",
@@ -98,6 +108,22 @@ class Command(BaseCommand):
         # Internal hack to get command-spesific options on top
         parser._action_groups.reverse()  # pylint: disable=protected-access
 
+    def setup_logger(self, options):
+        log = logging.getLogger(__name__)
+        if options["verbosity"] == 0:
+            # 0 = minimal output
+            log.setLevel(logging.ERROR)
+        elif options["verbosity"] == 1:
+            # 1 = normal output
+            log.setLevel(logging.WARNING)
+        elif options["verbosity"] == 2:
+            # 2 = verbose output
+            log.setLevel(logging.INFO)
+        elif options["verbosity"] == 3:
+            # 3 = very verbose output
+            log.setLevel(logging.DEBUG)
+        self.log = log
+
     @no_translations
     def handle(self, *_, **options):
         if options["webshop"] == "aliexpress":
@@ -113,3 +139,41 @@ class Command(BaseCommand):
                 AdafruitScraper(self, options).command_scrape()
         elif options["webshop"] == "tryout":
             TryOutScraper(self, options).command_scrape()
+        else:
+            if options["init_shops"]:
+                self.setup_logger(options)
+                self.log.debug("Initializing database with shops")
+                for shop in [
+                    (
+                        "Adafruit",
+                        None,
+                        "https://www.adafruit.com/index.php?main_page=account_history_info&order_id={order_id}",
+                        "https://www.adafruit.com/product/{item_id}",
+                    ),
+                    (
+                        "Amazon",
+                        "Amazon.de",
+                        "https://www.amazon.de/gp/your-account/order-details/?orderID={order_id}",
+                        "https://www.amazon.de/-/en/gp/product/{item_id}",
+                    ),
+                    (
+                        "Aliexpress",
+                        None,
+                        "https://www.aliexpress.com/p/order/detail.html?orderId={order_id}",
+                        "https://www.aliexpress.com/item/{item_id}.html",
+                    ),
+                ]:
+                    (shop_object, created) = Shop.objects.update_or_create(
+                        name=shop[0],
+                        branch_name=shop[1] if shop[1] else shop[0],
+                        defaults={
+                            "order_url_template": shop[2] if shop[2] else "",
+                            "item_url_template": shop[3] if shop[3] else "",
+                        },
+                    )
+                    if created:
+                        self.log.debug("Created new shop: %s", shop_object)
+                    else:
+                        self.log.debug(
+                            "Found and possibly updated: %s", shop_object
+                        )

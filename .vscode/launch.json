@@ -154,7 +154,21 @@
             "justMyCode": true
         },
         {
-            "name": "--help",
+            "name": "Init shops",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "--init-shops",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Help",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",

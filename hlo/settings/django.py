@@ -91,7 +91,7 @@ except ImportError:
             #'order_scraper.management.commands.scrapers.amazon_de'
             #'order_scraper.management.commands.scrapers.amazon_co_uk'
             #'order_scraper.management.commands.scrapers.amazon_com'
-            "order_scraper.management.commands.scrapers": {
+            "order_scraper.management.commands": {
                 "handlers": ["console", "file"],
                 "level": "DEBUG",  # Will be overriden by --verbosity
             }
