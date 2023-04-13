@@ -15,6 +15,14 @@ class Shop(models.Model):
         ),
         blank=True,
     )
+
+    def longname(self):
+        return f"{self.branch_name}" + (
+            f", a branch of {self.name}"
+            if self.name != self.branch_name
+            else ""
+        )
+
     # https://www.adafruit.com/index.php?main_page=account_history_info&order_id={order_id}
     order_url_template = models.CharField(
         max_length=250,

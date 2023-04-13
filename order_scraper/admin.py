@@ -1,6 +1,4 @@
 from django.contrib import admin
-from django.db import models
-from django.forms import Textarea, TextInput
 
 from .models.attachement import Attachement
 from .models.order import Order
@@ -8,14 +6,23 @@ from .models.orderitem import OrderItem
 from .models.shop import Shop
 
 admin.site.register(Attachement)
-admin.site.register(Order)
 admin.site.register(OrderItem)
 
 
+class OrderAdmin(admin.ModelAdmin):
+    readonly_fields = [
+        "shop",
+        "date",
+        "order_id",
+        "indent_extra_data",
+    ]
+
+
+admin.site.register(Order, OrderAdmin)
+
+
 class ShopAdmin(admin.ModelAdmin):
-    # formfield_overrides = {
-    #    models.CharField: {"widget": TextInput(attrs={"size": "75"})},
-    # }
+    list_display = [lambda obj: obj.longname()]
     readonly_fields = [
         "id",
     ]

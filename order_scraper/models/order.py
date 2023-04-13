@@ -2,18 +2,28 @@ from datetime import datetime
 
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
-
+import pprint
 from .attachement import Attachement
 from .shop import Shop
+from django.utils.safestring import mark_safe
+from django.utils.html import escape
 
 
 class Order(models.Model):
-    readonly_fields = ["order_id", "date"]
+    class Meta:
+        ordering = ["date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["shop", "order_id"],
+                name="unique_shop_order_id",
+            )
+        ]
 
     shop: Shop = models.ForeignKey(
         Shop,
         on_delete=models.CASCADE,
         related_name="orders",
+        editable=False,
     )
 
     order_id = models.CharField(
@@ -28,16 +38,7 @@ class Order(models.Model):
         editable=False,
     )
 
-    class Meta:
-        ordering = ["date"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["shop", "order_id"],
-                name="unique_shop_branch_order_id",
-            )
-        ]
-
-    date: datetime = models.DateTimeField(
+    date: datetime = models.DateField(
         "order date",
         editable=False,
     )
@@ -47,11 +48,20 @@ class Order(models.Model):
     extra_data = models.JSONField(
         default=dict,
         blank=True,
+        editable=False,
     )
+
+    def indent_extra_data(self):
+        return mark_safe(
+            "<pre>"
+            + escape(pprint.PrettyPrinter(indent=2).pformat(self.extra_data))
+            + "</pre>"
+        )
+
+    indent_extra_data.short_description = "Extra data"
 
     def __str__(self):
         return (
-            f"{self.shop.branch_name} #{self.order_id} placed at"
-            f" {self.date.strftime('%Y-%m-%d') } with"
+            f"{self.shop.branch_name} order #{self.order_id} with"
             f" {self.items.count()} items"
         )

@@ -48,7 +48,26 @@ class AdafruitScraper(BaseScraper):
                 "Processing file %s/%s", json_file.parent.name, json_file.name
             )
             order_dict = self.read(json_file, from_json=True)
-            self.pprint(list(order_dict.keys()))
+
+            for order_id, order in order_dict.items():
+                items = order["items"].copy()
+                del order["items"]
+                date = order["date_purchased"]
+                del order["date_purchased"]
+                self.pprint(order)
+
+                order_object, created = Order.objects.update_or_create(
+                    shop=shop,
+                    order_id=order_id,
+                    defaults={
+                        "date": datetime.fromisoformat(date),
+                        "extra_data": order,
+                    },
+                )
+                if created:
+                    self.log.debug("Created order %s", order_object)
+                else:
+                    self.log.debug("Created or updated order %s", order_object)
 
     def usage(self):
         print(f"""
