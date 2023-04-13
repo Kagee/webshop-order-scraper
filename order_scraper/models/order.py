@@ -51,6 +51,7 @@ class Order(models.Model):
         editable=False,
     )
 
+    # TODO: Replace with https://docs.djangoproject.com/en/3.2/ref/utils/#django.utils.html.format_html
     def order_url(self):
         return mark_safe(
             '%s (<a href="%s" target="_blank">Open order on Adafruit.com</a>)'
@@ -62,6 +63,7 @@ class Order(models.Model):
 
     order_url.short_description = "Order ID"
 
+    # TODO: Replace with https://docs.djangoproject.com/en/3.2/ref/utils/#django.utils.html.format_html
     def indent_extra_data(self):
         return mark_safe(
             "<pre>"
