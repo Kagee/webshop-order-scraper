@@ -51,6 +51,17 @@ class Order(models.Model):
         editable=False,
     )
 
+    def order_url(self):
+        return mark_safe(
+            '%s (<a href="%s" target="_blank">Open order on Adafruit.com</a>)'
+            % (
+                self.order_id,
+                self.shop.order_url_template.format(order_id=self.order_id),
+            )
+        )
+
+    order_url.short_description = "Order ID"
+
     def indent_extra_data(self):
         return mark_safe(
             "<pre>"

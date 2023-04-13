@@ -13,7 +13,7 @@ class OrderAdmin(admin.ModelAdmin):
     readonly_fields = [
         "shop",
         "date",
-        "order_id",
+        "order_url",
         "indent_extra_data",
     ]
 
