@@ -3,13 +3,14 @@ from datetime import datetime
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
-from . import Attachement, Shop
-
-# Create your models here.
+from .attachement import Attachement
+from .shop import Shop
 
 
 class Order(models.Model):
-    shop = models.ForeignKey(
+    readonly_fields = ["order_id", "date"]
+
+    shop: Shop = models.ForeignKey(
         Shop,
         on_delete=models.CASCADE,
         related_name="orders",
@@ -24,18 +25,22 @@ class Order(models.Model):
             "cofused with the internal database id."
         ),
         blank=False,
+        editable=False,
     )
 
     class Meta:
         ordering = ["date"]
         constraints = [
             models.UniqueConstraint(
-                fields=["shop", "shop_branch", "order_id"],
+                fields=["shop", "order_id"],
                 name="unique_shop_branch_order_id",
             )
         ]
 
-    date: datetime = models.DateTimeField("order date")
+    date: datetime = models.DateTimeField(
+        "order date",
+        editable=False,
+    )
     attachements = GenericRelation(Attachement)
     created_at = models.DateTimeField(auto_now_add=True)
     # Extra data that we do not import into model
@@ -44,14 +49,9 @@ class Order(models.Model):
         blank=True,
     )
 
-    def __shopname__(self):
-        return (
-            f"{self.shop}{ '' if not self.shop_branch else f' ({self.shop_branch})' }"
-        )
-
     def __str__(self):
         return (
-            f"{self.__shopname__()} #{self.order_id} placed at"
+            f"{self.shop.branch_name} #{self.order_id} placed at"
             f" {self.date.strftime('%Y-%m-%d') } with"
             f" {self.items.count()} items"
         )

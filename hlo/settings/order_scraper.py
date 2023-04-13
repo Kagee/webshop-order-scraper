@@ -50,6 +50,7 @@ SCRAPER_DEC_USERNAME: str = env("SCRAPER_DEC_USERNAME", default=None)
 SCRAPER_DEC_PASSWORD: str = env("SCRAPER_DEC_PASSWORD", default=None)
 
 # Config for scraper adafruit command
+SCRAPER_ADA_DB_SHOP_ID: int = env("SCRAPER_ADA_DB_SHOP_ID", default=-1)
 SCRAPER_ADA_ITEMS_MAX: int = env("SCRAPER_ADA_ITEMS_MAX", default=-1)
 SCRAPER_ADA_ITEMS = [
     x.strip() for x in env.list("SCRAPER_ADA_ITEMS", default=[])

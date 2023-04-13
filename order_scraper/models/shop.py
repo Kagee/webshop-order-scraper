@@ -13,7 +13,7 @@ class Shop(models.Model):
             " for Amazon, or elfadistrelec.no for Distrelec."
             " default is same as shop name"
         ),
-        default=name,
+        blank=True,
     )
     # https://www.adafruit.com/index.php?main_page=account_history_info&order_id={order_id}
     order_url_template = models.CharField(
@@ -27,3 +27,11 @@ class Shop(models.Model):
         help_text="The placeholders {order_id} and {item_id} can be used.",
         blank=True,
     )
+
+    def save(self, *args, **kwargs):
+        if not self.branch_name:
+            self.branch_name = self.name
+        super(Shop, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.branch_name}"

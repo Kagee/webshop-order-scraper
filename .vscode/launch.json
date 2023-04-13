@@ -133,9 +133,22 @@
             "args": [
                 "scrape",
                 "adafruit",
-                "--move-to-db",
+                "--load-to-db",
+                "--db-shop-id",
+                "1",
                 "-v",
                 "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "run server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "runserver",
             ],
             "django": true,
             "justMyCode": true

@@ -7,6 +7,7 @@ from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
 from .scrapers.adafruit import AdafruitScraper
 from .scrapers.tryout import TryOutScraper
+from ...models.shop import Shop
 
 
 class Command(BaseCommand):
@@ -20,7 +21,7 @@ class Command(BaseCommand):
             "-d",
             "--domain",
             type=str.lower,
-            default="de",
+            default="www.elfadistrelec.no",
             help="What domain to scrape. Default `www.elfadistrelec.no`",
         )
 
@@ -36,14 +37,12 @@ class Command(BaseCommand):
             ),
         )
         amz.add_argument(
-            "-s",
             "--start-year",
             type=int,
             help="Get all years, starting at START_YEAR.",
         )
 
         amz.add_argument(
-            "-t",
             "--tld",
             type=str.lower,
             default="de",
@@ -75,16 +74,26 @@ class Command(BaseCommand):
         )
 
         scraper.add_argument(
-            "-l",
-            "--leave-browser",
+            "-b",
+            "--do-not-close-browser",
             action="store_true",
             help="Leave browser window open after scraping.",
         )
         scraper.add_argument(
-            "-a",
             "--load-to-db",
             action="store_true",
             help="Load all currently parsed data to DB.",
+        )
+        scraper.add_argument(
+            "--db-shop-id",
+            type=int,
+            default=-1,
+            choices=list(Shop.objects.values_list("id", flat=True)),
+            help="Load data into this database shop. "
+            + ", ".join(
+                f"{x[0]} - {x[1]}"
+                for x in Shop.objects.values_list("id", "branch_name")
+            ),
         )
         # Internal hack to get command-spesific options on top
         parser._action_groups.reverse()  # pylint: disable=protected-access

@@ -13,6 +13,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from ....models.attachement import Attachement
 from ....models.order import Order
 from ....models.orderitem import OrderItem
+from ....models.shop import Shop
 from .base import BaseScraper, PagePart
 
 
@@ -24,13 +25,30 @@ class AdafruitScraper(BaseScraper):
         self.setup_templates()
 
     def command_load_to_db(self):
-        self.log.debug("Loading on-disk data")
-        print(self.cache["ORDERS"])
-        for json_file in Path(self.cache["ORDERS"]).glob("**/*.json"):
-            print(json_file)
+        if settings.SCRAPER_ADA_DB_SHOP_ID != -1:
+            self.log.debug("Using db shop ID from SCRAPER_ADA_DB_SHOP_ID")
+            db_shop_id = int(settings.SCRAPER_ADA_DB_ID)
+        elif self.options["db_shop_id"] != -1:
+            self.log.debug("Using db shop ID from --db-shop-id")
+            db_shop_id = int(self.options["db_shop_id"])
+        else:
+            self.log.debug(
+                "No value for db shop ID found, unable to load to db. Need"
+                " either SCRAPER_ADA_DB_SHOP_ID or --db-shop-id"
+            )
+            raise CommandError(
+                "No value for db shop ID found, unable to load to db."
+            )
+        shop = Shop.objects.get(id=db_shop_id)
+        self.log.debug("Loaded shop from model: %s", shop)
 
-        # for order in Order.objects.all():
-        #    print(order)
+        self.log.debug("Loading on-disk data")
+        for json_file in self.cache["ORDERS"].glob("*/*.json"):
+            self.log.debug(
+                "Processing file %s/%s", json_file.parent.name, json_file.name
+            )
+            order_dict = self.read(json_file, from_json=True)
+            self.pprint(list(order_dict.keys()))
 
     def usage(self):
         print(f"""

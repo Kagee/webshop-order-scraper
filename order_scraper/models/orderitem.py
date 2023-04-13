@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
@@ -34,4 +32,6 @@ class OrderItem(models.Model):
     extra_data = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
-        return f"{self.order.__shopname__()} item #{self.item_id}: {self.name}"
+        return (
+            f"{self.order.shop.branch_name} item #{self.item_id}: {self.name}"
+        )
