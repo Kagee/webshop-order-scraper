@@ -14,3 +14,4 @@ hlo/settings/logging.py
 *.un~
 .idea
 storage/
+*/migrations/*
