@@ -129,20 +129,9 @@ ROOT_URLCONF: str = "hlo.urls"
 
 TEMPLATES: List[Dict[str, Any]] = [
     {
-        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
             (Path(BASE_DIR, "templates")),
-        ],
-        "APP_DIRS": True,
-        "OPTIONS": {},
-    },
-    {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        # FIXME: This will not work for long, maybe ask in #django
-        "DIRS": [
-            "venv/lib/python3.11/site-packages/django/contrib/admin/templates",
-            "venv/lib/python3.10/site-packages/django/contrib/admin/templates",
-            "venv/lib/python3.9/site-packages/django/contrib/admin/templates",
         ],
         "APP_DIRS": False,
         "OPTIONS": {
