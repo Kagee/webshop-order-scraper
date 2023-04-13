@@ -1,3 +1,8 @@
-from django.shortcuts import render
+from django.views.generic.list import ListView
 
-# Create your views here.
+from .models.order import Order
+
+
+class OrderListView(ListView):
+    model = Order
+    paginate_by = 2

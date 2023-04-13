@@ -182,7 +182,16 @@ class AdafruitScraper(BaseScraper):
                     )
 
                     self.log.debug("Writing thumb to %s", png_filename)
-                    thumb = self.find_element(By.CSS_SELECTOR, "img#Slide1")
+                    counter = 0
+                    while True:
+                        thumb = self.find_element(By.CSS_SELECTOR, f"div#gallery-slide-{counter}")
+                        if not thumb or int(thumb.get_attribute("tabindex")) < 0:
+                            self.log.debug("Did not find %s, trying next", f"div#gallery-slide-{counter}")
+                            counter += 1
+                            continue
+                        else:
+                            break
+
                     self.write(
                         png_filename,
                         thumb.screenshot_as_base64,

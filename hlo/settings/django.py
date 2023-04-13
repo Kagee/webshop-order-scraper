@@ -22,31 +22,33 @@ env = environ.FileAwareEnv(
     HLO_PASSWORD_MIN_LEN=(int, 14),
 )
 
-env.prefix = 'HLO_'
+env.prefix = "HLO_"
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
 
+MEDIA_ROOT: Path = (BASE_DIR / Path("storage")).resolve()
+MEDIA_URL: str = "files/"
 # Take environment variables from .env file
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-DEBUG: bool = env('DEBUG')
+DEBUG: bool = env("DEBUG")
 
-LANGUAGE_CODE: str = env('LANGUAGE_CODE')
-TIME_ZONE: str = env('TIME_ZONE')
-USE_I18N: bool = env('USE_I18N')
-USE_L10N: bool = env('USE_L10N')
-USE_TZ: bool = env('USE_TZ')
+LANGUAGE_CODE: str = env("LANGUAGE_CODE")
+TIME_ZONE: str = env("TIME_ZONE")
+USE_I18N: bool = env("USE_I18N")
+USE_L10N: bool = env("USE_L10N")
+USE_TZ: bool = env("USE_TZ")
 
 # Raises Django's ImproperlyConfigured
 # exception if SECRET_KEY not in os.environ
-SECRET_KEY: str = env('SECRET_KEY')
+SECRET_KEY: str = env("SECRET_KEY")
 
 # Parse database connection url strings
 DATABASES = {
     # read os.environ['DATABASE_URL'] and raises
     # ImproperlyConfigured exception if not found
-    'default': env.db(),
+    "default": env.db(),
 }
 
 
@@ -55,52 +57,51 @@ try:
     from .logging import *  # type: ignore  # pylint: disable=wildcard-import
 except ImportError:
     LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'verbose': {
-                'format': '{asctime} [{levelname}] {module}: {message}',
-                'style': '{',
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "verbose": {
+                "format": "{asctime} [{levelname}] {module}: {message}",
+                "style": "{",
             },
-            'simple': {
-                'format': '{levelname} {message}',
-                'style': '{',
+            "simple": {
+                "format": "{levelname} {message}",
+                "style": "{",
             },
         },
-        'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'verbose',
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "verbose",
             },
-            'file': {
-                'class' : 'logging.FileHandler',
-                'filename': 'scraper.log',
-                'formatter': 'verbose',
-                'encoding': 'utf-8',
-            }
+            "file": {
+                "class": "logging.FileHandler",
+                "filename": "scraper.log",
+                "formatter": "verbose",
+                "encoding": "utf-8",
+            },
         },
-        'root': {
-            'handlers': [],
-            'level': 'WARNING',
+        "root": {
+            "handlers": [],
+            "level": "WARNING",
         },
-        'loggers': {
+        "loggers": {
             #'order_scraper.management.commands.scrapers.aliexpress'
             #'order_scraper.management.commands.scrapers.amazon'
             #'order_scraper.management.commands.scrapers.amazon_de'
             #'order_scraper.management.commands.scrapers.amazon_co_uk'
             #'order_scraper.management.commands.scrapers.amazon_com'
-            'order_scraper.management.commands.scrapers': {
-                'handlers': ['console', 'file'],
-                'level': 'DEBUG', # Will be overriden by --verbosity
+            "order_scraper.management.commands.scrapers": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",  # Will be overriden by --verbosity
             }
         },
     }
 
 
+ALLOWED_HOSTS: List[str] = env.list("ALLOWED_HOSTS")
 
-ALLOWED_HOSTS: List[str] = env.list('ALLOWED_HOSTS')
-
-STATIC_URL: str = env('STATIC_URL')
+STATIC_URL: str = env("STATIC_URL")
 
 
 INSTALLED_APPS: List[str] = [
@@ -112,8 +113,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.staticfiles",
 ]
 
-INSTALLED_APPS += env.list('INSTALLED_APPS', default=[])
-
+INSTALLED_APPS += env.list("INSTALLED_APPS", default=[])
 
 MIDDLEWARE: List[str] = [
     "django.middleware.security.SecurityMiddleware",
@@ -129,9 +129,22 @@ ROOT_URLCONF: str = "hlo.urls"
 
 TEMPLATES: List[Dict[str, Any]] = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "DIRS": [
+            (Path(BASE_DIR, "templates")),
+        ],
         "APP_DIRS": True,
+        "OPTIONS": {},
+    },
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        # FIXME: This will not work for long, maybe ask in #django
+        "DIRS": [
+            "venv/lib/python3.11/site-packages/django/contrib/admin/templates",
+            "venv/lib/python3.10/site-packages/django/contrib/admin/templates",
+            "venv/lib/python3.9/site-packages/django/contrib/admin/templates",
+        ],
+        "APP_DIRS": False,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -153,16 +166,22 @@ AUTH_PASSWORD_VALIDATORS: List[Dict[str, Any]] = [
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        'OPTIONS': {
-            'min_length': env('PASSWORD_MIN_LEN'),
-        }
+        "NAME": (
+            "django.contrib.auth.password_validation.MinimumLengthValidator"
+        ),
+        "OPTIONS": {
+            "min_length": env("PASSWORD_MIN_LEN"),
+        },
     },
     {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation.CommonPasswordValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation.NumericPasswordValidator"
+        ),
     },
 ]
 

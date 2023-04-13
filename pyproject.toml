@@ -44,6 +44,9 @@ disable = [
   "missing-class-docstring",
 ]
 
+[tool.pylint.miscellaneous]
+notes = ["FIXME", "XXX", "TODO", "NOTE"]
+
 [tool.black]
 line-length = 80
 target-version = ['py39']
