@@ -1,35 +1,20 @@
-from django.contrib.contenttypes.fields import (
-    GenericForeignKey,
-    GenericRelation,
-)
-from django.contrib.contenttypes.models import ContentType
-from django.db import models
 from datetime import datetime
 
-from .attachement import Attachement
+from django.contrib.contenttypes.fields import GenericRelation
+from django.db import models
+
+from . import Attachement, Shop
 
 # Create your models here.
 
 
 class Order(models.Model):
-    SHOPS_CHOICES = [
-        ("adafruit", "Adafruit"),  # Only one that i have that is complete yet
-    ]
-    shop = models.CharField(
-        max_length=30,
-        choices=SHOPS_CHOICES,
+    shop = models.ForeignKey(
+        Shop,
+        on_delete=models.CASCADE,
+        related_name="orders",
     )
-    # sub_shop can be "" since i.e. adafruit does
-    # not have "subshops" like Amazon .de/.com/.co.jp
-    shop_branch = models.CharField(
-        max_length=50,
-        default="",
-        blank=True,
-        help_text=(
-            "The branch of the primary shop, i.e. DE or CO.JP"
-            " for Amazon, or elfadistrelec.no for Distrelec."
-        ),
-    )
+
     order_id = models.CharField(
         "the original shop order id",
         max_length=100,

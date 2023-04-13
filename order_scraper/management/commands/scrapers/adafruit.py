@@ -1,21 +1,18 @@
-# pylint: disable=unused-import
-import os
+import csv
 import re
 import time
-import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
-from lxml.etree import tostring
-from lxml.html.soupparser import fromstring
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
 
+from ....models.attachement import Attachement
+from ....models.order import Order
+from ....models.orderitem import OrderItem
 from .base import BaseScraper, PagePart
 
 
@@ -25,6 +22,15 @@ class AdafruitScraper(BaseScraper):
         super().__init__(command, options, __name__)
         self.setup_cache("adafruit")
         self.setup_templates()
+
+    def command_load_to_db(self):
+        self.log.debug("Loading on-disk data")
+        print(self.cache["ORDERS"])
+        for json_file in Path(self.cache["ORDERS"]).glob("**/*.json"):
+            print(json_file)
+
+        # for order in Order.objects.all():
+        #    print(order)
 
     def usage(self):
         print(f"""
@@ -184,9 +190,17 @@ class AdafruitScraper(BaseScraper):
                     self.log.debug("Writing thumb to %s", png_filename)
                     counter = 0
                     while True:
-                        thumb = self.find_element(By.CSS_SELECTOR, f"div#gallery-slide-{counter}")
-                        if not thumb or int(thumb.get_attribute("tabindex")) < 0:
-                            self.log.debug("Did not find %s, trying next", f"div#gallery-slide-{counter}")
+                        thumb = self.find_element(
+                            By.CSS_SELECTOR, f"div#gallery-slide-{counter}"
+                        )
+                        if (
+                            not thumb
+                            or int(thumb.get_attribute("tabindex")) < 0
+                        ):
+                            self.log.debug(
+                                "Did not find %s, trying next",
+                                f"div#gallery-slide-{counter}",
+                            )
                             counter += 1
                             continue
                         else:
