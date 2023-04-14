@@ -80,6 +80,11 @@ class Command(BaseCommand):
             help="Leave browser window open after scraping/unexpected stops.",
         )
         scraper.add_argument(
+            "--random",
+            action="store_true",
+            help="Process orders/items in random order. Not supported by all scrapers.",
+        )
+        scraper.add_argument(
             "--init-shops",
             action="store_true",
             help=(
