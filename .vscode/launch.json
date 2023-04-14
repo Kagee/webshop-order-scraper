@@ -12,7 +12,7 @@
             "args": [
                 "scrape",
                 "aliexpress",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "-v",
                 "3"
             ],
@@ -27,7 +27,7 @@
             "args": [
                 "scrape",
                 "amazon",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "-v",
                 "3",
                 "--start-year",
@@ -44,7 +44,7 @@
             "args": [
                 "scrape",
                 "amazon",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "--tld",
                 "co.uk",
                 "-v",
@@ -65,7 +65,7 @@
                 "amazon",
                 "--tld",
                 "com",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "-v",
                 "3",
                 "--year",
@@ -84,7 +84,7 @@
                 "amazon",
                 "--tld",
                 "co.jp",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "-v",
                 "3",
                 "--start-year",
@@ -101,7 +101,7 @@
             "args": [
                 "scrape",
                 "distrelec",
-                "--cache-orderlist",
+                "--use-cached-orderlist",
                 "-v",
                 "3",
                 "--leave-browser",

@@ -67,19 +67,17 @@ class Command(BaseCommand):
         )
 
         scraper.add_argument(
-            "-c",
-            "--cache-orderlist",
+            "--use-cached-orderlist",
             action="store_true",
             help=(
-                "Use file for order list. Will not detect new orders with this."
+                "Use cached version of orderlist. Will make re-runs more effective, but will not detect new orders."
             ),
         )
 
         scraper.add_argument(
-            "-b",
-            "--do-not-close-browser",
+            "--no-close-browser",
             action="store_true",
-            help="Leave browser window open after scraping.",
+            help="Leave browser window open after scraping/unexpected stops.",
         )
         scraper.add_argument(
             "--init-shops",

@@ -188,9 +188,9 @@ class BaseScraper(object):
         """
         try:
             if self.browser_status == "created":
-                if self.options["leave_browser"]:
+                if self.options["no_close_browser"]:
                     self.log.info(
-                        "Not cloding browser because of --leave-browser"
+                        "Not cloding browser because of --no-close-browser"
                     )
                     return
                 self.log.info("Safely closing browser")

@@ -6,7 +6,7 @@ from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
-
+import random 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
@@ -45,7 +45,7 @@ class AliExpressScraper(BaseScraper):
         for info_row in info_rows:
             text = "".join(info_row.itertext())
             if text.startswith("Payment"):
-                order["payment_method"] = "".join(text.split(":")[1:]).strip()
+                order["payment_method"] = "".join(text.split(":")[1:]).strip().replace("\xa0", " ")
         contact_info_div = html.xpath(
             '//div[contains(@class, "order-detail-info-item")]'
             '[not(contains(@class, "order-detail-order-info"))]'
@@ -59,12 +59,12 @@ class AliExpressScraper(BaseScraper):
                 price_item.xpath('.//span[contains(@class, "left-col")]')[
                     0
                 ].itertext()
-            ).strip()
+            ).strip().replace("\xa0", " ")
             order["price_items"][left] = "".join(
                 price_item.xpath('.//span[contains(@class, "right-col")]')[
                     0
                 ].itertext()
-            ).strip()
+            ).strip().replace("\xa0", " ")
         if "items" not in order:
             order["items"] = {}
 
@@ -87,7 +87,7 @@ class AliExpressScraper(BaseScraper):
                 ).decode("utf-8")
                 sku = ""
             else:
-                sku = "".join(sku_list[0].itertext()).strip()
+                sku = "".join(sku_list[0].itertext()).strip().replace("\xa0", " ")
                 sku_hash = base64.urlsafe_b64encode(sku.encode("utf-8")).decode(
                     "utf-8"
                 )
@@ -96,11 +96,11 @@ class AliExpressScraper(BaseScraper):
                 item.xpath('.//div[contains(@class, "item-price")]')[
                     0
                 ].itertext()
-            ).strip()
+            ).strip().replace("\xa0", " ")
 
             (price, count) = price_count.split("x")
             # Remove space .. spacing
-            title = re.sub(" +", " ", title)
+            title = re.sub(" +", " ", title.replace("\xa0", " "))
             item_sku_id = f"{item_id}-{sku_hash}"
             if not item_sku_id in order["items"]:
                 order["items"][item_sku_id] = {}
@@ -132,9 +132,9 @@ class AliExpressScraper(BaseScraper):
 
             order["items"][item_sku_id].update(
                 {
-                    "title": title.strip(),
+                    "title": title.strip().replace("\xa0", " "),
                     "sku": sku,
-                    "price": price.strip(),
+                    "price": price.strip().replace("\xa0", " "),
                     "count": int(count),
                 }
             )
@@ -172,21 +172,25 @@ class AliExpressScraper(BaseScraper):
             self.log.info("Scraping all order IDs")
 
         counter = 0
+        random.shuffle(orders)
+        max_orders_reached = False
         for order in orders:
-            counter += 1
             if settings.SCRAPER_ALI_ORDERS_MAX > 0:
-                if counter > settings.SCRAPER_ALI_ORDERS_MAX:
-                    self.log.info(
-                        "Scraped %s order, breaking",
-                        settings.SCRAPER_ALI_ORDERS_MAX,
-                    )
-                    break
+                if counter >= settings.SCRAPER_ALI_ORDERS_MAX:
+                    if not max_orders_reached:
+                        self.log.info(
+                            "Scraped %s order, stopping scraping",
+                            settings.SCRAPER_ALI_ORDERS_MAX,
+                        )
+                        max_orders_reached = True
+                    continue
             if (
                 len(settings.SCRAPER_ALI_ORDERS)
                 and order["id"] not in settings.SCRAPER_ALI_ORDERS
             ) or order["id"] in settings.SCRAPER_ALI_ORDERS_SKIP:
                 self.log.info("Skipping order ID %s", order["id"])
                 continue
+            counter += 1
             order_cache_dir = self.cache["ORDERS"] / order["id"]
             self.makedir(order_cache_dir)
             json_filename = self.ORDER_FILENAME_TEMPLATE.format(
@@ -244,7 +248,7 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         """
-        if self.cache_orderlist and os.access(
+        if self.options["use_cached_orderlist"] and os.access(
             self.ORDER_LIST_FILENAME, os.R_OK
         ):
             self.log.info(
@@ -287,13 +291,13 @@ class AliExpressScraper(BaseScraper):
             )[0]
         shipper_div = html.xpath('//span[contains(@class, "title-eclp")]')[0]
         tracking["shipper"] = (
-            shipper_div.text.strip() if shipper_div is not None else "Unknown"
+            shipper_div.text.strip().replace("\xa0", " ") if shipper_div is not None else "Unknown"
         )
         status_div = html.xpath('//div[contains(@class, "status-title-text")]')[
             0
         ]
         tracking["status"] = (
-            status_div.text.strip() if status_div is not None else "Unknown"
+            status_div.text.strip().replace("\xa0", " ") if status_div is not None and status_div.text is not None else "Unknown"
         )
         addr = []
         for p_element in html.xpath(
@@ -505,7 +509,7 @@ class AliExpressScraper(BaseScraper):
 
             # URL and filename-safe base64, so we can
             # reverse the sku to text if we need
-            if len(sku_element) == 0 or len(sku_element[0].text.strip()) == 0:
+            if len(sku_element) == 0 or len(sku_element[0].text.replace("\xa0", " ").strip()) == 0:
                 sku_hash = base64.urlsafe_b64encode(
                     "no-sku".encode("utf-8")
                 ).decode("utf-8")
@@ -513,13 +517,13 @@ class AliExpressScraper(BaseScraper):
             else:
                 sku_element = sku_element[0].text
                 sku_hash = base64.urlsafe_b64encode(
-                    sku_element.strip().encode("utf-8")
+                    sku_element.strip().replace("\xa0", " ").encode("utf-8")
                 ).decode("utf-8")
 
             self.log.debug(
                 "Sku for item %s is %s, hash %s",
                 item_id,
-                sku_element.strip(),
+                sku_element.strip().replace("\xa0", " "),
                 sku_hash,
             )
 
@@ -927,7 +931,7 @@ class AliExpressScraper(BaseScraper):
                 ).click()
                 order_list_page = False
                 try:
-                    WebDriverWait(brws, 5).until(
+                    WebDriverWait(brws, 15).until(
                         EC.url_matches(order_list_url_re_espaced)
                     )
                     order_list_page = True
@@ -990,7 +994,7 @@ class AliExpressScraper(BaseScraper):
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
         self.command = command
-        self.cache_orderlist = options["cache_orderlist"]
+        
         self.log = self.setup_logger(__name__)
         super().setup_cache(Path("aliexpress"))
 
