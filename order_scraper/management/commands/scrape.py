@@ -130,7 +130,10 @@ class Command(BaseCommand):
     @no_translations
     def handle(self, *_, **options):
         if options["webshop"] == "aliexpress":
-            AliExpressScraper(self, options).command_scrape()
+            if options["load_to_db"]:
+                AliExpressScraper(self, options).command_load_to_db()
+            else:
+                AliExpressScraper(self, options).command_scrape()
         elif options["webshop"] == "amazon":
             AmazonScraper(self, options).command_scrape()
         elif options["webshop"] == "distrelec":
@@ -166,9 +169,11 @@ class Command(BaseCommand):
                         "https://www.aliexpress.com/item/{item_id}.html",
                     ),
                 ]:
+                    branch_name=shop[1] if shop[1] else shop[0]
+                    continue
                     (shop_object, created) = Shop.objects.update_or_create(
                         name=shop[0],
-                        branch_name=shop[1] if shop[1] else shop[0],
+                        branch_name=branch_name,
                         defaults={
                             "order_url_template": shop[2] if shop[2] else "",
                             "item_url_template": shop[3] if shop[3] else "",

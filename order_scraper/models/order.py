@@ -53,9 +53,10 @@ class Order(models.Model):
 
     def order_url(self):
         return format_html(
-            '{} (<a href="{}" target="_blank">Open order on Adafruit.com</a>)',
+            '{} (<a href="{}" target="_blank">Open order on {}</a>)',
             self.order_id,
             self.shop.order_url_template.format(order_id=self.order_id),
+                        self.shop.branch_name
         )
 
     order_url.short_description = "Order ID"

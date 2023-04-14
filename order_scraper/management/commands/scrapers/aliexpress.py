@@ -1,31 +1,34 @@
 import base64
 import os
+import random
 import re
 import time
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
-import random 
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
-from selenium.common.exceptions import (
-    ElementClickInterceptedException,
-    NoAlertPresentException,
-    NoSuchElementException,
-    NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
-)
+from selenium.common.exceptions import (ElementClickInterceptedException,
+                                        NoAlertPresentException,
+                                        NoSuchElementException,
+                                        NoSuchWindowException,
+                                        StaleElementReferenceException,
+                                        TimeoutException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
+from ....models.attachement import Attachement
+from ....models.order import Order
+from ....models.orderitem import OrderItem
+from ....models.shop import Shop
 from .base import BaseScraper
 
 
@@ -38,6 +41,63 @@ class AliExpressScraper(BaseScraper):
         "https://track.aliexpress.com/logisticsdetail.htm?tradeId={}"
     )
     LOGIN_PAGE_RE: Final[str] = r"^https://login\.aliexpress\.com"
+
+
+    def command_load_to_db(self):
+        if settings.SCRAPER_ALI_DB_SHOP_ID != -1:
+            self.log.debug("Using db shop ID from SCRAPER_ALI_DB_SHOP_ID")
+            db_shop_id = int(settings.SCRAPER_ALI_DB_SHOP_ID)
+        elif self.options["db_shop_id"] != -1:
+            self.log.debug("Using db shop ID from --db-shop-id")
+            db_shop_id = int(self.options["db_shop_id"])
+        else:
+            self.log.debug(
+                "No value for db shop ID found, unable to load to db. Need"
+                " either SCRAPER_ALI_DB_SHOP_ID or --db-shop-id"
+            )
+            raise CommandError(
+                "No value for db shop ID found, unable to load to db."
+            )
+        shop = Shop.objects.get(id=db_shop_id)
+        self.log.debug("Loaded shop from model: %s", shop)
+        
+        self.log.debug("Loading on-disk data")
+        for json_file in self.cache["ORDERS"].glob("*/*.json"):
+            self.log.debug(
+                "Processing file %s/%s", json_file.parent.name, json_file.name
+            )
+            order_dict = self.read(json_file, from_json=True)
+            items = order_dict["items"].copy()
+            del order_dict["items"]
+            date = order_dict["date"]
+            del order_dict["date"]
+            order_id = order_dict["id"]
+            del order_dict["id"]
+            if order_dict["status"] not in ["finished", "closed"]:
+                self.log.info(self.command.style.WARNING("Not loading order %s to DB because status is %s"), order_id, order_dict["status"])
+                continue
+            #order_object, created = Order.objects.update_or_create(
+            #        shop=shop,
+            #        order_id=order_id,
+            #        defaults={
+            #            "date": datetime.fromisoformat(date),
+            #            "extra_data": order_dict,
+            #        },
+            #    )
+        """
+                order_object, created = Order.objects.update_or_create(
+                    shop=shop,
+                    order_id=order_id,
+                    defaults={
+                        "date": datetime.fromisoformat(date),
+                        "extra_data": order,
+                    },
+                )
+                if created:
+                    self.log.debug("Created order %s", order_object)
+                else:
+                    self.log.debug("Created or updated order %s", order_object)
+        """
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -502,7 +562,7 @@ class AliExpressScraper(BaseScraper):
                 thumb.get_attribute("href"),
             )
             item_id = info.group(1)
-            self.log.debug("Curren item id is %s", item_id)
+            self.log.debug("Current item id is %s", item_id)
 
             sku_element = item_content.find_elements(
                 By.XPATH, './/div[contains(@class, "item-sku-attr")]'

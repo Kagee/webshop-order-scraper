@@ -5,3 +5,4 @@ beautifulsoup4>=4.12
 lxml>=4.9
 webdriver_manager
 jinja2>=3.1
+pillow>=9.5

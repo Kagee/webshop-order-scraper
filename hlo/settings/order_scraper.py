@@ -26,6 +26,7 @@ SCRAPER_ALI_ORDERS_SKIP = [
     x.strip() for x in env.list("SCRAPER_ALI_ORDERS_SKIP", default=[])
 ]
 SCRAPER_ALI_ORDERS_MAX: int = env("SCRAPER_ALI_ORDERS_MAX", default=-1)
+SCRAPER_ALI_DB_SHOP_ID: int = env("SCRAPER_ALI_DB_SHOP_ID", default=-1)
 
 
 # Config for scraper amazon command
@@ -46,6 +47,7 @@ SCRAPER_AMZ_ORDERS_SKIP = [
 
 # Config for scraper dec command
 SCRAPER_DEC_MANUAL_LOGIN = env.bool("SCRAPER_DEC_MANUAL_LOGIN", False)
+SCRAPER_DEC_DB_SHOP_ID: int = env("SCRAPER_DEC_DB_SHOP_ID", default=-1)
 SCRAPER_DEC_USERNAME: str = env("SCRAPER_DEC_USERNAME", default=None)
 SCRAPER_DEC_PASSWORD: str = env("SCRAPER_DEC_PASSWORD", default=None)
 

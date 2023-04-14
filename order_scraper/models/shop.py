@@ -15,7 +15,7 @@ class Shop(models.Model):
         ),
         blank=True,
     )
-
+    icon = models.ImageField(upload_to="shop/icons/", blank=True)
     def longname(self):
         return f"{self.branch_name}" + (
             f", a branch of {self.name}"

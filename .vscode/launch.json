@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Ali",
+            "name": "Aliexpress",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -14,6 +14,23 @@
                 "aliexpress",
                 "--use-cached-orderlist",
                 "--random",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Aliexpress (to db)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "aliexpress",
+                "--load-to-db",
+                //"--db-shop-id",
+                //"3",
                 "-v",
                 "3"
             ],
