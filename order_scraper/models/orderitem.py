@@ -17,6 +17,14 @@ class OrderItem(models.Model):
         ),
         blank=False,
     )
+    item_sku = models.CharField(
+        "the original shop item sku",
+        max_length=100,
+        default="",
+        help_text=(
+            "The original item sku."
+        ),
+    )
     count = models.PositiveIntegerField("number of items")
     order: Order = models.ForeignKey(
         Order,

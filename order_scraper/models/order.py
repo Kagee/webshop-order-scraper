@@ -53,7 +53,7 @@ class Order(models.Model):
 
     def order_url(self):
         return format_html(
-            '%s (<a href="%s" target="_blank">Open order on Adafruit.com</a>)',
+            '{} (<a href="{}" target="_blank">Open order on Adafruit.com</a>)',
             self.order_id,
             self.shop.order_url_template.format(order_id=self.order_id),
         )
@@ -62,7 +62,7 @@ class Order(models.Model):
 
     def indent_extra_data(self):
         return format_html(
-            "<pre>%s</pre>",
+            "<pre>{}</pre>",
             escape(pprint.PrettyPrinter(indent=2).pformat(self.extra_data)),
         )
 

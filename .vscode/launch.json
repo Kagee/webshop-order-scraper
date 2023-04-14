@@ -13,6 +13,7 @@
                 "scrape",
                 "aliexpress",
                 "--use-cached-orderlist",
+                "--random",
                 "-v",
                 "3"
             ],
