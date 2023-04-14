@@ -172,7 +172,7 @@ class AliExpressScraper(BaseScraper):
             self.log.info("Scraping all order IDs")
 
         counter = 0
-        random.shuffle(orders)
+        #random.shuffle(orders)
         max_orders_reached = False
         for order in orders:
             if settings.SCRAPER_ALI_ORDERS_MAX > 0:
