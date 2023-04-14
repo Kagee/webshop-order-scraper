@@ -200,7 +200,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.info("Json for order %s found, skipping", order["id"])
                 continue
             self.log.info("#" * 30)
-            self.log.info("Scraping order ID %s", order["id"])
+            self.log.info(self.command.style.WARNING("Scraping order ID %s"), order["id"])
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
             order["cache_file"] = self.ORDER_FILENAME_TEMPLATE.format(
@@ -655,7 +655,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.debug("Found random page, closing: %s", handle)
             self.browser.close()
         if not debug_found_snapshot:
-            self.log(
+            self.log.debug(
                 self.command.style.ERROR(
                     "Failed to find snapshot, sleeping 100 seconds for debug"
                 )
