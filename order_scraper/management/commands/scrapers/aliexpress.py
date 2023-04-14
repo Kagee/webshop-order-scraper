@@ -13,12 +13,14 @@ from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
-from selenium.common.exceptions import (ElementClickInterceptedException,
-                                        NoAlertPresentException,
-                                        NoSuchElementException,
-                                        NoSuchWindowException,
-                                        StaleElementReferenceException,
-                                        TimeoutException)
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoAlertPresentException,
+    NoSuchElementException,
+    NoSuchWindowException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -42,7 +44,6 @@ class AliExpressScraper(BaseScraper):
     )
     LOGIN_PAGE_RE: Final[str] = r"^https://login\.aliexpress\.com"
 
-
     def command_load_to_db(self):
         if settings.SCRAPER_ALI_DB_SHOP_ID != -1:
             self.log.debug("Using db shop ID from SCRAPER_ALI_DB_SHOP_ID")
@@ -60,12 +61,15 @@ class AliExpressScraper(BaseScraper):
             )
         shop = Shop.objects.get(id=db_shop_id)
         self.log.debug("Loaded shop from model: %s", shop)
-        
+
         self.log.debug("Loading on-disk data")
+        counter = 0
+        max_title_length = 0
         for json_file in self.cache["ORDERS"].glob("*/*.json"):
-            self.log.debug(
-                "Processing file %s/%s", json_file.parent.name, json_file.name
-            )
+            counter += 1
+            # self.log.debug(
+            #    "Processing file %s/%s", json_file.parent.name, json_file.name
+            # )
             order_dict = self.read(json_file, from_json=True)
             items = order_dict["items"].copy()
             del order_dict["items"]
@@ -74,30 +78,70 @@ class AliExpressScraper(BaseScraper):
             order_id = order_dict["id"]
             del order_dict["id"]
             if order_dict["status"] not in ["finished", "closed"]:
-                self.log.info(self.command.style.WARNING("Not loading order %s to DB because status is %s"), order_id, order_dict["status"])
-                continue
-            #order_object, created = Order.objects.update_or_create(
-            #        shop=shop,
-            #        order_id=order_id,
-            #        defaults={
-            #            "date": datetime.fromisoformat(date),
-            #            "extra_data": order_dict,
-            #        },
-            #    )
-        """
-                order_object, created = Order.objects.update_or_create(
-                    shop=shop,
-                    order_id=order_id,
-                    defaults={
-                        "date": datetime.fromisoformat(date),
-                        "extra_data": order,
-                    },
+                self.log.info(
+                    self.command.style.WARNING(
+                        "Not loading order %s to DB because status is %s"
+                    ),
+                    order_id,
+                    order_dict["status"],
                 )
-                if created:
-                    self.log.debug("Created order %s", order_object)
-                else:
-                    self.log.debug("Created or updated order %s", order_object)
-        """
+                continue
+            all_item_files_ok = True
+            for key, value in items.items():
+                max_title_length = max(max_title_length, len(value["title"]))
+                #
+                if not (
+                    all(
+                        [
+                            (
+                                self.can_read(
+                                    self.cache["BASE"] / value["thumbnail"]
+                                )
+                            ),
+                            (
+                                self.can_read(
+                                    self.cache["BASE"]
+                                    / value["snapshot"]["pdf"]
+                                )
+                            ),
+                            (
+                                self.can_read(
+                                    self.cache["BASE"]
+                                    / value["snapshot"]["html"]
+                                )
+                            ),
+                        ]
+                    )
+                ):
+                    self.log.error(
+                        self.command.style.ERROR(
+                            "Not importing item %s in order %s because some"
+                            " files were missing"
+                        ),
+                        key,
+                        order_id,
+                    )
+
+            order_object, created = Order.objects.update_or_create(
+                shop=shop,
+                order_id=order_id,
+                defaults={
+                    "date": datetime.fromisoformat(date),
+                    "extra_data": order_dict,
+                },
+            )
+            if created:
+                self.log.debug(
+                    self.command.style.SUCCESS("Created order %s"), order_object
+                )
+            # else:
+            #    self.log.debug("Created or updated order %s", order_object)
+
+        self.log.info(
+            "Loaded %s orders. The longest item title was %s characters",
+            counter,
+            max_title_length,
+        )
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -105,7 +149,9 @@ class AliExpressScraper(BaseScraper):
         for info_row in info_rows:
             text = "".join(info_row.itertext())
             if text.startswith("Payment"):
-                order["payment_method"] = "".join(text.split(":")[1:]).strip().replace("\xa0", " ")
+                order["payment_method"] = (
+                    "".join(text.split(":")[1:]).strip().replace("\xa0", " ")
+                )
         contact_info_div = html.xpath(
             '//div[contains(@class, "order-detail-info-item")]'
             '[not(contains(@class, "order-detail-order-info"))]'
@@ -115,16 +161,24 @@ class AliExpressScraper(BaseScraper):
         for price_item in html.xpath(
             '//div[contains(@class, "order-price-item")]'
         ):
-            left = "".join(
-                price_item.xpath('.//span[contains(@class, "left-col")]')[
-                    0
-                ].itertext()
-            ).strip().replace("\xa0", " ")
-            order["price_items"][left] = "".join(
-                price_item.xpath('.//span[contains(@class, "right-col")]')[
-                    0
-                ].itertext()
-            ).strip().replace("\xa0", " ")
+            left = (
+                "".join(
+                    price_item.xpath('.//span[contains(@class, "left-col")]')[
+                        0
+                    ].itertext()
+                )
+                .strip()
+                .replace("\xa0", " ")
+            )
+            order["price_items"][left] = (
+                "".join(
+                    price_item.xpath('.//span[contains(@class, "right-col")]')[
+                        0
+                    ].itertext()
+                )
+                .strip()
+                .replace("\xa0", " ")
+            )
         if "items" not in order:
             order["items"] = {}
 
@@ -147,16 +201,22 @@ class AliExpressScraper(BaseScraper):
                 ).decode("utf-8")
                 sku = ""
             else:
-                sku = "".join(sku_list[0].itertext()).strip().replace("\xa0", " ")
+                sku = (
+                    "".join(sku_list[0].itertext()).strip().replace("\xa0", " ")
+                )
                 sku_hash = base64.urlsafe_b64encode(sku.encode("utf-8")).decode(
                     "utf-8"
                 )
 
-            price_count = "".join(
-                item.xpath('.//div[contains(@class, "item-price")]')[
-                    0
-                ].itertext()
-            ).strip().replace("\xa0", " ")
+            price_count = (
+                "".join(
+                    item.xpath('.//div[contains(@class, "item-price")]')[
+                        0
+                    ].itertext()
+                )
+                .strip()
+                .replace("\xa0", " ")
+            )
 
             (price, count) = price_count.split("x")
             # Remove space .. spacing
@@ -261,7 +321,9 @@ class AliExpressScraper(BaseScraper):
                 self.log.info("Json for order %s found, skipping", order["id"])
                 continue
             self.log.info("#" * 30)
-            self.log.info(self.command.style.WARNING("Scraping order ID %s"), order["id"])
+            self.log.info(
+                self.command.style.WARNING("Scraping order ID %s"), order["id"]
+            )
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
             order["cache_file"] = self.ORDER_FILENAME_TEMPLATE.format(
@@ -352,13 +414,17 @@ class AliExpressScraper(BaseScraper):
             )[0]
         shipper_div = html.xpath('//span[contains(@class, "title-eclp")]')[0]
         tracking["shipper"] = (
-            shipper_div.text.strip().replace("\xa0", " ") if shipper_div is not None else "Unknown"
+            shipper_div.text.strip().replace("\xa0", " ")
+            if shipper_div is not None
+            else "Unknown"
         )
         status_div = html.xpath('//div[contains(@class, "status-title-text")]')[
             0
         ]
         tracking["status"] = (
-            status_div.text.strip().replace("\xa0", " ") if status_div is not None and status_div.text is not None else "Unknown"
+            status_div.text.strip().replace("\xa0", " ")
+            if status_div is not None and status_div.text is not None
+            else "Unknown"
         )
         addr = []
         for p_element in html.xpath(
@@ -570,7 +636,10 @@ class AliExpressScraper(BaseScraper):
 
             # URL and filename-safe base64, so we can
             # reverse the sku to text if we need
-            if len(sku_element) == 0 or len(sku_element[0].text.replace("\xa0", " ").strip()) == 0:
+            if (
+                len(sku_element) == 0
+                or len(sku_element[0].text.replace("\xa0", " ").strip()) == 0
+            ):
                 sku_hash = base64.urlsafe_b64encode(
                     "no-sku".encode("utf-8")
                 ).decode("utf-8")
@@ -1055,7 +1124,7 @@ class AliExpressScraper(BaseScraper):
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
         self.command = command
-        
+
         self.log = self.setup_logger(__name__)
         super().setup_cache(Path("aliexpress"))
 

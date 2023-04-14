@@ -1,14 +1,17 @@
 import datetime
+import logging
+import os
 
+from django.conf import settings
+from django.core.files import File
 from django.core.management.base import BaseCommand, no_translations
 
+from ...models.shop import Shop
+from .scrapers.adafruit import AdafruitScraper
 from .scrapers.aliexpress import AliExpressScraper
 from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
-from .scrapers.adafruit import AdafruitScraper
 from .scrapers.tryout import TryOutScraper
-from ...models.shop import Shop
-import logging
 
 
 class Command(BaseCommand):
@@ -70,7 +73,8 @@ class Command(BaseCommand):
             "--use-cached-orderlist",
             action="store_true",
             help=(
-                "Use cached version of orderlist. Will make re-runs more effective, but will not detect new orders."
+                "Use cached version of orderlist. Will make re-runs more"
+                " effective, but will not detect new orders."
             ),
         )
 
@@ -82,7 +86,10 @@ class Command(BaseCommand):
         scraper.add_argument(
             "--random",
             action="store_true",
-            help="Process orders/items in random order. Not supported by all scrapers.",
+            help=(
+                "Process orders/items in random order. Not supported by all"
+                " scrapers."
+            ),
         )
         scraper.add_argument(
             "--init-shops",
@@ -169,8 +176,14 @@ class Command(BaseCommand):
                         "https://www.aliexpress.com/item/{item_id}.html",
                     ),
                 ]:
-                    branch_name=shop[1] if shop[1] else shop[0]
-                    continue
+                    branch_name = shop[1] if shop[1] else shop[0]
+                    logo_path = (
+                        settings.BASE_DIR / f"logos/{branch_name.lower()}.png"
+                    )
+                    logo_img = None
+                    if os.access(logo_path, os.R_OK):
+                        logo_img = File(open(logo_path, "rb"), logo_path.name)
+
                     (shop_object, created) = Shop.objects.update_or_create(
                         name=shop[0],
                         branch_name=branch_name,
@@ -179,6 +192,12 @@ class Command(BaseCommand):
                             "item_url_template": shop[3] if shop[3] else "",
                         },
                     )
+                    if logo_img:
+                        if shop_object.icon:
+                            shop_object.icon.delete()
+                        shop_object.icon = logo_img
+                        shop_object.save()
+                        logo_img.close()
                     if created:
                         self.log.debug("Created new shop: %s", shop_object)
                     else:

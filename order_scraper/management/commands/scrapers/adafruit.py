@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
+from django.core.files import File
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -54,7 +55,7 @@ class AdafruitScraper(BaseScraper):
                 del order["items"]
                 date = order["date_purchased"]
                 del order["date_purchased"]
-                self.pprint(order)
+                self.pprint(items)
 
                 order_object, created = Order.objects.update_or_create(
                     shop=shop,
@@ -64,8 +65,43 @@ class AdafruitScraper(BaseScraper):
                         "extra_data": order,
                     },
                 )
+
+                for item_id, item in items.items():
+                    # print(item_id, item)
+                    name = item["product name"]
+                    del item["product name"]
+
+                    quantity = item["quantity"]
+                    del item["quantity"]
+
+                    thumb_path = self.cache["BASE"] / item["png"]
+                    thumb_img = File(open(thumb_path, "rb"), thumb_path.name)
+                    del item["png"]
+
+                    # TODO: Save html and pdf as attachements
+                    # del item["html"]
+                    # del item["pdf"]
+
+                    item_object, created = OrderItem.objects.update_or_create(
+                        order=order_object,
+                        item_id=item_id,
+                        item_sku="",  # Adafruit has no SKUs?
+                        defaults={
+                            "name": name,
+                            "count": quantity,
+                            "extra_data": item,
+                        },
+                    )
+
+                    if item_object.thumbnail:
+                        item_object.thumbnail.delete()
+                    item_object.thumbnail = thumb_img
+                    item_object.save()
+
+                    if thumb_img:
+                        thumb_img.close()
                 if created:
-                    self.log.debug("Created order %s", order_object)
+                    self.log.debug("Created order %s", order_id)
                 else:
                     self.log.debug("Created or updated order %s", order_object)
 

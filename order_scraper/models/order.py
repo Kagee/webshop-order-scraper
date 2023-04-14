@@ -1,9 +1,11 @@
 import pprint
 from datetime import datetime
 
+from django.contrib import admin
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
-from django.utils.html import escape, format_html
+from django.urls import reverse
+from django.utils.html import escape, format_html, format_html_join
 
 from .attachement import Attachement
 from .shop import Shop
@@ -51,23 +53,63 @@ class Order(models.Model):
         editable=False,
     )
 
+    @admin.display(description="Items")
+    def items_list(self):
+        if not self.items.count():
+            return "No items in database"
+        else:
+            return format_html(
+                '<ul style="margin: 0;">{}</ul>',
+                format_html_join(
+                    "\n",
+                    (
+                        '<li><a href="{}">{}</a>&nbsp;&nbsp;(<a target="_blank"'
+                        ' href="{}">View on {}</a>)</li>'
+                    ),
+                    [
+                        (
+                            reverse(
+                                "admin:order_scraper_orderitem_change",
+                                args=(i[1],),
+                            ),
+                            i[0],
+                            self.shop.item_url_template.format(item_id=i[2]),
+                            self.shop.branch_name,
+                        )
+                        for i in self.items.all().values_list(
+                            "name", "id", "item_id"
+                        )
+                    ],
+                ),
+            )
+
+    @admin.display(description="Order ID")
     def order_url(self):
         return format_html(
-            '{} (<a href="{}" target="_blank">Open order on {}</a>)',
+            '{} (<a href="{}" target="_blank">View on {}</a>)',
             self.order_id,
             self.shop.order_url_template.format(order_id=self.order_id),
-                        self.shop.branch_name
+            self.shop.branch_name,
         )
 
-    order_url.short_description = "Order ID"
-
+    @admin.display(description="Extra data")
     def indent_extra_data(self):
         return format_html(
             "<pre>{}</pre>",
             escape(pprint.PrettyPrinter(indent=2).pformat(self.extra_data)),
         )
 
-    indent_extra_data.short_description = "Extra data"
+    @admin.display(description="Order")
+    def admin_list_render(self):
+        return format_html(
+            (
+                f'<img src="{self.shop.icon.url}" width="25" />'
+                if self.shop.icon
+                else ""
+            )
+            + f"&nbsp;&nbsp;&nbsp; {self.shop.branch_name} order"
+            f" #{self.order_id} with {self.items.count()} items"
+        )
 
     def __str__(self):
         return (
