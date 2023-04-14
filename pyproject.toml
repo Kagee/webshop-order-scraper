@@ -28,6 +28,7 @@ django_settings_module = "hlo.settings"
 extension-pkg-allow-list = [
   "lxml",
 ]
+load-plugins = pylint_django
 
 [tool.pyright]
 # This makes pyright not mark code behind thinks like
@@ -46,6 +47,12 @@ disable = [
 
 [tool.pylint.miscellaneous]
 notes = ["FIXME", "XXX", "TODO", "NOTE"]
+
+[tool.pylint."django foreign keys referenced by strings"]
+# A module containing Django settings to be used while linting.
+django-settings-module = "hlo.settings"
+
+
 
 [tool.black]
 line-length = 80
