@@ -1,12 +1,12 @@
+import pprint
 from datetime import datetime
 
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
-import pprint
+from django.utils.html import escape, format_html
+
 from .attachement import Attachement
 from .shop import Shop
-from django.utils.safestring import mark_safe
-from django.utils.html import escape
 
 
 class Order(models.Model):
@@ -51,24 +51,19 @@ class Order(models.Model):
         editable=False,
     )
 
-    # TODO: Replace with https://docs.djangoproject.com/en/3.2/ref/utils/#django.utils.html.format_html
     def order_url(self):
-        return mark_safe(
-            '%s (<a href="%s" target="_blank">Open order on Adafruit.com</a>)'
-            % (
-                self.order_id,
-                self.shop.order_url_template.format(order_id=self.order_id),
-            )
+        return format_html(
+            '%s (<a href="%s" target="_blank">Open order on Adafruit.com</a>)',
+            self.order_id,
+            self.shop.order_url_template.format(order_id=self.order_id),
         )
 
     order_url.short_description = "Order ID"
 
-    # TODO: Replace with https://docs.djangoproject.com/en/3.2/ref/utils/#django.utils.html.format_html
     def indent_extra_data(self):
-        return mark_safe(
-            "<pre>"
-            + escape(pprint.PrettyPrinter(indent=2).pformat(self.extra_data))
-            + "</pre>"
+        return format_html(
+            "<pre>%s</pre>",
+            escape(pprint.PrettyPrinter(indent=2).pformat(self.extra_data)),
         )
 
     indent_extra_data.short_description = "Extra data"
@@ -76,5 +71,6 @@ class Order(models.Model):
     def __str__(self):
         return (
             f"{self.shop.branch_name} order #{self.order_id} with"
+            # 2pylint: disable=no-member
             f" {self.items.count()} items"
         )
