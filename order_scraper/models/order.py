@@ -6,6 +6,8 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from django.urls import reverse
 from django.utils.html import escape, format_html, format_html_join
+from djmoney.models.fields import MoneyField
+from djmoney.money import Money
 
 from .attachement import Attachement
 from .shop import Shop
@@ -45,6 +47,28 @@ class Order(models.Model):
         editable=False,
     )
     attachements = GenericRelation(Attachement)
+
+    total = MoneyField(
+        max_digits=19,
+        decimal_places=4,
+        default_currency=None,
+    )
+    subtotal = MoneyField(
+        max_digits=19,
+        decimal_places=4,
+        default_currency=None,
+    )
+    tax = MoneyField(
+        max_digits=19,
+        decimal_places=4,
+        default_currency=None,
+    )
+    shipping = MoneyField(
+        max_digits=19,
+        decimal_places=4,
+        default_currency=None,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     # Extra data that we do not import into model
     extra_data = models.JSONField(

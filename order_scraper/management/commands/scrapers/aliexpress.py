@@ -13,6 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
+from price_parser import Price
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
     NoAlertPresentException,
@@ -26,6 +27,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from djmoney.money import Money
 
 from ....models.attachement import Attachement
 from ....models.order import Order
@@ -65,6 +67,7 @@ class AliExpressScraper(BaseScraper):
         self.log.debug("Loading on-disk data")
         counter = 0
         max_title_length = 0
+
         for json_file in self.cache["ORDERS"].glob("*/*.json"):
             counter += 1
             # self.log.debug(
@@ -77,6 +80,39 @@ class AliExpressScraper(BaseScraper):
             del order_dict["date"]
             order_id = order_dict["id"]
             del order_dict["id"]
+
+            prices = {
+                "total": Money(0, "NOK"),
+                "subtotal": Money(0, "NOK"),
+                "tax": Money(0, "NOK"),
+                "shipping": Money(0, "NOK"),
+            }
+            price_items = order_dict["price_items"].copy()
+            for key in price_items:
+                value = Price.fromstring(order_dict["price_items"][key])
+                if value.amount == 0 and not value.currency:
+                    self.log.debug(
+                        "Value is 0 and currency in None, forcing to $: %s",
+                        order_dict["price_items"][key],
+                    )
+                    value.currency = "$"
+                try:
+                    assert value.currency in ["$", "€"]
+                except AssertionError as err:
+                    self.log.debug(
+                        "Ops, value was %s => %s %s",
+                        order_dict["price_items"][key],
+                        value.amount,
+                        value.currency,
+                    )
+                    raise err
+
+                if key.lower() in prices.keys():
+                    prices[key.lower()] = Money(
+                        value.amount, "USD" if value.currency == "$" else "EUR"
+                    )
+                    del order_dict["price_items"][key]
+
             if order_dict["status"] not in ["finished", "closed"]:
                 self.log.info(
                     self.command.style.WARNING(
@@ -121,14 +157,16 @@ class AliExpressScraper(BaseScraper):
                         key,
                         order_id,
                     )
+            defaults = {
+                "date": datetime.fromisoformat(date),
+                "extra_data": order_dict,
+            }
+            defaults.update(prices)
 
             order_object, created = Order.objects.update_or_create(
                 shop=shop,
                 order_id=order_id,
-                defaults={
-                    "date": datetime.fromisoformat(date),
-                    "extra_data": order_dict,
-                },
+                defaults=defaults,
             )
             if created:
                 self.log.debug(
@@ -138,7 +176,7 @@ class AliExpressScraper(BaseScraper):
             #    self.log.debug("Created or updated order %s", order_object)
 
         self.log.info(
-            "Loaded %s orders. The longest item title was %s characters",
+            "Loaded %s orders. The longest item title was %s characters.",
             counter,
             max_title_length,
         )

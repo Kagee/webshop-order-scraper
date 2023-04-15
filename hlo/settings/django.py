@@ -111,6 +111,7 @@ INSTALLED_APPS: List[str] = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "djmoney",  # MoneyField
 ]
 
 INSTALLED_APPS += env.list("INSTALLED_APPS", default=[])
