@@ -7,7 +7,8 @@ from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
-
+import csv
+from datetime import date
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from lxml.etree import tostring
@@ -34,25 +35,99 @@ from ....models.order import Order
 from ....models.orderitem import OrderItem
 from ....models.shop import Shop
 from .base import BaseScraper
+from decimal import Decimal
 
 
 class AliExpressScraper(BaseScraper):
-    ORDER_LIST_URL: Final[str] = "https://www.aliexpress.com/p/order/index.html"
-    ORDER_DETAIL_URL: Final[str] = (
-        "https://www.aliexpress.com/p/order/detail.html?orderId={}"
-    )
-    ORDER_TRACKING_URL: Final[str] = (
-        "https://track.aliexpress.com/logisticsdetail.htm?tradeId={}"
-    )
-    LOGIN_PAGE_RE: Final[str] = r"^https://login\.aliexpress\.com"
+    def command_db_to_csv(self):
+        curr_dict = self.load_currency_to_nok_dict()
 
-    def command_load_to_db(self):
+        def curr_val(curr_day_dict, curr, val):
+            return (Decimal(val) / curr_day_dict[curr][0]) * curr_day_dict[
+                curr
+            ][1]
+
+        shop = self.get_shop()
+        queryset = Order.objects.filter(shop=shop).values()
+        orders_with_nok = []
+        for value in queryset:
+            value.pop("extra_data", None)
+            curr_day_dict = curr_dict[str(value["date"])]
+            value["total_nok"] = curr_val(
+                curr_day_dict, value["total_currency"], value["total"]
+            )
+            value["total_nok_round"] = round(
+                curr_val(
+                    curr_day_dict, value["total_currency"], value["total"]
+                ),
+                2,
+            )
+            self.pprint(value)
+            orders_with_nok.append(value)
+        self.remove(self.ORDER_CSV_FILENAME)
+        with open(self.ORDER_CSV_FILENAME, "w", newline="") as csvfile:
+            fieldnames = [
+                "date",
+                "order_id",
+                "subtotal",
+                "subtotal_currency",
+                "shipping",
+                "shipping_currency",
+                "tax",
+                "tax_currency",
+                "total",
+                "total_currency",
+                "total_nok",
+                "total_nok_round",
+            ]
+            writer = csv.DictWriter(
+                csvfile, fieldnames=fieldnames, extrasaction="ignore"
+            )
+            writer.writeheader()
+            for order in orders_with_nok:
+                order.pop("extra_data", None)
+                writer.writerow(order)
+                for k in fieldnames:
+                    order.pop(k, None)
+                self.pprint(order)
+
+    def setup_templates(self):
+        # pylint: disable=invalid-name
+        # URL Templates
+        self.ORDER_LIST_URL: str = (
+            "https://www.aliexpress.com/p/order/index.html"
+        )
+        self.ORDER_DETAIL_URL: str = (
+            "https://www.aliexpress.com/p/order/detail.html?orderId={}"
+        )
+        self.ORDER_TRACKING_URL: str = (
+            "https://track.aliexpress.com/logisticsdetail.htm?tradeId={}"
+        )
+        self.LOGIN_PAGE_RE: str = r"^https://login\.aliexpress\.com"
+
+        # pylint: disable=invalid-name
+        self.SNAPSHOT_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "{order_id}/item-snapshot-{item_id}.{ext}"
+        )
+        self.THUMB_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
+        )
+        self.ORDER_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "{order_id}/order.{ext}"
+        )
+        self.TRACKING_HTML_FILENAME_TEMPLATE = str(
+            self.cache["ORDERS"] / "{order_id}/tracking.html"
+        )
+        self.ORDER_CSV_FILENAME = self.cache["BASE"] / "aliexpress-orders.csv"
+        self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
+
+    def get_shop(self):
         if settings.SCRAPER_ALI_DB_SHOP_ID != -1:
             self.log.debug("Using db shop ID from SCRAPER_ALI_DB_SHOP_ID")
-            db_shop_id = int(settings.SCRAPER_ALI_DB_SHOP_ID)
+            shop_id = int(settings.SCRAPER_ALI_DB_SHOP_ID)
         elif self.options["db_shop_id"] != -1:
             self.log.debug("Using db shop ID from --db-shop-id")
-            db_shop_id = int(self.options["db_shop_id"])
+            shop_id = int(self.options["db_shop_id"])
         else:
             self.log.debug(
                 "No value for db shop ID found, unable to load to db. Need"
@@ -61,7 +136,10 @@ class AliExpressScraper(BaseScraper):
             raise CommandError(
                 "No value for db shop ID found, unable to load to db."
             )
-        shop = Shop.objects.get(id=db_shop_id)
+        return Shop.objects.get(id=shop_id)
+
+    def command_load_to_db(self):
+        shop = self.get_shop()
         self.log.debug("Loaded shop from model: %s", shop)
 
         self.log.debug("Loading on-disk data")
@@ -82,10 +160,10 @@ class AliExpressScraper(BaseScraper):
             del order_dict["id"]
 
             prices = {
-                "total": Money(0, "NOK"),
-                "subtotal": Money(0, "NOK"),
-                "tax": Money(0, "NOK"),
-                "shipping": Money(0, "NOK"),
+                "total": Money(0, "USD"),
+                "subtotal": Money(0, "USD"),
+                "tax": Money(0, "USD"),
+                "shipping": Money(0, "USD"),
             }
             price_items = order_dict["price_items"].copy()
             for key in price_items:
@@ -122,7 +200,7 @@ class AliExpressScraper(BaseScraper):
                     order_dict["status"],
                 )
                 continue
-            all_item_files_ok = True
+
             for key, value in items.items():
                 max_title_length = max(max_title_length, len(value["title"]))
                 #
@@ -1165,22 +1243,7 @@ class AliExpressScraper(BaseScraper):
 
         self.log = self.setup_logger(__name__)
         super().setup_cache(Path("aliexpress"))
-
-        # pylint: disable=invalid-name
-        self.SNAPSHOT_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / "{order_id}/item-snapshot-{item_id}.{ext}"
-        )
-        self.THUMB_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
-        )
-        self.ORDER_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / "{order_id}/order.{ext}"
-        )
-        self.TRACKING_HTML_FILENAME_TEMPLATE = str(
-            self.cache["ORDERS"] / "{order_id}/tracking.html"
-        )
-
-        self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
+        self.setup_templates()
 
     def part_to_filename(self, _, **__):
         # Not used here yet

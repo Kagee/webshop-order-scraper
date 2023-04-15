@@ -1,11 +1,18 @@
 import base64
+import csv
+import datetime
 import json
 import logging
+import math
 import os
 import pprint
 import random
 import re
 import time
+from datetime import date
+from decimal import Decimal
+
+# datetime as dt
 from enum import Enum
 from logging import Logger
 from pathlib import Path
@@ -16,10 +23,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
+from price_parser import Price
 from selenium import webdriver
 from selenium.common.exceptions import (
-    WebDriverException,
     NoSuchElementException,
+    WebDriverException,
 )
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -322,10 +330,18 @@ class BaseScraper(object):
         return content
 
     def read(
-        self, path: Union[Path, str], from_json=False, from_html=False
+        self,
+        path: Union[Path, str],
+        from_json=False,
+        from_html=False,
+        from_csv=False,
+        **kwargs,
     ) -> Any:
-        with open(path, "r", encoding="utf-8") as file:
-            contents = file.read()
+        with open(path, "r", encoding="utf-8-sig") as file:
+            if from_csv:
+                contents = list(csv.DictReader(file, **kwargs))
+            else:
+                contents = file.read()
             if from_json:
                 contents = json.loads(contents)
             elif from_html:
@@ -403,6 +419,54 @@ class BaseScraper(object):
                 """,
             elemets_to_hide,
         )
+
+    def load_currency_to_nok_dict(
+        self,
+    ) -> Dict[date, Dict[str, tuple[int, str]]]:
+        input_csv = settings.SCRAPER_CACHE_BASE / "EXR.csv"
+        self.log.debug("Loading currency conversion data from %s", input_csv)
+        index: dict = self.read(
+            input_csv,
+            from_csv=True,
+            delimiter=";",
+        )
+        data_dict = {}
+
+        for line in index:
+            date_name = date.fromisoformat(line["TIME_PERIOD"])
+            if date_name not in data_dict:
+                data_dict[date_name] = {}
+            data_dict[date_name][line["BASE_CUR"]] = (
+                Decimal(math.pow(10, int(line["UNIT_MULT"]))),
+                Price.fromstring(
+                    line["OBS_VALUE"], decimal_separator=","
+                ).amount,
+            )
+
+        def daterange(start_date, end_date):
+            for num_days in range(int((end_date - start_date).days - 1)):
+                yield start_date + datetime.timedelta(num_days + 1)
+
+        sorted_data_dict = sorted(data_dict.keys())
+
+        prev_date = None
+        self.log.debug("Filling missing dates with previous valid date")
+        for idx, date_index in enumerate(sorted_data_dict):
+            if idx > 0:
+                for created_date_index in daterange(
+                    prev_date,
+                    date_index,
+                ):
+                    data_dict[str(created_date_index)] = data_dict[prev_date]
+                    prev_date = str(created_date_index)
+            prev_date = date_index
+
+        last_day = sorted_data_dict[len(sorted_data_dict) - 1]
+        if last_day < date.today():
+            for created_date_index in daterange(last_day, date.today()):
+                data_dict[str(created_date_index)] = data_dict[last_day]
+            data_dict[str(date.today())] = data_dict[last_day]
+        return {str(key): value for (key, value) in data_dict.items()}
 
 
 class HLOEncoder(DjangoJSONEncoder):

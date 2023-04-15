@@ -105,6 +105,11 @@ class Command(BaseCommand):
             help="Load all currently parsed data to DB.",
         )
         scraper.add_argument(
+            "--db-to-csv",
+            action="store_true",
+            help="Put db fields in CSV",
+        )
+        scraper.add_argument(
             "--db-shop-id",
             type=int,
             default=-1,
@@ -134,11 +139,14 @@ class Command(BaseCommand):
             log.setLevel(logging.DEBUG)
         self.log = log
 
+    # TODO: download EXR.json from https://data.norges-bank.no/api/data/EXR/B..NOK.SP?startPeriod=2013-04-15&endPeriod=2023-04-15&format=sdmx-json&locale=no if not exist
     @no_translations
     def handle(self, *_, **options):
         if options["webshop"] == "aliexpress":
             if options["load_to_db"]:
                 AliExpressScraper(self, options).command_load_to_db()
+            elif options["db_to_csv"]:
+                AliExpressScraper(self, options).command_db_to_csv()
             else:
                 AliExpressScraper(self, options).command_scrape()
         elif options["webshop"] == "amazon":
