@@ -1119,7 +1119,7 @@ class AliExpressScraper(BaseScraper):
         return brws.page_source
 
     # Browser util methods
-    def browser_login(self, url):
+    def browser_login(self, target_url):
         """
         Uses Selenium to log in AliExpress.
         Returns when the browser is at url, after login.
@@ -1131,7 +1131,7 @@ class AliExpressScraper(BaseScraper):
             self.command.style.NOTICE("We need to log in to Aliexpress")
         )
 
-        url_re_escaped = re.escape(url)
+        url_re_escaped = re.escape(target_url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
         if settings.SCRAPER_ALI_MANUAL_LOGIN:
             self.log.debug(
@@ -1141,6 +1141,7 @@ class AliExpressScraper(BaseScraper):
                 )
             )
             input()
+            brws = self.browser_get_instance()
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
@@ -1210,7 +1211,7 @@ class AliExpressScraper(BaseScraper):
                 self.browser_safe_quit()
                 # pylint: disable=raise-missing-from
                 raise CommandError("Login to Aliexpress was not successful.")
-        brws.get(url)
+        brws.get(target_url)
         self.log.info("Waiting up to 120 seconds for %s", url_re_escaped)
         WebDriverWait(brws, 120).until(EC.url_matches(url_re_escaped))
 
