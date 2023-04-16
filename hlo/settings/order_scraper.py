@@ -57,3 +57,7 @@ SCRAPER_ADA_ITEMS_MAX: int = env("SCRAPER_ADA_ITEMS_MAX", default=-1)
 SCRAPER_ADA_ITEMS = [
     x.strip() for x in env.list("SCRAPER_ADA_ITEMS", default=[])
 ]
+
+SCRAPER_EBY_MANUAL_LOGIN = env.bool("SCRAPER_EBY_MANUAL_LOGIN", False)
+SCRAPER_EBY_USERNAME: str = env("SCRAPER_EBY_USERNAME", default=None)
+SCRAPER_EBY_PASSWORD: str = env("SCRAPER_EBY_PASSWORD", default=None)
