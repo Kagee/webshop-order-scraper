@@ -104,18 +104,22 @@ class BaseScraper(object):
         )
 
     def find_element(
-        self, by: str, value: Union[str, None]
+        self, by: str, value: Union[str, None], element=None
     ) -> Union[WebElement, None]:
         try:
-            return self.browser.find_element(by, value)
+            if not element:
+                element = self.browser
+            return element.find_element(by, value)
         except NoSuchElementException:
             return None
 
     def find_elements(
-        self, by: str, value: Union[str, None]
+        self, by: str, value: Union[str, None], element=None
     ) -> Union[WebElement, None]:
         try:
-            return self.browser.find_elements(by, value)
+            if not element:
+                element = self.browser
+            return element.find_elements(by, value)
         except NoSuchElementException:
             return []
 
@@ -255,6 +259,14 @@ class BaseScraper(object):
         else:
             self.browser_detect_handle_interrupt(url)
         return self.browser
+
+    def browser_visit_page_v2(self, url: str):
+        return self.browser_visit_page(
+            url,
+            goto_url_after_login=False,
+            do_login=False,
+            default_login_detect=False,
+        )
 
     def browser_login_required(self, url, goto_url_after_login, do_login):
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):

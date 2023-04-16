@@ -38,8 +38,14 @@ from .base import BaseScraper, PagePart
 class EbayScraper(BaseScraper):
     # Scrape comand and __init__
     def command_scrape(self):
-        if False:
-            pass
+        if settings.SCRAPER_EBY_MANUAL_LOGIN:
+            self.log.debug(
+                self.command.style.ERROR(
+                    "Please log in to eBay and press enter when ready."
+                )
+            )
+            input()
+            brws = self.browser_get_instance()
         else:
             brws = self.browser_get_instance(emulate_mobile_browser=True)
 
@@ -74,36 +80,27 @@ class EbayScraper(BaseScraper):
                 input()
 
             self.log.debug("Visiting order page %s", self.ORDER_LIST_URL)
-            self.browser_visit_page(
-                self.ORDER_LIST_URL,
-                goto_url_after_login=False,
-                do_login=False,
-                default_login_detect=False,
-            )
+            self.browser_visit_page_v2(self.ORDER_LIST_URL)
 
-            # time.sleep(2)
-            # self.browser_safe_quit()
-            # input id userid
-            # button id signin-continue-btn
+            self.rand_sleep(1, 3)
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+            time.sleep(10)
+            for item_container in self.find_elements(
+                By.CSS_SELECTOR, "div.m-mweb-item-container"
+            ):
+                print(
+                    self.find_element(
+                        By.CSS_SELECTOR, "a.m-mweb-item-link", item_container
+                    ).get_attribute("href")
+                )
+                pass
 
-            # input id pass
-            # button id sgnBt
+        # mobile a class m-pagination-simple-next [aria-disabled="true"]
 
-            # if div id captcha_loading:
-            # uiser interaction
-
-            # https://www.ebay.com/mye/myebay/purchase
-            # mobile? https://www.ebay.com/mye/myebay/purchase?pg=purchase
-
-            # mobile a class m-pagination-simple-next [aria-disabled="true"]
-
-            #
-            # url stats with https://signin.ebay.com
-            # https://www.ebay.com/mye/myebay -> login
-            # https://www.ebay.com/mye/myebay/purchase?pg=purchase
-            # div.m-mweb-item-container
-            #    a.m-mweb-item-link
-            #    div.m-image -> img -> thumbnail
+        #
+        # div.m-mweb-item-container
+        #    a.m-mweb-item-link
+        #    div.m-image -> img -> thumbnail
         #
         #     div.item-details
         #         div.item-banner-text -> status refunded/shippet etc
@@ -120,6 +117,7 @@ class EbayScraper(BaseScraper):
         # https://www.ebay.com/mye/myebay/v2/purchase?filter=year_filter%3ATWO_YEARS_AGO&page=1&moduleId=122164&pg=purchase&mp=purchase-module-v2&type=v2
 
         # <span class="m-container-message__content">No orders were found</span>
+        assert brws
         # self.browser_safe_quit()
 
     def __init__(self, command: BaseCommand, options: Dict):
