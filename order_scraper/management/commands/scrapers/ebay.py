@@ -62,10 +62,10 @@ class EbayScraper(BaseScraper):
             elif sys.platform.startswith("linux"):
                 pass
             elif sys.platform.startswith("darwin"):
-                import atomac
+                import atomacos
 
                 self.log.debug("Random title is %s", title)
-                automator = atomac.getAppRefByBundleId("org.mozilla.firefox")
+                automator = atomacos.getAppRefByBundleId("org.mozilla.firefox")
                 for window in automator.windows():
                     self.log.debug("Found window with title %s", window.AXTitle)
             else:
