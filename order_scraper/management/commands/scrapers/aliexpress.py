@@ -53,39 +53,41 @@ class AliExpressScraper(BaseScraper):
         for value in queryset:
             value.pop("extra_data", None)
             curr_day_dict = curr_dict[str(value["date"])]
-            value["total_nok"] = curr_val(
-                curr_day_dict, value["total_currency"], value["total"]
-            )
-            value["total_nok_round"] = round(
-                curr_val(
-                    curr_day_dict, value["total_currency"], value["total"]
-                ),
-                2,
-            )
-            self.pprint(value)
+            for value_name in ["total", "subtotal", "tax", "shipping"]:
+                value[f"{value_name}_nok"] = round(
+                    curr_val(
+                        curr_day_dict,
+                        value[f"{value_name}_currency"],
+                        value[f"{value_name}"],
+                    ),
+                    2,
+                )
             orders_with_nok.append(value)
         self.remove(self.ORDER_CSV_FILENAME)
-        with open(self.ORDER_CSV_FILENAME, "w", newline="") as csvfile:
+        with open(
+            self.ORDER_CSV_FILENAME, "w", newline="", encoding="utf-8"
+        ) as csvfile:
             fieldnames = [
                 "date",
                 "order_id",
                 "subtotal",
                 "subtotal_currency",
+                "subtotal_nok",
                 "shipping",
                 "shipping_currency",
+                "shipping_nok",
                 "tax",
                 "tax_currency",
+                "tax_nok",
                 "total",
                 "total_currency",
                 "total_nok",
-                "total_nok_round",
             ]
             writer = csv.DictWriter(
                 csvfile, fieldnames=fieldnames, extrasaction="ignore"
             )
             writer.writeheader()
             for order in orders_with_nok:
-                order.pop("extra_data", None)
                 writer.writerow(order)
                 for k in fieldnames:
                     order.pop(k, None)
