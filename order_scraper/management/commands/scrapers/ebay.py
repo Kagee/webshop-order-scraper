@@ -67,7 +67,7 @@ class EbayScraper(BaseScraper):
                 self.log.debug("Random title is %s", title)
                 automator = atomac.getAppRefByBundleId("org.mozilla.firefox")
                 for window in automator.windows():
-                    self.log.debug(window.AXTitle)
+                    self.log.debug("Found window with title %s", window.AXTitle)
             else:
                 self.log.info(
                     "Could not automate Responsive Design Mode activation,"
