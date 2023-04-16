@@ -10,7 +10,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-
+from djmoney.money import Money
 from ....models.attachement import Attachement
 from ....models.order import Order
 from ....models.orderitem import OrderItem
@@ -54,15 +54,22 @@ class AdafruitScraper(BaseScraper):
                 del order["items"]
                 date = order["date_purchased"]
                 del order["date_purchased"]
-                self.pprint(items)
-
+                # self.pprint(items)
+                prices = {
+                    "total": Money(0, "USD"),
+                    "subtotal": Money(0, "USD"),
+                    "tax": Money(0, "USD"),
+                    "shipping": Money(0, "USD"),
+                }
+                defaults = {
+                    "date": datetime.fromisoformat(date),
+                    "extra_data": order,
+                }
+                defaults.update(prices)
                 order_object, created = Order.objects.update_or_create(
                     shop=shop,
                     order_id=order_id,
-                    defaults={
-                        "date": datetime.fromisoformat(date),
-                        "extra_data": order,
-                    },
+                    defaults=defaults,
                 )
 
                 for item_id, item in items.items():

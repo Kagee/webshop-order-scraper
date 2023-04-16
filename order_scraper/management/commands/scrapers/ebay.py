@@ -1,17 +1,26 @@
 # pylint: disable=unused-import
 import csv
+import random
 import re
+import string
+import sys
 import time
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Dict, List
-import random
-import string
-import sys
+
 from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoAlertPresentException,
+    NoSuchElementException,
+    NoSuchWindowException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -34,23 +43,11 @@ class EbayScraper(BaseScraper):
         else:
             brws = self.browser_get_instance(emulate_mobile_browser=True)
 
-            # self.browser_visit_page(
-            #    # self.ORDER_LIST_URL,
-            #    "https://example.com/",
-            #    goto_url_after_login=False,
-            #    do_login=False,
-            #    default_login_detect=False,
-            # )
             title = "".join(
                 random.choice(string.ascii_lowercase) for i in range(25)
             )
             time.sleep(2)
             brws.execute_script(f'document.title = "{title}"')
-            self.log.debug("Trying stuff")
-            # print(brws.service.process)
-            # print(brws.service.process.pid)
-            # print(brws.service.process.args)
-            # print(dir(brws.service.process))
 
             if sys.platform.startswith("win32"):
                 import uiautomation as auto
@@ -59,25 +56,30 @@ class EbayScraper(BaseScraper):
                     searchDepth=1, RegexName=rf".*{title}.*"
                 )
                 window.SendKeys("{Ctrl}{Shift}{M}", 0.2, 0)
-            elif sys.platform.startswith("linux"):
-                pass
+            # elif sys.platform.startswith("linux"):
+            #    pass
             elif sys.platform.startswith("darwin"):
-                import atomacos
-
-                self.log.debug("Random title is %s", title)
-                automator = atomacos.getAppRefByBundleId("org.mozilla.firefox")
-                self.log.debug("Automator is %s", automator)
-                self.log.debug("Automator windows is %s", automator.windows())
-                for window in automator.windows():
-                    self.log.debug("Found window with title %s", window.AXTitle)
-                self.log.debug("Finished printing titles")
+                self.log.info(
+                    "Could not automate Responsive Design Mode activation,"
+                    " please activate Responsive Design Mode in Firefox by"
+                    " pressing [Cmd]-[Opt]-[m] and press enter."
+                )
+                input()
             else:
                 self.log.info(
                     "Could not automate Responsive Design Mode activation,"
-                    " please activate Responsive Design Mode in Firefox and"
-                    " press enter."
+                    " please activate Responsive Design Mode in Firefox by"
+                    " pressing [Ctrl]-[Shift]-[m] and press enter."
                 )
                 input()
+
+            self.log.debug("Visiting order page %s", self.ORDER_LIST_URL)
+            self.browser_visit_page(
+                self.ORDER_LIST_URL,
+                goto_url_after_login=False,
+                do_login=False,
+                default_login_detect=False,
+            )
 
             # time.sleep(2)
             # self.browser_safe_quit()
@@ -135,12 +137,27 @@ class EbayScraper(BaseScraper):
     # ...
 
     # Selenium-heavy function
-    def browser_detect_handle_interrupt(self, url):
-        pass
+    def browser_detect_handle_interrupt(self, expected_url):
+        time.sleep(2)
+        gdpr_accept = self.find_element(
+            By.CSS_SELECTOR, "button#gdpr-banner-accept"
+        )
+        if gdpr_accept:
+            self.log.debug("Accepting GDPR/cookies")
+            gdpr_accept.click()
+            time.sleep(0.5)
+        else:
+            self.log.debug("No GDPR/cookies to accept")
+        if re.match(r".*captcha.*", self.browser.current_url):
+            if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
+                self.log.info("Please complete captcha and press enter.")
+                input()
+        if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+            self.browser_login(expected_url)
 
-    def browser_login(self, _):
+    def browser_login(self, expected_url):
         """
-        Uses Selenium to log in Amazon.
+        Uses Selenium to log in eBay.
         Returns when the browser is at url, after login.
 
         Raises and alert in the browser if user action
@@ -156,67 +173,98 @@ class EbayScraper(BaseScraper):
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
-            amz_username = (
+            src_username = (
                 input("Enter eBay username:")
-                if not settings.SCRAPER_AMZ_USERNAME
-                else settings.SCRAPER_AMZ_USERNAME
+                if not settings.SCRAPER_EBY_USERNAME
+                else settings.SCRAPER_EBY_USERNAME
             )
-            amz_password = (
+            src_password = (
                 getpass("Enter eBay password:")
-                if not settings.SCRAPER_AMZ_PASSWORD
-                else settings.SCRAPER_AMZ_PASSWORD
+                if not settings.SCRAPER_EBY_PASSWORD
+                else settings.SCRAPER_EBY_PASSWORD
             )
 
             self.log.info(self.command.style.NOTICE("Trying to log in to eBay"))
             brws = self.browser_get_instance()
 
             wait = WebDriverWait(brws, 10)
+
+            def captcha_test():
+                if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
+                    self.log.info("Please complete captcha and press enter.")
+                    input()
+
             try:
-                self.rand_sleep()
+                self.rand_sleep(0, 2)
+                captcha_test()
+                self.log.debug("Looking for %s", "input#userid")
                 username = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_email"))
-                )
-                username.send_keys(amz_username)
-                self.rand_sleep()
-                wait.until(
-                    EC.element_to_be_clickable(((By.ID, "continue")))
-                ).click()
-                self.rand_sleep()
-                password = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_password"))
-                )
-                password.send_keys(amz_password)
-                self.rand_sleep()
-                remember = wait.until(
-                    EC.presence_of_element_located((By.NAME, "rememberMe"))
-                )
-                remember.click()
-                self.rand_sleep()
-                sign_in = wait.until(
                     EC.presence_of_element_located(
-                        (By.ID, "auth-signin-button")
-                    )
+                        (By.CSS_SELECTOR, "input#userid")
+                    ),
+                    "Could not find input#userid",
                 )
-                sign_in.click()
-                self.rand_sleep()
+                username.send_keys(src_username)
+                self.rand_sleep(0, 2)
+                self.log.debug("Looking for %s", "button#signin-continue-btn")
+                wait.until(
+                    EC.element_to_be_clickable(
+                        ((By.CSS_SELECTOR, "button#signin-continue-btn"))
+                    ),
+                    "Could not find button#signin-continue-btn",
+                ).click()
+                self.rand_sleep(0, 2)
 
-            except TimeoutException:
-                self.browser_safe_quit()
-                # pylint: disable=raise-missing-from
+                captcha_test()
+                self.log.debug("Looking for %s", "input#pass")
+                password = wait.until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "input#pass")
+                    ),
+                    "Could not find input#pass",
+                )
+                password.send_keys(src_password)
+                self.rand_sleep(0, 2)
+
+                self.log.debug("Looking for %s", "button#sgnBt")
+                wait.until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "button#sgnBt"),
+                    ),
+                    "Could not find button#sgnBt",
+                ).click()
+                self.rand_sleep(0, 2)
+                captcha_test()
+            except TimeoutException as toe:
+                # self.browser_safe_quit()
                 raise CommandError(
-                    "Login to Amazon was not successful "
+                    "Login to eBay was not successful "
                     "because we could not find a expected element.."
-                )
-        # if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+                ) from toe
+        if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+            self.log.debug(
+                "Login to eBay was not successful. If you want continue,"
+                " complete login, and then press enter. Press Ctrl-Z to cancel."
+            )
+            input()
 
+        if not re.match(expected_url, self.browser.current_url):
+            self.log.debug(
+                (
+                    "Expected url was %s, but we are at %s. Press enter if you"
+                    " think we can continue. Press Ctrl-Z to cancel."
+                ),
+                expected_url,
+                self.browser.current_url,
+            )
+            input()
         self.log.info("Login to eBay was successful.")
-
-    def browser_login(self, _):
-        return False
 
     # Utility functions
     def setup_templates(self):
         # pylint: disable=invalid-name
+        login_url = re.escape("https://signin.ebay.com")
+        self.LOGIN_PAGE_RE = rf"{login_url}.*"
         self.ORDER_LIST_URL = "https://www.ebay.com/mye/myebay/purchase"
         self.ORDERS_CSV = self.cache["BASE"] / "order_history.csv"
         self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"

@@ -270,10 +270,10 @@ class BaseScraper(object):
                     url, goto_url_after_login, do_login=False
                 )
 
-    def browser_login(self, target_url):
+    def browser_login(self, expected_url):
         raise NotImplementedError("Child does not implement browser_login()")
 
-    def browser_detect_handle_interrupt(self, url) -> None:
+    def browser_detect_handle_interrupt(self, expected_url) -> None:
         pass
 
     def part_to_filename(self, part: PagePart, **kwargs):
