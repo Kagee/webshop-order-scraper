@@ -153,6 +153,7 @@ class Command(BaseCommand):
 
     @no_translations
     def handle(self, *_, **options):
+        options["verbosity"] = 3  # Force debug output
         if options["webshop"] == "aliexpress":
             if options["load_to_db"]:
                 AliExpressScraper(self, options).command_load_to_db()
