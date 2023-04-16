@@ -4,13 +4,18 @@ import os
 
 from django.conf import settings
 from django.core.files import File
-from django.core.management.base import BaseCommand, no_translations
+from django.core.management.base import (
+    BaseCommand,
+    CommandError,
+    no_translations,
+)
 
 from ...models.shop import Shop
 from .scrapers.adafruit import AdafruitScraper
 from .scrapers.aliexpress import AliExpressScraper
 from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
+from .scrapers.ebay import EbayScraper
 from .scrapers.tryout import TryOutScraper
 
 
@@ -65,7 +70,14 @@ class Command(BaseCommand):
             "webshop",
             type=str.lower,
             nargs="?",
-            choices=["aliexpress", "amazon", "distrelec", "adafruit", "tryout"],
+            choices=[
+                "aliexpress",
+                "amazon",
+                "distrelec",
+                "adafruit",
+                "ebay",
+                "tryout",
+            ],
             help="The online webshop to scrape orders from. (REQUIRED)",
         )
 
@@ -139,7 +151,6 @@ class Command(BaseCommand):
             log.setLevel(logging.DEBUG)
         self.log = log
 
-    # TODO: download EXR.json from https://data.norges-bank.no/api/data/EXR/B..NOK.SP?startPeriod=2013-04-15&endPeriod=2023-04-15&format=sdmx-json&locale=no if not exist
     @no_translations
     def handle(self, *_, **options):
         if options["webshop"] == "aliexpress":
@@ -150,12 +161,31 @@ class Command(BaseCommand):
             else:
                 AliExpressScraper(self, options).command_scrape()
         elif options["webshop"] == "amazon":
-            AmazonScraper(self, options).command_scrape()
+            if options["load_to_db"] or options["db_to_csv"]:
+                raise CommandError(
+                    "Load to DB and DB to CSV not supported for Amazon"
+                )
+            else:
+                AmazonScraper(self, options).command_scrape()
         elif options["webshop"] == "distrelec":
-            DistrelecScraper(self, options).command_scrape()
+            if options["load_to_db"] or options["db_to_csv"]:
+                raise CommandError(
+                    "Load to DB and DB to CSV not supported for Distrelec"
+                )
+            else:
+                DistrelecScraper(self, options).command_scrape()
+        elif options["webshop"] == "ebay":
+            if options["load_to_db"] or options["db_to_csv"]:
+                raise CommandError(
+                    "Load to DB and DB to CSV not supported for eBay"
+                )
+            else:
+                EbayScraper(self, options).command_scrape()
         elif options["webshop"] == "adafruit":
             if options["load_to_db"]:
                 AdafruitScraper(self, options).command_load_to_db()
+            elif options["db_to_csv"]:
+                raise CommandError("DB to CSV not supported for Adafruit")
             else:
                 AdafruitScraper(self, options).command_scrape()
         elif options["webshop"] == "tryout":
