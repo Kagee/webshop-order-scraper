@@ -18,7 +18,6 @@ from ....models.shop import Shop
 from .base import BaseScraper, PagePart
 
 
-# Scraper for trying out code for other scrapers
 class AdafruitScraper(BaseScraper):
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)

@@ -28,6 +28,40 @@ class AmazonScraper(BaseScraper):
     # Xpath to individual order item parent element
     ORDER_CARD_XPATH: Final[str] = "//div[contains(@class, 'js-order-card')]"
 
+    # Scraper commands and __init__
+    def command_scrape(self) -> None:
+        order_lists_html = self.load_order_lists_html()
+        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
+        self.save_order_lists_to_json(order_lists)
+        order_lists = self.load_order_lists_from_json()
+
+        if settings.SCRAPER_AMZ_ORDERS_SKIP:
+            self.log.debug(
+                "Skipping scraping order IDs: %s",
+                settings.SCRAPER_AMZ_ORDERS_SKIP,
+            )
+        if self.SCRAPER_AMZ_ORDERS:
+            self.log.debug(
+                "Scraping only order IDs: %s", self.SCRAPER_AMZ_ORDERS
+            )
+        count = 0
+        for year in self.YEARS:
+            self.log.debug("Year: %s", year)
+            for order_id in order_lists[year]:
+                if self.skip_order(order_id, count):
+                    continue
+                count += 1
+                self.parse_order(order_id, order_lists[year][order_id])
+                self.pprint(order_lists[year][order_id])
+                # Write order to json here?
+        self.browser_safe_quit()
+
+    def command_db_to_csv(self):
+        pass
+    
+    def command_load_to_db(self):
+        pass
+
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
         # pylint: disable=invalid-name
@@ -88,33 +122,6 @@ class AmazonScraper(BaseScraper):
                 PagePart.ORDER_LIST_JSON, year=year
             )
         return order_lists
-
-    def command_scrape(self) -> None:
-        order_lists_html = self.load_order_lists_html()
-        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
-        self.save_order_lists_to_json(order_lists)
-        order_lists = self.load_order_lists_from_json()
-
-        if settings.SCRAPER_AMZ_ORDERS_SKIP:
-            self.log.debug(
-                "Skipping scraping order IDs: %s",
-                settings.SCRAPER_AMZ_ORDERS_SKIP,
-            )
-        if self.SCRAPER_AMZ_ORDERS:
-            self.log.debug(
-                "Scraping only order IDs: %s", self.SCRAPER_AMZ_ORDERS
-            )
-        count = 0
-        for year in self.YEARS:
-            self.log.debug("Year: %s", year)
-            for order_id in order_lists[year]:
-                if self.skip_order(order_id, count):
-                    continue
-                count += 1
-                self.parse_order(order_id, order_lists[year][order_id])
-                self.pprint(order_lists[year][order_id])
-                # Write order to json here?
-        self.browser_safe_quit()
 
     def skip_order(self, order_id: str, count: int) -> bool:
         if order_id.startswith("D01"):
@@ -183,212 +190,6 @@ class AmazonScraper(BaseScraper):
             order_id,
             html_cache_filename.name,
         )
-
-    def browser_scrape_order(
-        self, order_id: str, order_cache_dir: Path
-    ) -> Dict:
-        order = {}
-        curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
-        self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
-        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
-        wait2 = WebDriverWait(brws, 2)
-
-        order["attachements"] = []
-        order_handle = brws.current_window_handle
-        invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
-            self.save_order_attachements(order_cache_dir, order["attachements"])
-        )
-
-        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-        time.sleep(2)
-
-        if "items" not in order:
-            order["items"] = {}
-
-        self.log.debug("Scraping item IDs and thumbnails")
-
-        for item in brws.find_elements(
-            By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div"
-        ):
-            item_id = None
-            for atag in item.find_elements(By.TAG_NAME, "a"):
-                product_link = re.match(
-                    # item id or "gc" => gift card
-                    r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
-                    atag.get_attribute("href"),
-                )
-                if product_link:
-                    item_id = product_link.group("id")
-            self.log.debug("Item id: %s", item_id)
-            assert item_id
-            if item_id not in order["items"]:
-                order["items"][item_id] = {}
-
-            # Don't save anything for gift cards
-            if item_id != "gc":
-                thumb = item.find_element(
-                    By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]"
-                )
-                high_res_thumb_url = thumb.get_attribute("data-a-hires")
-                # _AC_UY300_SX300_
-                # 1. Autocrop
-                # 2. Resize Y to 300px
-                # 3. Scale X so no larger than 300px
-                large_image_src = re.sub(
-                    r"(.+\._)[^\.]*(_\.+)",
-                    r"\1AC_UY300_SX300\2",
-                    high_res_thumb_url,
-                )
-                ext = os.path.splitext(urlparse(large_image_src).path)[1]
-                item_thumb_file = (
-                    order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
-                ).resolve()
-
-                urllib.request.urlretrieve(large_image_src, item_thumb_file)
-                order["items"][item_id]["thumbnail"] = str(
-                    Path(item_thumb_file).relative_to(self.cache["BASE"])
-                )  # keep this
-
-        self.log.debug("Saving item pages to PDF and HTML")
-        for item_id in order["items"]:
-            self.browser_scrape_item_page(
-                item_id, order["items"][item_id], order_id, order_cache_dir
-            )
-            brws.switch_to.window(order_handle)
-
-        time.sleep(10)
-        self.log.debug("Opening order page again")
-        brws.switch_to.window(order_handle)
-
-        # We "open" the Invoice popup before saving HTML
-        # so it is in the DOM
-        try:
-            brws.find_element(By.XPATH, order_summary_a_xpath)
-            # If we found this, there is not Invoice link
-        except NoSuchElementException:
-            # We should expect to find a invoice link or wrapper
-            try:
-                brws.find_element(By.XPATH, invoice_wrapper_div_xpath)
-            except NoSuchElementException:
-                # Invoice wrapper is not open, need to open it
-                try:
-                    wait2.until(
-                        EC.presence_of_element_located(
-                            (By.XPATH, invoice_a_xpath)
-                        ),
-                        "Timeout waiting for Invoice button",
-                    ).click()
-                    wait2.until(
-                        EC.presence_of_element_located(
-                            (By.XPATH, invoice_wrapper_div_xpath)
-                        ),
-                        "Timeout waiting for Invoice popup",
-                    )
-                except TimeoutException:
-                    # pylint: disable=raise-missing-from
-                    raise CommandError(
-                        "Invoice popup did not open as expected, or did not"
-                        " find invoice link. We need this open to save it to"
-                        " HTML cache."
-                    )
-        self.write(
-            self.part_to_filename(
-                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
-            ),
-            brws.page_source,
-            html=True,
-        )
-        self.log.debug("Saved order page HTML to file")
-        return order
-
-    def browser_scrape_item_page(
-        self,
-        item_id: str,
-        item_dict: Dict,
-        order_id: str,
-        order_cache_dir: Path,
-    ):
-        # TODO: Finish process_item_page
-        brws = self.browser
-        self.log.debug("New tab for item %s", item_id)
-        brws.switch_to.new_window()
-        brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
-        item_dict["removed"] = False
-
-        if "Page Not Found" not in self.browser.title:
-            self.log.debug("Slowly scrolling to bottom of item page")
-            brws.execute_script(
-                """
-                var hlo_wh = window.innerHeight/2;
-                var hlo_count = 0;
-                var intervalID = setInterval(function() {
-                    window.scrollTo(0,hlo_wh*hlo_count)
-                    hlo_count = hlo_count + 1;
-                    console.log(hlo_count)
-                    if (hlo_count > 40) {
-                        clearInterval(intervalID);
-                    }
-                }, 250);
-                """,
-            )
-
-            # Javascript above happens async
-            time.sleep(11)
-            try:
-                brws.find_element(
-                    By.XPATH,
-                    (
-                        "//div[@id = 'productOverview_feature_div']"
-                        "//span[contains(@class, 'a-expander-prompt')]"
-                        "[contains(text(), 'See more')]"
-                    ),
-                ).click()
-            except NoSuchElementException:
-                pass
-            try:
-                brws.find_element(
-                    By.XPATH,
-                    (
-                        "//div[@id = 'bookDescription_feature_div']"
-                        "//span[contains(@class, 'a-expander-prompt')]"
-                        "[contains(text(), 'Read more')]"
-                    ),
-                ).click()
-            except NoSuchElementException:
-                pass
-            self.browser_cleanup_item_page()
-            item_html_filename = self.part_to_filename(
-                PagePart.ORDER_ITEM,
-                order_id=order_id,
-                item_id=item_id,
-                ext="html",
-            )
-
-            self.log.debug(
-                "Saving item %s HTML to %s", item_id, item_html_filename
-            )
-
-            self.write(item_html_filename, self.browser.page_source, html=True)
-            self.append_thumnails_to_item_html()
-        else:
-            self.log.debug("Item page for %s has been removed", item_id)
-            item_dict["removed"] = True
-
-        self.log.debug("Printing page to PDF")
-        brws.execute_script("window.print();")
-
-        self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-        item_pdf_file = (
-            order_cache_dir / Path(f"item-{item_id}.pdf")
-        ).resolve()
-        item_dict["pdf"] = str(
-            Path(item_pdf_file).relative_to(self.cache["BASE"])
-        )
-        self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
-        self.log.debug("PDF moved to cache")
-
-        brws.close()
-        self.log.debug("Closed page for item %s", item_id)
 
     def append_thumnails_to_item_html(self):
         brws = self.browser
@@ -626,202 +427,6 @@ class AmazonScraper(BaseScraper):
             attachement_dict.append(attachement)
             brws.switch_to.window(order_handle)
         return invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath
-
-    def browser_cleanup_item_page(self) -> None:
-        brws = self.browser
-        self.log.debug("Hide fluff, ads, etc")
-        elemets_to_hide: List[WebElement] = []
-
-        for element_xpath in [
-            (
-                "//table[@id='productDetails_warranty_support_sections']"
-                "/parent::div/parent::div"
-            ),
-            (
-                "//table[@id='productDetails_feedback_sections']"
-                "/parent::div/parent::div"
-            ),
-        ]:
-            elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
-
-        for element_id in [
-            "aplusBrandStory_feature_div",
-            "ask-btf_feature_div",
-            "customer-reviews_feature_div",
-            "discovery-and-inspiration_feature_div",
-            "dp-ads-center-promo_feature_div",
-            "HLCXComparisonWidget_feature_div",
-            "navFooter",
-            "navbar",
-            "orderInformationGroup",
-            "productAlert_feature_div",
-            "promotions_feature_div",
-            "rhf-container",
-            "rhf-frame",
-            "rightCol",
-            "sellYoursHere_feature_div",
-            "similarities_feature_div",
-            "value-pick-ac",
-            "valuePick_feature_div",
-            "sponsoredProducts2_feature_div",
-            "sims-themis-sponsored-products-2_feature_div",
-            "climatePledgeFriendlyBTF_feature_div",
-            "aplusSustainabilityStory_feature_div",
-            "accessories-and-compatible-products_feature_div",
-            "ad-display-center-1_feature_div",
-            "seo-related-keywords-pages_feature_div",
-            "issuancePriceblockAmabot_feature_div",
-            "b2bUpsell_feature_div",
-            "merchByAmazonBranding_feature_div",
-            "alternativeOfferEligibilityMessaging_feature_div",
-            "followTheAuthor_feature_div",
-            "moreAboutTheAuthorCard_feature_div",
-            "showing-breadcrumbs_div",
-            "gridgetWrapper",
-            "gringottsPersistentWidget_feature_div",
-            "va-related-videos-widget_feature_div",
-            "nav-top",
-            "skiplink",
-            "wayfinding-breadcrumbs_container",
-            "tp-inline-twister-dim-values-container",
-            "poToggleButton",
-        ]:
-            elemets_to_hide += brws.find_elements(By.ID, element_id)
-
-        for css_selector in [
-            "div.a-carousel-container",
-            "div.a-carousel-header-row",
-            "div.a-carousel-row",
-            "div.ad",
-            "div.adchoices-container",
-            "div.copilot-secure-display",
-            "div.outOfStock",
-            # share-button, gives weird artefacts on PDF
-            "div.ssf-background",
-            # share-button, gives weird artefacts on PDF (co.jp)
-            "div.ssf-background-float",
-            "div.widgetContentContainer",
-            "div.vse-vwdp-video-block-wrapper",
-            "div#variation_style_name ul",
-        ]:
-            elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
-
-        for element in [
-            (By.TAG_NAME, "hr"),
-            (By.TAG_NAME, "iframe"),
-        ]:
-            elemets_to_hide += brws.find_elements(element[0], element[1])
-        try:
-            center_col = brws.find_element(
-                By.CSS_SELECTOR, "div.centerColAlign"
-            )
-        except NoSuchElementException:
-            # co.jp?
-            center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
-        brws.execute_script(
-            """
-                // remove spam/ad elements
-                for (let i = 0; i < arguments[0].length; i++) {
-                    arguments[0][i].remove()
-                }
-                // Give product text more room
-                arguments[1].style.marginRight=0
-                // Turn om Amazon's special font
-                arguments[2].classList.remove("a-ember");
-                arguments[3].scrollIntoView()
-                """,
-            elemets_to_hide,
-            center_col,
-            brws.find_element(By.TAG_NAME, "html"),
-            brws.find_element(By.ID, "leftCol"),
-        )
-        time.sleep(2)
-
-    def browser_scrape_individual_order_list_page(
-        self, year, start_index, order_list_html
-    ):
-        """
-        Returns False when there are no more pages
-        """
-        self.log.debug(
-            "Scraping order list for %s, index %s", year, start_index
-        )
-        if year != "archived":
-            curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
-                year=year, start_index=start_index
-            )
-        else:
-            curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
-                year=year, start_index=start_index
-            )
-
-        self.log.debug("Visiting %s", curr_url)
-        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
-        wait2 = WebDriverWait(brws, 2)
-
-        empty_order_list = True
-
-        try:
-            wait2.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, self.ORDER_CARD_XPATH)
-                )
-            )
-            # If we found any order items
-            # the order list is not empty
-            empty_order_list = False
-        except TimeoutException:
-            pass
-
-        if empty_order_list:
-            # Empty order list, shotcut and save
-            self.log.info("No orders on %s", year)
-            order_list_html[(year, start_index)] = (
-                self.save_order_list_cache_html_file(year, start_index)
-            )
-            return False
-
-        # Non-empty order page
-        self.log.debug("Page %s has orders", curr_url)
-        try:
-            num_orders = brws.find_element(
-                By.XPATH, "//span[contains(@class, 'num-orders')]"
-            )
-            num_orders: int = int(re.match(r"^(\d+)", num_orders.text).group(1))
-        except NoSuchElementException:
-            num_orders = 0
-
-        self.log.debug(
-            "Total of %s orders, probably %s page(s)",
-            num_orders,
-            math.ceil(num_orders / 10),
-        )
-
-        found_next_button = False
-        next_button_works = False
-        try:
-            next_button = brws.find_element(
-                By.XPATH, "//li[contains(@class, 'a-last')]"
-            )
-            found_next_button = True
-            next_button.find_element(By.XPATH, ".//a")
-            next_button_works = True
-        except NoSuchElementException:
-            pass
-        order_list_html[(year, start_index)] = (
-            self.save_order_list_cache_html_file(year, start_index)
-        )
-        if num_orders <= 10:
-            self.log.debug("This order list (%s) has only one page", year)
-            if found_next_button:
-                self.log.critical(
-                    'But we found a "Next" button. '
-                    "Don't know how to handle this..."
-                )
-                raise CommandError("See critical error above")
-            return False
-
-        return found_next_button and next_button_works
 
     def lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
         order_lists = {}
@@ -1112,6 +717,408 @@ class AmazonScraper(BaseScraper):
                     " interaction."
                 )
         self.log.info("Login to Amazon was successful.")
+
+    def browser_scrape_order(
+        self, order_id: str, order_cache_dir: Path
+    ) -> Dict:
+        order = {}
+        curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
+        self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
+        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
+        wait2 = WebDriverWait(brws, 2)
+
+        order["attachements"] = []
+        order_handle = brws.current_window_handle
+        invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
+            self.save_order_attachements(order_cache_dir, order["attachements"])
+        )
+
+        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        time.sleep(2)
+
+        if "items" not in order:
+            order["items"] = {}
+
+        self.log.debug("Scraping item IDs and thumbnails")
+
+        for item in brws.find_elements(
+            By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div"
+        ):
+            item_id = None
+            for atag in item.find_elements(By.TAG_NAME, "a"):
+                product_link = re.match(
+                    # item id or "gc" => gift card
+                    r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
+                    atag.get_attribute("href"),
+                )
+                if product_link:
+                    item_id = product_link.group("id")
+            self.log.debug("Item id: %s", item_id)
+            assert item_id
+            if item_id not in order["items"]:
+                order["items"][item_id] = {}
+
+            # Don't save anything for gift cards
+            if item_id != "gc":
+                thumb = item.find_element(
+                    By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]"
+                )
+                high_res_thumb_url = thumb.get_attribute("data-a-hires")
+                # _AC_UY300_SX300_
+                # 1. Autocrop
+                # 2. Resize Y to 300px
+                # 3. Scale X so no larger than 300px
+                large_image_src = re.sub(
+                    r"(.+\._)[^\.]*(_\.+)",
+                    r"\1AC_UY300_SX300\2",
+                    high_res_thumb_url,
+                )
+                ext = os.path.splitext(urlparse(large_image_src).path)[1]
+                item_thumb_file = (
+                    order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
+                ).resolve()
+
+                urllib.request.urlretrieve(large_image_src, item_thumb_file)
+                order["items"][item_id]["thumbnail"] = str(
+                    Path(item_thumb_file).relative_to(self.cache["BASE"])
+                )  # keep this
+
+        self.log.debug("Saving item pages to PDF and HTML")
+        for item_id in order["items"]:
+            self.browser_scrape_item_page(
+                item_id, order["items"][item_id], order_id, order_cache_dir
+            )
+            brws.switch_to.window(order_handle)
+
+        time.sleep(10)
+        self.log.debug("Opening order page again")
+        brws.switch_to.window(order_handle)
+
+        # We "open" the Invoice popup before saving HTML
+        # so it is in the DOM
+        try:
+            brws.find_element(By.XPATH, order_summary_a_xpath)
+            # If we found this, there is not Invoice link
+        except NoSuchElementException:
+            # We should expect to find a invoice link or wrapper
+            try:
+                brws.find_element(By.XPATH, invoice_wrapper_div_xpath)
+            except NoSuchElementException:
+                # Invoice wrapper is not open, need to open it
+                try:
+                    wait2.until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, invoice_a_xpath)
+                        ),
+                        "Timeout waiting for Invoice button",
+                    ).click()
+                    wait2.until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, invoice_wrapper_div_xpath)
+                        ),
+                        "Timeout waiting for Invoice popup",
+                    )
+                except TimeoutException:
+                    # pylint: disable=raise-missing-from
+                    raise CommandError(
+                        "Invoice popup did not open as expected, or did not"
+                        " find invoice link. We need this open to save it to"
+                        " HTML cache."
+                    )
+        self.write(
+            self.part_to_filename(
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
+            ),
+            brws.page_source,
+            html=True,
+        )
+        self.log.debug("Saved order page HTML to file")
+        return order
+
+    def browser_scrape_item_page(
+        self,
+        item_id: str,
+        item_dict: Dict,
+        order_id: str,
+        order_cache_dir: Path,
+    ):
+        # TODO: Finish process_item_page
+        brws = self.browser
+        self.log.debug("New tab for item %s", item_id)
+        brws.switch_to.new_window()
+        brws.get(self.ITEM_URL_TEMPLATE.format(item_id=item_id))
+        item_dict["removed"] = False
+
+        if "Page Not Found" not in self.browser.title:
+            self.log.debug("Slowly scrolling to bottom of item page")
+            brws.execute_script(
+                """
+                var hlo_wh = window.innerHeight/2;
+                var hlo_count = 0;
+                var intervalID = setInterval(function() {
+                    window.scrollTo(0,hlo_wh*hlo_count)
+                    hlo_count = hlo_count + 1;
+                    console.log(hlo_count)
+                    if (hlo_count > 40) {
+                        clearInterval(intervalID);
+                    }
+                }, 250);
+                """,
+            )
+
+            # Javascript above happens async
+            time.sleep(11)
+            try:
+                brws.find_element(
+                    By.XPATH,
+                    (
+                        "//div[@id = 'productOverview_feature_div']"
+                        "//span[contains(@class, 'a-expander-prompt')]"
+                        "[contains(text(), 'See more')]"
+                    ),
+                ).click()
+            except NoSuchElementException:
+                pass
+            try:
+                brws.find_element(
+                    By.XPATH,
+                    (
+                        "//div[@id = 'bookDescription_feature_div']"
+                        "//span[contains(@class, 'a-expander-prompt')]"
+                        "[contains(text(), 'Read more')]"
+                    ),
+                ).click()
+            except NoSuchElementException:
+                pass
+            self.browser_cleanup_item_page()
+            item_html_filename = self.part_to_filename(
+                PagePart.ORDER_ITEM,
+                order_id=order_id,
+                item_id=item_id,
+                ext="html",
+            )
+
+            self.log.debug(
+                "Saving item %s HTML to %s", item_id, item_html_filename
+            )
+
+            self.write(item_html_filename, self.browser.page_source, html=True)
+            self.append_thumnails_to_item_html()
+        else:
+            self.log.debug("Item page for %s has been removed", item_id)
+            item_dict["removed"] = True
+
+        self.log.debug("Printing page to PDF")
+        brws.execute_script("window.print();")
+
+        self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+        item_pdf_file = (
+            order_cache_dir / Path(f"item-{item_id}.pdf")
+        ).resolve()
+        item_dict["pdf"] = str(
+            Path(item_pdf_file).relative_to(self.cache["BASE"])
+        )
+        self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
+        self.log.debug("PDF moved to cache")
+
+        brws.close()
+        self.log.debug("Closed page for item %s", item_id)
+
+    def browser_cleanup_item_page(self) -> None:
+        brws = self.browser
+        self.log.debug("Hide fluff, ads, etc")
+        elemets_to_hide: List[WebElement] = []
+
+        for element_xpath in [
+            (
+                "//table[@id='productDetails_warranty_support_sections']"
+                "/parent::div/parent::div"
+            ),
+            (
+                "//table[@id='productDetails_feedback_sections']"
+                "/parent::div/parent::div"
+            ),
+        ]:
+            elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
+
+        for element_id in [
+            "aplusBrandStory_feature_div",
+            "ask-btf_feature_div",
+            "customer-reviews_feature_div",
+            "discovery-and-inspiration_feature_div",
+            "dp-ads-center-promo_feature_div",
+            "HLCXComparisonWidget_feature_div",
+            "navFooter",
+            "navbar",
+            "orderInformationGroup",
+            "productAlert_feature_div",
+            "promotions_feature_div",
+            "rhf-container",
+            "rhf-frame",
+            "rightCol",
+            "sellYoursHere_feature_div",
+            "similarities_feature_div",
+            "value-pick-ac",
+            "valuePick_feature_div",
+            "sponsoredProducts2_feature_div",
+            "sims-themis-sponsored-products-2_feature_div",
+            "climatePledgeFriendlyBTF_feature_div",
+            "aplusSustainabilityStory_feature_div",
+            "accessories-and-compatible-products_feature_div",
+            "ad-display-center-1_feature_div",
+            "seo-related-keywords-pages_feature_div",
+            "issuancePriceblockAmabot_feature_div",
+            "b2bUpsell_feature_div",
+            "merchByAmazonBranding_feature_div",
+            "alternativeOfferEligibilityMessaging_feature_div",
+            "followTheAuthor_feature_div",
+            "moreAboutTheAuthorCard_feature_div",
+            "showing-breadcrumbs_div",
+            "gridgetWrapper",
+            "gringottsPersistentWidget_feature_div",
+            "va-related-videos-widget_feature_div",
+            "nav-top",
+            "skiplink",
+            "wayfinding-breadcrumbs_container",
+            "tp-inline-twister-dim-values-container",
+            "poToggleButton",
+        ]:
+            elemets_to_hide += brws.find_elements(By.ID, element_id)
+
+        for css_selector in [
+            "div.a-carousel-container",
+            "div.a-carousel-header-row",
+            "div.a-carousel-row",
+            "div.ad",
+            "div.adchoices-container",
+            "div.copilot-secure-display",
+            "div.outOfStock",
+            # share-button, gives weird artefacts on PDF
+            "div.ssf-background",
+            # share-button, gives weird artefacts on PDF (co.jp)
+            "div.ssf-background-float",
+            "div.widgetContentContainer",
+            "div.vse-vwdp-video-block-wrapper",
+            "div#variation_style_name ul",
+        ]:
+            elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
+
+        for element in [
+            (By.TAG_NAME, "hr"),
+            (By.TAG_NAME, "iframe"),
+        ]:
+            elemets_to_hide += brws.find_elements(element[0], element[1])
+        try:
+            center_col = brws.find_element(
+                By.CSS_SELECTOR, "div.centerColAlign"
+            )
+        except NoSuchElementException:
+            # co.jp?
+            center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
+        brws.execute_script(
+            """
+                // remove spam/ad elements
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].remove()
+                }
+                // Give product text more room
+                arguments[1].style.marginRight=0
+                // Turn om Amazon's special font
+                arguments[2].classList.remove("a-ember");
+                arguments[3].scrollIntoView()
+                """,
+            elemets_to_hide,
+            center_col,
+            brws.find_element(By.TAG_NAME, "html"),
+            brws.find_element(By.ID, "leftCol"),
+        )
+        time.sleep(2)
+
+    def browser_scrape_individual_order_list_page(
+        self, year, start_index, order_list_html
+    ):
+        """
+        Returns False when there are no more pages
+        """
+        self.log.debug(
+            "Scraping order list for %s, index %s", year, start_index
+        )
+        if year != "archived":
+            curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
+                year=year, start_index=start_index
+            )
+        else:
+            curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
+                year=year, start_index=start_index
+            )
+
+        self.log.debug("Visiting %s", curr_url)
+        brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
+        wait2 = WebDriverWait(brws, 2)
+
+        empty_order_list = True
+
+        try:
+            wait2.until(
+                EC.presence_of_element_located(
+                    (By.XPATH, self.ORDER_CARD_XPATH)
+                )
+            )
+            # If we found any order items
+            # the order list is not empty
+            empty_order_list = False
+        except TimeoutException:
+            pass
+
+        if empty_order_list:
+            # Empty order list, shotcut and save
+            self.log.info("No orders on %s", year)
+            order_list_html[(year, start_index)] = (
+                self.save_order_list_cache_html_file(year, start_index)
+            )
+            return False
+
+        # Non-empty order page
+        self.log.debug("Page %s has orders", curr_url)
+        try:
+            num_orders = brws.find_element(
+                By.XPATH, "//span[contains(@class, 'num-orders')]"
+            )
+            num_orders: int = int(re.match(r"^(\d+)", num_orders.text).group(1))
+        except NoSuchElementException:
+            num_orders = 0
+
+        self.log.debug(
+            "Total of %s orders, probably %s page(s)",
+            num_orders,
+            math.ceil(num_orders / 10),
+        )
+
+        found_next_button = False
+        next_button_works = False
+        try:
+            next_button = brws.find_element(
+                By.XPATH, "//li[contains(@class, 'a-last')]"
+            )
+            found_next_button = True
+            next_button.find_element(By.XPATH, ".//a")
+            next_button_works = True
+        except NoSuchElementException:
+            pass
+        order_list_html[(year, start_index)] = (
+            self.save_order_list_cache_html_file(year, start_index)
+        )
+        if num_orders <= 10:
+            self.log.debug("This order list (%s) has only one page", year)
+            if found_next_button:
+                self.log.critical(
+                    'But we found a "Next" button. '
+                    "Don't know how to handle this..."
+                )
+                raise CommandError("See critical error above")
+            return False
+
+        return found_next_button and next_button_works
 
     # Init / Utility Functions
 

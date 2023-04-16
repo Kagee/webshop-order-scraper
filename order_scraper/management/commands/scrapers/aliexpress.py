@@ -89,9 +89,6 @@ class AliExpressScraper(BaseScraper):
             writer.writeheader()
             for order in orders_with_nok:
                 writer.writerow(order)
-                for k in fieldnames:
-                    order.pop(k, None)
-                self.pprint(order)
 
     def setup_templates(self):
         # pylint: disable=invalid-name
