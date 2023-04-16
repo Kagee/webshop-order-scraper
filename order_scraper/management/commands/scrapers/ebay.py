@@ -75,33 +75,6 @@ class EbayScraper(BaseScraper):
                     " press enter."
                 )
                 input()
-            # app = Application(backend="uia")
-            # dlg_spec = app.window(title=title)
-            # app.connect(process=brws.service.process.pid)
-            # app = Application(backend="uia").connect(
-            #    title_re=title, class_name="FireFox"
-            # )
-            # app = Application(backend="uia").connect(
-            #    title=title, found_index=0, timeout=5
-            # )
-            # dlg_spec = app.window(title=title, found_index=0)
-            # self.browser_visit_page(
-            #    # self.ORDER_LIST_URL,
-            #    "https://hild1.no",
-            #    goto_url_after_login=False,
-            #    do_login=False,
-            #    default_login_detect=False,
-            # )
-            # dlg = app.top_window()
-            # dlg_spec.print_control_identifiers()
-            # actionable_dlg = dlg_spec.wait("visible")
-            # app.draw_outline()
-            # app = Application(backend="uia").start("notepad.exe")
-            # body = brws.find_element(By.TAG_NAME, "body")
-            # ActionChains(brws).key_down(Keys.CONTROL, body).key_down(
-            #    Keys.SHIFT, body
-            # ).send_keys("M").key_up(Keys.CONTROL).key_up(Keys.SHIFT).perform()
-            # self.log.debug("Sendt keys")
 
             # time.sleep(2)
             # self.browser_safe_quit()

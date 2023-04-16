@@ -12,13 +12,11 @@ def remove(path):
         return False
 
 
-sys.exit()
+nuke = input("This will nuke and reinitialize you database. Continue? (y/N):")
+if nuke.lower() != "y":
+    print("Non-positive answer, bailig....!")
+    sys.exit()
 
-print(
-    "This will nuke and reinitialize you database. Press enter to continue,"
-    " Ctrl-Z to cancel."
-)
-input()
 here = Path(os.getcwd())
 if here.name != "homelab-organizer":
     print("I should be run from homelab-organizer")
@@ -41,3 +39,33 @@ print("Initializing shops")
 subprocess.run(
     [sys.executable, "manage.py", "scrape", "--init-shops"], check=False
 )
+
+nuke = input("Load AliExpress to DB? (y/N):")
+if nuke.lower() == "y":
+    subprocess.run(
+        [
+            sys.executable,
+            "manage.py",
+            "scrape",
+            "aliexpress",
+            "--load-to-db",
+            "--db-shop-id",
+            "3",
+        ],
+        check=False,
+    )
+
+nuke = input("Load Adafruit to DB? (y/N):")
+if nuke.lower() != "y":
+    subprocess.run(
+        [
+            sys.executable,
+            "manage.py",
+            "scrape",
+            "adafruit",
+            "--load-to-db",
+            "--db-shop-id",
+            "1",
+        ],
+        check=False,
+    )
