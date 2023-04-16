@@ -897,7 +897,11 @@ class AliExpressScraper(BaseScraper):
                 )
                 debug_found_snapshot = True
             else:
-                self.log.debug("Found random page, closing: %s", handle)
+                self.log.debug(
+                    "Found random page, closing: %s with url %s",
+                    handle,
+                    self.browser.current_url,
+                )
             self.browser.close()
         if not debug_found_snapshot:
             self.log.debug(
