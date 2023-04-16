@@ -4,8 +4,9 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        // Aliexpress scrape
         {
-            "name": "Aliexpress",
+            "name": "Aliexpress scrape",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}${pathSeparator}manage.py",
@@ -20,6 +21,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Aliexpress (to db)
         {
             "name": "Aliexpress (to db)",
             "type": "python",
@@ -37,6 +39,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Amazon.de 2011+
         {
             "name": "Amazon.de 2011+",
             "type": "python",
@@ -54,6 +57,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Amazon.co.uk 2011+
         {
             "name": "Amazon.co.uk 2011+",
             "type": "python",
@@ -73,6 +77,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Amazon.com 2018
         {
             "name": "Amazon.com 2018",
             "type": "python",
@@ -92,6 +97,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Amazon.co.jp 2022+
         {
             "name": "Amazon.co.jp 2022+",
             "type": "python",
@@ -111,6 +117,7 @@
             "django": true,
             "justMyCode": true
         },
+        // elfadistrelec
         {
             "name": "Scrape elfadistrelec.no",
             "type": "python",
@@ -129,6 +136,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Adafruit scrape
         {
             "name": "Adafruit",
             "type": "python",
@@ -143,6 +151,7 @@
             "django": true,
             "justMyCode": true
         },
+        // Adafruit to db
         {
             "name": "Adafruit (to db)",
             "type": "python",
@@ -160,6 +169,21 @@
             "django": true,
             "justMyCode": true
         },
+        // eBay scrape
+        {
+            "name": "eBay",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "ebay",
+                "--use-cached-orderlist",
+            ],
+            "django": true,
+            "justMyCode": true
+        },
+        // run webserver
         {
             "name": "run server",
             "type": "python",
@@ -171,6 +195,7 @@
             "django": true,
             "justMyCode": true
         },
+        // init shops
         {
             "name": "Init shops",
             "type": "python",
@@ -185,6 +210,7 @@
             "django": true,
             "justMyCode": true
         },
+        // help
         {
             "name": "Help",
             "type": "python",
@@ -197,6 +223,7 @@
             "django": true,
             "justMyCode": true
         },
+        // tryout
         {
             "name": "TryOut",
             "type": "python",

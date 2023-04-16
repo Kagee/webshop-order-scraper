@@ -6,11 +6,15 @@ from datetime import datetime
 from getpass import getpass
 from pathlib import Path
 from typing import Dict, List
-
+import random
+import string
+import sys
 from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
@@ -28,13 +32,79 @@ class EbayScraper(BaseScraper):
         if False:
             pass
         else:
-            self.browser_visit_page(
-                self.ORDER_LIST_URL,
-                goto_url_after_login=False,
-                do_login=False,
-                default_login_detect=False,
-            )
+            brws = self.browser_get_instance(emulate_mobile_browser=True)
 
+            # self.browser_visit_page(
+            #    # self.ORDER_LIST_URL,
+            #    "https://example.com/",
+            #    goto_url_after_login=False,
+            #    do_login=False,
+            #    default_login_detect=False,
+            # )
+            title = "".join(
+                random.choice(string.ascii_lowercase) for i in range(25)
+            )
+            time.sleep(2)
+            brws.execute_script(f'document.title = "{title}"')
+            self.log.debug("Trying stuff")
+            # print(brws.service.process)
+            # print(brws.service.process.pid)
+            # print(brws.service.process.args)
+            # print(dir(brws.service.process))
+
+            if sys.platform.startswith("win32"):
+                import uiautomation as auto
+
+                window = auto.WindowControl(
+                    searchDepth=1, RegexName=rf".*{title}.*"
+                )
+                window.SendKeys("{Ctrl}{Shift}{M}", 0.2, 0)
+            elif sys.platform.startswith("linux"):
+                pass
+            elif sys.platform.startswith("darwin"):
+                import atomac
+
+                self.log.debug("Random title is %s", title)
+                automator = atomac.getAppRefByBundleId("org.mozilla.firefox")
+                for window in automator.windows():
+                    self.log.debug(window.AXTitle)
+            else:
+                self.log.info(
+                    "Could not automate Responsive Design Mode activation,"
+                    " please activate Responsive Design Mode in Firefox and"
+                    " press enter."
+                )
+                input()
+            # app = Application(backend="uia")
+            # dlg_spec = app.window(title=title)
+            # app.connect(process=brws.service.process.pid)
+            # app = Application(backend="uia").connect(
+            #    title_re=title, class_name="FireFox"
+            # )
+            # app = Application(backend="uia").connect(
+            #    title=title, found_index=0, timeout=5
+            # )
+            # dlg_spec = app.window(title=title, found_index=0)
+            # self.browser_visit_page(
+            #    # self.ORDER_LIST_URL,
+            #    "https://hild1.no",
+            #    goto_url_after_login=False,
+            #    do_login=False,
+            #    default_login_detect=False,
+            # )
+            # dlg = app.top_window()
+            # dlg_spec.print_control_identifiers()
+            # actionable_dlg = dlg_spec.wait("visible")
+            # app.draw_outline()
+            # app = Application(backend="uia").start("notepad.exe")
+            # body = brws.find_element(By.TAG_NAME, "body")
+            # ActionChains(brws).key_down(Keys.CONTROL, body).key_down(
+            #    Keys.SHIFT, body
+            # ).send_keys("M").key_up(Keys.CONTROL).key_up(Keys.SHIFT).perform()
+            # self.log.debug("Sendt keys")
+
+            # time.sleep(2)
+            # self.browser_safe_quit()
             # input id userid
             # button id signin-continue-btn
 
@@ -49,7 +119,7 @@ class EbayScraper(BaseScraper):
 
             # mobile a class m-pagination-simple-next [aria-disabled="true"]
 
-            # UA Mozilla/5.0 (Android 13; Mobile; rv:68.0) Gecko/68.0 Firefox/112.0
+            #
             # url stats with https://signin.ebay.com
             # https://www.ebay.com/mye/myebay -> login
             # https://www.ebay.com/mye/myebay/purchase?pg=purchase
