@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+import sqlite3
+import subprocess
 import sys
 from pathlib import Path
-import subprocess
-import sqlite3
+from sqlite3 import OperationalError
 
 
 def remove(path):
@@ -15,7 +16,7 @@ def remove(path):
         return False
 
 
-nuke = input("This will nuke and reinitialize you database. Continue? (y/N):")
+nuke = input("This will nuke and reinitialize you database. Superusers will be preserved. Continue? (y/N):")
 if nuke.lower() != "y":
     print("Non-positive answer, bailig....!")
     sys.exit()
@@ -32,26 +33,29 @@ sql_commands = []
 sql_commands.append("PRAGMA foreign_keys=OFF;")
 sql_commands.append("BEGIN TRANSACTION;")
 conn.row_factory = sqlite3.Row
-for line in conn.execute(
-    "SELECT sql FROM sqlite_master WHERE tbl_name = 'auth_user';"
-).fetchall():
-    if line["sql"]:
-        sql_commands.append(
-            line["sql"].replace(
-                'CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "'
+try:
+    for line in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE tbl_name = 'auth_user';"
+    ).fetchall():
+        if line["sql"]:
+            sql_commands.append(
+                line["sql"].replace(
+                    'CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "'
+                )
             )
+    for line in conn.execute(
+        "SELECT * FROM 'auth_user' WHERE is_superuser = 1;"
+    ).fetchall():
+        sql_commands.append(
+            "INSERT INTO auth_user"
+            f" VALUES({line['id']},'{line['password']}',NULL,"
+            f"{line['is_superuser']},'{line['username']}','',"
+            f"'{line['email']}',{line['is_staff']},"
+            f"{line['is_active']},'{line['date_joined']}','');"
         )
-        print(line["sql"])
-for line in conn.execute(
-    "SELECT * FROM 'auth_user' WHERE is_superuser = 1;"
-).fetchall():
-    sql_commands.append(
-        "INSERT INTO auth_user"
-        f" VALUES({line['id']},'{line['password']}',NULL,"
-        f"{line['is_superuser']},'{line['username']}','',"
-        f"'{line['email']}',{line['is_staff']},"
-        f"{line['is_active']},'{line['date_joined']}','');"
-    )
+except OperationalError:
+    pass
+
 sql_commands.append("COMMIT;")
 conn.close()
 
