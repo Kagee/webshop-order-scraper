@@ -112,7 +112,8 @@ class AdafruitScraper(BaseScraper):
                     self.log.debug("Created or updated order %s", order_object)
 
     def usage(self):
-        print(f"""
+        print(
+            f"""
     USAGE:
     ==================================================
     Login to https://www.adafruit.com/
@@ -122,7 +123,8 @@ class AdafruitScraper(BaseScraper):
         {self.cache['BASE']}
     Click "Export Orders CSV" and save "order_history.csv" to 
         {self.cache['BASE']}
-        """)
+        """
+        )
 
     def parse_order_csv(self):
         with open(self.ORDERS_CSV, newline="", encoding="utf-8") as csvfile:

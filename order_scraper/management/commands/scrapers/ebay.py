@@ -37,7 +37,33 @@ from .base import BaseScraper, PagePart
 
 class EbayScraper(BaseScraper):
     # Scrape comand and __init__
+
+    def website_mode(self, to=None):
+        to_mobile_link = self.find_element(By.CSS_SELECTOR, "a#mobileCTALink")
+        to_classic_link = self.find_element(
+            By.CSS_SELECTOR, "div.gh-mwebfooter__siteswitch a"
+        )
+        if to == "mobile" and to_mobile_link:
+            to_mobile_link.click()
+            return True
+        elif to == "classic" and to_classic_link:
+            to_classic_link.click()
+            return True
+        elif not to_mobile_link and to_classic_link:
+            self.log.debug("Failed to find a mode change link!!")
+            # raise CommandError("Failed to find a mode change link!!")
+        else:
+            return False
+
     def command_scrape(self):
+        browser_kwargs = {
+            "change_ua": (
+                "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U)"
+                " AppleWebKit/537.36 (KHTML, like Gecko)"
+                " SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile"
+                " Safari/537.36"
+            )
+        }
         if settings.SCRAPER_EBY_MANUAL_LOGIN:
             self.log.debug(
                 self.command.style.ERROR(
@@ -45,80 +71,106 @@ class EbayScraper(BaseScraper):
                 )
             )
             input()
-            brws = self.browser_get_instance()
+            brws = self.browser_get_instance(**browser_kwargs)
         else:
-            brws = self.browser_get_instance(emulate_mobile_browser=True)
+            brws = self.browser_get_instance(**browser_kwargs)
 
-            title = "".join(
-                random.choice(string.ascii_lowercase) for i in range(25)
+            self.log.debug("Visiting homepage %s", self.HOMEPAGE)
+            self.browser_visit_page_v2(self.HOMEPAGE)
+
+            self.log.debug(
+                "Switching to mobile: %s", self.website_mode("mobile")
             )
-            time.sleep(2)
-            brws.execute_script(f'document.title = "{title}"')
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
 
-            if sys.platform.startswith("win32"):
-                import uiautomation as auto
-
-                window = auto.WindowControl(
-                    searchDepth=1, RegexName=rf".*{title}.*"
-                )
-                window.SendKeys("{Ctrl}{Shift}{M}", 0.2, 0)
-            # elif sys.platform.startswith("linux"):
-            #    pass
-            elif sys.platform.startswith("darwin"):
-                self.log.info(
-                    "Could not automate Responsive Design Mode activation,"
-                    " please activate Responsive Design Mode in Firefox by"
-                    " pressing [Cmd]-[Opt]-[m] and press enter."
-                )
-                input()
-            else:
-                self.log.info(
-                    "Could not automate Responsive Design Mode activation,"
-                    " please activate Responsive Design Mode in Firefox by"
-                    " pressing [Ctrl]-[Shift]-[m] and press enter."
-                )
-                input()
-
-            self.log.debug("Visiting order page %s", self.ORDER_LIST_URL)
+            self.log.debug("Visiting homepage %s", self.ORDER_LIST_URL)
             self.browser_visit_page_v2(self.ORDER_LIST_URL)
 
-            self.rand_sleep(1, 3)
-            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-            time.sleep(10)
-            for item_container in self.find_elements(
-                By.CSS_SELECTOR, "div.m-mweb-item-container"
-            ):
-                print(
-                    self.find_element(
-                        By.CSS_SELECTOR, "a.m-mweb-item-link", item_container
-                    ).get_attribute("href")
+            time.sleep(3)
+            while True:
+                self.browser_scrape_individual_order_list()
+                next = self.find_element(
+                    By.CSS_SELECTOR, "a.m-pagination-simple-next"
                 )
-                pass
-
-        # mobile a class m-pagination-simple-next [aria-disabled="true"]
+                if next.get_attribute("aria-disabled") == "true":
+                    self.log.debug("No more orders")
+                    break
+                next.click()
+                self.rand_sleep(2, 4)
 
         #
-        # div.m-mweb-item-container
-        #    a.m-mweb-item-link
-        #    div.m-image -> img -> thumbnail
+        ##
         #
-        #     div.item-details
-        #         div.item-banner-text -> status refunded/shippet etc
-        #         h2.item-title
-        #         div.item-variation (optional, SKU)
-        #         div.item-info
-        #             span.info-displayprice -> span BOLD, clipped (forskjell???)
-        ##             span.info-logisticscost -> span or span.clipped (more info?)
-        #             span.info-orderdate
 
-        # span class filter -> span text "Last 60 Days" -> click
-        # data-url: data-url="/module_provider?filter=year_filter:LAST_YEAR&page=1&modules=ALL_TRANSACTIONS&moduleId=122164" ?
-        # https://www.ebay.com/mye/myebay/v2/purchase?filter=year_filter%3ALAST_YEAR&page=1&moduleId=122164&pg=purchase&mp=purchase-module-v2&type=v2
-        # https://www.ebay.com/mye/myebay/v2/purchase?filter=year_filter%3ATWO_YEARS_AGO&page=1&moduleId=122164&pg=purchase&mp=purchase-module-v2&type=v2
+        #
 
-        # <span class="m-container-message__content">No orders were found</span>
+        #
+
         assert brws
-        # self.browser_safe_quit()
+
+    def browser_scrape_individual_order_list(self):
+        for item_container in self.find_elements(
+            By.CSS_SELECTOR, "div.m-mweb-item-container"
+        ):
+            order_href = self.find_element(
+                By.CSS_SELECTOR, "a.m-mweb-item-link", item_container
+            ).get_attribute("href")
+            re_matches = re.match(
+                r".*\?orderId=(?P<order_id>[0-9-]*).*", order_href
+            )
+            order_id = re_matches.group("order_id")
+            print("Order ID", order_id)
+            # thumb_img = self.find_element(
+            #     By.CSS_SELECTOR, "div.m-image img", item_container
+            # )
+            # print("Item thumb", thumb_img.get_attribute("src"))
+            # item_details = self.find_element(
+            #     By.CSS_SELECTOR, "div.item-details", item_container
+            # )
+            # status = self.find_element(
+            #     By.CSS_SELECTOR, "div.item-banner-text", item_details
+            # ).text
+            # print("Status", status)
+            # name = self.find_element(
+            #     By.CSS_SELECTOR, "h2.item-title", item_details
+            # ).text
+            # print("Name", name)
+            # item_sku = ""
+            # item_sku_div = self.find_element(
+            #     By.CSS_SELECTOR, "div.item-variation", item_details
+            # )
+            # if item_sku_div:
+            #     item_sku = item_sku_div.text
+            # print("Item sku", item_sku)
+            # div_item_info = self.find_element(
+            #     By.CSS_SELECTOR, "div.item-div.item-info", item_container
+            # )
+            # price1 = self.find_element(
+            #     By.CSS_SELECTOR,
+            #     "span.info-displayprice span.BOLD",
+            #     div_item_info,
+            # ).text
+            # print("Price 1", price1)
+            # price2 = self.find_element(
+            #     By.CSS_SELECTOR,
+            #     "span.info-displayprice span.clipped",
+            #     div_item_info,
+            # ).text
+            # print("Price 2", price2)
+            # if price1 != price2:
+            #     self.log.debug(
+            #         self.command.style.SUCCESS(
+            #             "PRICES DIFFER! TELL KAGEE!: '%s' '%s'"
+            #         ),
+            #         price1,
+            #         price2,
+            #     )
+            # date = self.find_element(
+            #     By.CSS_SELECTOR,
+            #     "span.info-orderdate",
+            #     div_item_info,
+            # ).text
+            # print("Date", date)
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
@@ -153,7 +205,7 @@ class EbayScraper(BaseScraper):
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.browser_login(expected_url)
 
-    def browser_login(self, expected_url):
+    def browser_login(self, _):
         """
         Uses Selenium to log in eBay.
         Returns when the browser is at url, after login.
@@ -202,6 +254,7 @@ class EbayScraper(BaseScraper):
                     ),
                     "Could not find input#userid",
                 )
+                username.click()
                 username.send_keys(src_username)
                 self.rand_sleep(0, 2)
                 self.log.debug("Looking for %s", "button#signin-continue-btn")
@@ -221,6 +274,8 @@ class EbayScraper(BaseScraper):
                     ),
                     "Could not find input#pass",
                 )
+                self.rand_sleep(2, 2)
+                password.click()
                 password.send_keys(src_password)
                 self.rand_sleep(0, 2)
 
@@ -245,25 +300,16 @@ class EbayScraper(BaseScraper):
                 " complete login, and then press enter. Press Ctrl-Z to cancel."
             )
             input()
-
-        if not re.match(expected_url, self.browser.current_url):
-            self.log.debug(
-                (
-                    "Expected url was %s, but we are at %s. Press enter if you"
-                    " think we can continue. Press Ctrl-Z to cancel."
-                ),
-                expected_url,
-                self.browser.current_url,
-            )
-            input()
         self.log.info("Login to eBay was successful.")
 
     # Utility functions
     def setup_templates(self):
         # pylint: disable=invalid-name
         login_url = re.escape("https://signin.ebay.com")
+        self.HOMEPAGE = "https://ebay.com"
         self.LOGIN_PAGE_RE = rf"{login_url}.*"
         self.ORDER_LIST_URL = "https://www.ebay.com/mye/myebay/purchase"
+        self.ORDER_LIST_URLv2 = "https://www.ebay.com/mye/myebay/v2/purchase"
         self.ORDERS_CSV = self.cache["BASE"] / "order_history.csv"
         self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"
         self.ITEM_URL_TEMPLATE = "https://www.adafruit.com/product/{item_id}"

@@ -58,7 +58,7 @@ class AmazonScraper(BaseScraper):
 
     def command_db_to_csv(self):
         pass
-    
+
     def command_load_to_db(self):
         pass
 

@@ -123,7 +123,7 @@ class BaseScraper(object):
         except NoSuchElementException:
             return []
 
-    def browser_get_instance(self, emulate_mobile_browser=False):
+    def browser_get_instance(self, change_ua=None):
         """
         Initializing and configures a browser (Firefox)
         using Selenium.
@@ -187,32 +187,12 @@ class BaseScraper(object):
             options.set_preference(
                 f"print.printer_{ printer_name }.show_print_progress", True
             )
-            if emulate_mobile_browser:
-                options.set_preference(
-                    "devtools.responsive.userAgent",
-                    (
-                        "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U)"
-                        " AppleWebKit/537.36 (KHTML, like Gecko)"
-                        " SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile"
-                        " Safari/537.36"
-                    ),
-                )
-                options.set_preference(
-                    "devtools.responsive.viewport.height", 760
-                )
-                options.set_preference(
-                    "devtools.responsive.viewport.pixelRatio", 4
-                )
-                options.set_preference(
-                    "devtools.responsive.viewport.width", 360
-                )
+            if change_ua:
                 options.set_preference(
                     "general.useragent.override",
-                    (
-                        "UA Mozilla/5.0 (Android 13; Mobile; rv:68.0)"
-                        " Gecko/68.0 Firefox/112.0"
-                    ),
+                    change_ua,
                 )
+        
             self.browser = webdriver.Firefox(options=options, service=service)
 
             self.browser_status = "created"
