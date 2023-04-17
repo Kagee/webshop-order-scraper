@@ -195,6 +195,21 @@
             "django": true,
             "justMyCode": true
         },
+        // Scrape IMAP
+        {
+            "name": "Scrape IMAP",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}${pathSeparator}manage.py",
+            "args": [
+                "scrape",
+                "--scrape-imap",
+                "-v",
+                "3"
+            ],
+            "django": true,
+            "justMyCode": true
+        },
         // init shops
         {
             "name": "Init shops",
