@@ -17,7 +17,7 @@ from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
 from .scrapers.ebay import EbayScraper
 from .scrapers.tryout import TryOutScraper
-from .scrapers.mail import MailScraper
+from .scrapers.imap import IMAPScraper
 
 class Command(BaseCommand):
     help = "Scrapes a webshop for orders using Selenium"
@@ -200,7 +200,7 @@ class Command(BaseCommand):
             TryOutScraper(self, options).command_scrape()
         else:
             if options["scrape_imap"]:
-                MailScraper().command_scrape()
+                IMAPScraper().command_scrape()
             elif options["init_shops"]:
                 self.setup_logger(options)
                 self.log.debug("Initializing database with shops")

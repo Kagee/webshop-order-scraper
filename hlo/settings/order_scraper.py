@@ -62,10 +62,10 @@ SCRAPER_EBY_MANUAL_LOGIN = env.bool("SCRAPER_EBY_MANUAL_LOGIN", False)
 SCRAPER_EBY_USERNAME: str = env("SCRAPER_EBY_USERNAME", default=None)
 SCRAPER_EBY_PASSWORD: str = env("SCRAPER_EBY_PASSWORD", default=None)
 
-SCRAPER_MAIL_SERVER: str = env("SCRAPER_MAIL_SERVER", default="imap.gmail.com")
-SCRAPER_MAIL_PORT: int = env.int("SCRAPER_MAIL_PORT", default=993)
-SCRAPER_MAIL_USERNAME: str = env("SCRAPER_MAIL_USERNAME", default=None)
-SCRAPER_MAIL_PASSWORD: str = env("SCRAPER_MAIL_PASSWORD", default=None)
-# We use this flag to find the localized Gmail "All Mail" folder
-SCRAPER_MAIL_FLAG: str = env("SCRAPER_SCRAPER_MAIL_FLAG", default=r"\All")
-SCRAPER_MAIL_FOLDER: str = env("SCRAPER_MAIL_FOLDER", default=None)
+SCRAPER_IMAP_SERVER: str = env("SCRAPER_IMAP_SERVER", default="imap.gmail.com")
+SCRAPER_IMAP_PORT: int = env.int("SCRAPER_IMAP_PORT", default=993)
+SCRAPER_IMAP_USERNAME: str = env("SCRAPER_IMAP_USERNAME", default=None)
+SCRAPER_IMAP_PASSWORD: str = env("SCRAPER_IMAP_PASSWORD", default=None)
+# We use this flag to find the localized Gmail "All Main" folder
+SCRAPER_IMAP_FLAG: str = env("SCRAPER_IMAP_FLAG", default=None)
+SCRAPER_IMAP_FOLDER: str = env("SCRAPER_IMAP_FOLDER", default=None)
