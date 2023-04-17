@@ -17,7 +17,7 @@ from .scrapers.amazon import AmazonScraper
 from .scrapers.distrelec import DistrelecScraper
 from .scrapers.ebay import EbayScraper
 from .scrapers.tryout import TryOutScraper
-
+from .scrapers.mail import MailScraper
 
 class Command(BaseCommand):
     help = "Scrapes a webshop for orders using Selenium"
@@ -112,6 +112,13 @@ class Command(BaseCommand):
             ),
         )
         scraper.add_argument(
+            "--scrape-imap",
+            action="store_true",
+            help=(
+                "Will scrape a IMAP account for eBay order numbers."
+            ),
+        )
+        scraper.add_argument(
             "--load-to-db",
             action="store_true",
             help="Load all currently parsed data to DB.",
@@ -192,7 +199,9 @@ class Command(BaseCommand):
         elif options["webshop"] == "tryout":
             TryOutScraper(self, options).command_scrape()
         else:
-            if options["init_shops"]:
+            if options["scrape_imap"]:
+                MailScraper().command_scrape()
+            elif options["init_shops"]:
                 self.setup_logger(options)
                 self.log.debug("Initializing database with shops")
                 for shop in [

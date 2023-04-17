@@ -10,3 +10,4 @@ django-money>=3.0.0
 price-parser>=0.3.4
 uiautomation>=1.1.14; sys_platform == "win32"
 atomacos; sys_platform == "darwin"
+imapclient>=2.3
