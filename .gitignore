@@ -16,3 +16,4 @@ hlo/settings/logging.py
 storage/
 */migrations/*
 logos/
+scraper-cache
