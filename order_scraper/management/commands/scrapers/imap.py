@@ -1,15 +1,14 @@
-import logging
-import os
 import email.header
-import sys
+import logging
+import re
+from email.policy import default as default_policy
 from getpass import getpass
 
-from click import Command
+from bs4 import BeautifulSoup
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
 from imapclient import IMAPClient
 from imapclient.exceptions import *
-from email.policy import default as default_policy
 
 
 class IMAPScraper(object):
@@ -36,22 +35,20 @@ class IMAPScraper(object):
             settings.SCRAPER_IMAP_SERVER,
             settings.SCRAPER_IMAP_PORT,
         )
-        self.client = IMAPClient(
+        imap_client = IMAPClient(
             host=settings.SCRAPER_IMAP_SERVER, port=settings.SCRAPER_IMAP_PORT
         )
         try:
-            self.client.login(
-                settings.SCRAPER_IMAP_USERNAME, settings.SCRAPER_IMAP_PASSWORD
-            )
-        except LoginError as le:
-            raise CommandError("Invalid credentials", le)
+            imap_client.login(imap_username, imap_password)
+        except LoginError as login_error:
+            raise CommandError("Invalid credentials", login_error)
         mailboxes = []
         if settings.SCRAPER_IMAP_FLAGS:
             self.log.debug(
                 "Using SCRAPER_IMAP_FLAG, ignoring SCRAPER_IMAP_FOLDER"
             )
 
-            for folder in self.client.list_folders():
+            for folder in imap_client.list_folders():
                 if any(
                     [
                         flag
@@ -74,86 +71,85 @@ class IMAPScraper(object):
             self.log.debug("Using SCRAPER_IMAP_FOLDER")
             mailboxes = settings.SCRAPER_IMAP_FOLDERS
         else:
-            self.log.error(
-                "HLO_SCRAPER_IMAP_FLAG or HLOSCRAPER_IMAP_FOLDER must be set."
-            )
-            raise CommandError()
+            self.log.debug("Looking in AAAAAALLLL mailboxes")
+            for folder in imap_client.list_folders():
+                mailboxes.append(folder[2])
+
         messages = []
         for folder in mailboxes:
             self.log.debug("Selecting folder %s", folder)
-            self.client.select_folder(folder)
-            messages = messages + self.client.search(["FROM", "ebay@ebay.com"])
+            imap_client.select_folder(folder)
+            messages = messages + imap_client.search(["FROM", "ebay@ebay.com"])
 
-        interesting_messages = []
-        ignore_subj = [
-            "A new device is using your account",
-            "Privacy Notice",
-            "sent a message",
-            "New sign in activity",
-        ]
+        def find_in_plaintext(uid, content):
+            transid = re.findall(
+                r"(?:cartid|transId|transid)(?:%3D|=)([0-9]+)[^0-9]",
+                content,
+                re.MULTILINE | re.DOTALL,
+            )
+            if transid:
+                return set(transid)
+            return None
 
-        for uid, message_data in self.client.fetch(messages, "RFC822").items():
+        def find_in_html(uid, content):
+            soup = BeautifulSoup(content, features="lxml")
+            rovers = re.findall(
+                r".*rover\.ebay\.com.*",
+                soup.prettify(),
+                re.IGNORECASE,
+            )
+            res = set()
+            for rover in rovers:
+                if "payments.ebay.com" in rover and (
+                    "transid" in rover or "chartid" in rover
+                ):
+                    res.add("MAIL SCRAPE")
+                else:
+                    if "transid" in rover:
+                        # just get transid + itemid
+                        res.add("WEB SCRAPE")
+            if res:
+                return res
+            return None
+
+        def process_not_multipart(part):
+            content = part.get_content()
+            if part.get_content_type() == "text/plain":
+                r = find_in_plaintext(uid, content)
+                if r:
+                    return r
+            elif part.get_content_type() == "text/html":
+                r = find_in_html(uid, content)
+                if r:
+                    return r
+            else:
+                body = part.get_content()[0:1000].split("\n")[0:10]
+                for line in body:
+                    print(line)
+            return None
+
+        for uid, message_data in reversed(
+            imap_client.fetch(messages, "RFC822").items()
+        ):
             email_message: email.message.EmailMessage = (
                 email.message_from_bytes(
                     message_data[b"RFC822"], policy=default_policy
                 )
             )
-            subject = email.header.decode_header(email_message.get("Subject"))
+            look_at = None
+            if email_message.is_multipart():
+                for part in email_message.walk():
+                    if not part.is_multipart():
+                        look_at = process_not_multipart(part)
+            else:
+                look_at = process_not_multipart(email_message)
 
-            subject = (
-                subject[0][0].decode(subject[0][1])
-                if subject[0][1]
-                else subject[0][0]
-            )
-            if any([x for x in ignore_subj if x in subject]):
-                continue
-            print(uid, email_message.get("From"), subject)
-            for part in email_message.walk():
-                if part.get_content_type() != "multipart/mixed":
-                    print(
-                        uid,
-                        part.get("Content-Type"),
-                        part.get_charsets(),
-                        part.get("Content-Transfer-Encoding"),
-                    )
-                    print(
-                        uid,
-                    )
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        # print(
-                        #    uid,
-                        #    payload.decode(part.get_charsets()[0]),
-                        # )
-                        pass
-                    else:
-                        print(
-                            uid,
-                            part,
-                        )
-                    # )
-                # if part.get_content_type() != :
-                #    for part in email_message.walk():
-                #        print(type(part))
-                # print(part.as_string())
+            if look_at:
+                print(
+                    "We should take a look at",
+                    uid,
+                    email.header.decode_header(email_message.get("Date"))[0][0],
+                    look_at,
+                )
 
-        self.log.debug(self.client.logout().decode("utf-8"))
-
-    # with  as client:
-    #    print(
-    #    print("")
-    #
-    #    print("")
-    #    print(len(client.search(['FROM', '"*@ebay.com"'])))
-    #    print("")
-    #
-    #    print(M.noop())
-    #    print(M.utf8_enabled)
-    #    lst = M.list()
-    #    if lst[0]:
-    #        for item in lst[1]:
-    #            print(item.decode("utf-8"))
-    #    print(M.select("INBOX"))
-    #    print(M.search(None, 'FROM', '"@ebay.com"'))
-    #    print(M.logout())
-    #
+        self.log.debug(imap_client.logout().decode("utf-8"))
