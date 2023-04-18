@@ -13,8 +13,9 @@ if me.is_absolute() and isinstance(me, WindowsPath):
     time.sleep(30)
     sys.exit(1)
 
-print("git pull")
-subprocess.run(["git", "pull"], check=False)
+if len(sys.argv) == 1 or sys.argv[1] != "no-git":
+    print("git pull")
+    subprocess.run(["git", "pull"], check=False)
 
 def find_pythons():
     python = None
@@ -47,10 +48,10 @@ if sys.version_info.major < 3 or sys.version_info.minor < 9:
     print(f"Requires Python 3.9 or newer, this is %s.%s" % (sys.version_info.major, sys.version_info.minor))
     newest_python = find_pythons()
     print("Found %s, reloading..." %(newest_python,))
-    subprocess.run([newest_python, __file__], check=False)
+    subprocess.run([newest_python, __file__, "no-git"], check=False)
     sys.exit(0)
 
-
+print("Runing using ", sys.executable)
 
 if ("VIRTUAL_ENV" not in os.environ or os.environ["VIRTUAL_ENV"].strip() == "") and not os.access("./venv", os.R_OK):
     venv_inp = input("No python python virtual environment. Create one in ./venv? (Y/n): ")
@@ -77,15 +78,17 @@ elif ("VIRTUAL_ENV" not in os.environ or os.environ["VIRTUAL_ENV"].strip() == ""
     )
     sys.exit(1)
 
-print("update pip")
+
+
+print("upgrade pip")
 subprocess.run(
-   [sys.executable, "-m", "pip", "install", "-U", "pip"],
+   [sys.executable, "-m", "pip", "install", "--require-virtualenv", "--no-user", "--upgrade", "pip"],
    check=False,
 )
 
 print("pip install")
 subprocess.run(
-   [sys.executable, "-m", "pip", "install", "-U", "-r", "requirements-dev.txt"],
+   [sys.executable, "-m", "pip", "install", "--require-virtualenv", "--no-user", "--upgrade", "-r", "requirements-dev.txt"],
    check=False,
 )
 
