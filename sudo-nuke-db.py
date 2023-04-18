@@ -16,7 +16,7 @@ def remove(path):
         return False
 
 
-nuke = input("This will nuke and reinitialize you database. Superusers will be preserved. Continue? (y/N):")
+nuke = input("This will nuke and reinitialize you database. Superusers will be preserved. Continue? (y/N): ")
 if nuke.lower() != "y":
     print("Non-positive answer, bailig....!")
     sys.exit()
@@ -89,7 +89,7 @@ for sql in sql_commands:
     conn.execute(sql)
 conn.close()
 
-nuke = input("Load AliExpress to DB? (y/N):")
+nuke = input("Load AliExpress to DB? (y/N): ")
 if nuke.lower() == "y":
     subprocess.run(
         [
@@ -104,7 +104,7 @@ if nuke.lower() == "y":
         check=False,
     )
 
-nuke = input("Load Adafruit to DB? (y/N):")
+nuke = input("Load Adafruit to DB? (y/N): ")
 if nuke.lower() == "y":
     subprocess.run(
         [
