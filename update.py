@@ -50,43 +50,42 @@ if sys.version_info.major < 3 or sys.version_info.minor < 9:
     subprocess.run([newest_python, __file__], check=False)
     sys.exit(0)
 
-print(f"Python %s.%s" % (sys.version_info.major, sys.version_info.minor))
 
-from importlib.util import find_spec
 
-if "VIRTUAL_ENV" not in os.environ and not os.access("./venv", os.R_OK):
-    venv_loader = find_spec("venv")
-    if not venv_loader:
-        print(
-            "Failed to find venv module using"
-            f" {sys.executable} ({sys.version_info.major}.{sys.version_info.minor})."
-            " Please install it using your system package manager."
-        )
-        sys.exit(1)
-
-    venv = input("No ./venv found. Create? (Y/n): ")
-    if venv.lower() == "y" or venv == "":
+if ("VIRTUAL_ENV" not in os.environ or os.environ["VIRTUAL_ENV"].strip() == "") and not os.access("./venv", os.R_OK):
+    venv_inp = input("No python python virtual environment. Create one in ./venv? (Y/n): ")
+    print(f"Using python %s.%s" % (sys.version_info.major, sys.version_info.minor))
+    if venv_inp.lower() == "y" or venv_inp == "":
+        from importlib.util import find_spec
+        venv_loader = find_spec("venv")
+        if not venv_loader:
+            print(
+                "Failed to find venv module using"
+                f" {sys.executable} ({sys.version_info.major}.{sys.version_info.minor})."
+                " Please install it using your system package manager."
+            )
+            sys.exit(1)
         from venv import create
         create("./venv", with_pip=True)
-        print("Please activate the venv,then re-run the script")
-        sys.exit()
+        print("Please activate the new venv,then re-run the script")
+    sys.exit()
 
-if "VIRTUAL_ENV" not in os.environ:
+elif ("VIRTUAL_ENV" not in os.environ or os.environ["VIRTUAL_ENV"].strip() == ""):
     print(
         "Please activate the python virtual "
-        "envirionment before running this script."
+        "environment before running this script."
     )
     sys.exit(1)
 
 print("update pip")
 subprocess.run(
-   [sys.executable, "-m", "pip", "install", "pip"],
+   [sys.executable, "-m", "pip", "install", "-U", "pip"],
    check=False,
 )
 
 print("pip install")
 subprocess.run(
-   [sys.executable, "-m", "pip", "install", "-r", "requirements-dev.txt"],
+   [sys.executable, "-m", "pip", "install", "-U", "-r", "requirements-dev.txt"],
    check=False,
 )
 
