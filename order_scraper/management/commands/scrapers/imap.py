@@ -162,8 +162,7 @@ class IMAPScraper(object):
                     look_at = process_not_multipart(email_message)
 
                 if look_at:
-                    self.log.debug("%s %s %s",
-                        "We should take a look at",
+                    self.log.debug("%s %s looks interresting",
                         uid,
                         email_date,
                     )
