@@ -81,7 +81,7 @@ class IMAPScraper(object):
             imap_client.select_folder(folder)
             folder_mg = imap_client.search(["FROM", "ebay@ebay.com"])
             print(f"Found {len(folder_mg)} messages from eBay")
-            messages = messages + folder_mg
+            messages.append((folder, folder_mg))
 
         def find_in_plaintext(uid, content):
             transid = re.findall(
@@ -133,29 +133,30 @@ class IMAPScraper(object):
                 # Images, PDFs, icals, etc. Ignore
                 return None
 
-        for uid, message_data in reversed(
-            imap_client.fetch(set(messages), "RFC822").items()
-        ):
-            email_message: email.message.EmailMessage = (
-                email.message_from_bytes(
-                    message_data[b"RFC822"], policy=default_policy
-                )
-            )
-            look_at = None
-            if email_message.is_multipart():
-                for part in email_message.walk():
-                    if not part.is_multipart():
-                        look_at = process_not_multipart(part)
-            else:
-                look_at = process_not_multipart(email_message)
+        for m in messages:
+            imap_client.select_folder(m[0])
 
-            if look_at:
-                print(
-                    "We should take a look at",
-                    uid,
-                    email.header.decode_header(email_message.get("Date"))[0][0],
+            for uid, message_data in imap_client.fetch(set(m[1]), "RFC822").items():
+                email_message: email.message.EmailMessage = (
+                    email.message_from_bytes(
+                        message_data[b"RFC822"], policy=default_policy
+                    )
                 )
-                for look in look_at:
-                    print(uid, look)
+                look_at = None
+                if email_message.is_multipart():
+                    for part in email_message.walk():
+                        if not part.is_multipart():
+                            look_at = process_not_multipart(part)
+                else:
+                    look_at = process_not_multipart(email_message)
+
+                if look_at:
+                    print(
+                        "We should take a look at",
+                        uid,
+                        email.header.decode_header(email_message.get("Date"))[0][0],
+                    )
+                    for look in look_at:
+                        print(uid, look)
 
         self.log.debug(imap_client.logout().decode("utf-8"))
