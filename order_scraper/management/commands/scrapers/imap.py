@@ -79,7 +79,9 @@ class IMAPScraper(object):
         for folder in mailboxes:
             self.log.debug("Selecting folder %s", folder)
             imap_client.select_folder(folder)
-            messages = messages + imap_client.search(["FROM", "ebay@ebay.com"])
+            folder_mg = imap_client.search(["FROM", "ebay@ebay.com"])
+            print(f"Found {len(folder_mg)} messages from eBay")
+            messages = messages + folder_mg
 
         def find_in_plaintext(uid, content):
             transid = re.findall(
@@ -100,11 +102,6 @@ class IMAPScraper(object):
             )
             res = set()
             for rover in rovers:
-                #if "payments.ebay.com" in rover and (
-                #    "transid" in rover or "chartid" in rover
-                #):
-                #    res.add("MAIL SCRAPE")
-                #else:
                     if "transid" in rover:
                         # just get transid + itemid
                         t = re.match(r".*transid(?:%3D|=)([0-9-]+)[^0-9]", rover, re.IGNORECASE)
@@ -133,15 +130,8 @@ class IMAPScraper(object):
                 if r:
                     return r
             else:
-                print("WTF IS THIS?? " + part.get_content_type())
-                try:
-                    print(part.get_content()[0:250])
-                except TypeError:
-                    pass
-                #body = part.get_content()[0:1000].split("\n")[0:10]
-                #for line in body:
-                #    print(line)
-            return None
+                # Images, PDFs, icals, etc. Ignore
+                return None
 
         for uid, message_data in reversed(
             imap_client.fetch(set(messages), "RFC822").items()
