@@ -107,10 +107,10 @@ class IMAPScraper(object):
                         t = re.match(r".*transid(?:%3D|=)([0-9-]+)[^0-9]", rover, re.IGNORECASE)
                         ti = re.match(r".*itemid(?:%3D|=)([0-9-]+)[^0-9].*", rover, re.IGNORECASE)
                         url = "Failed to find bot transid and itemid"
+                        foo = ""
                         if t and ti:
                             transid = t.group(1)
                             itemid = ti.group(1)
-                            foo = ""
                             if len(transid) < 13:
                                 foo = "Probably to old, but try: "
                             url = f"https://order.ebay.com/ord/show?transid={transid}&itemid={itemid}"
