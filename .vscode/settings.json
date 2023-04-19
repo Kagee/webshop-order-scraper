@@ -7,7 +7,7 @@
         "--django-settings-module",
         "hlo.settings",
     ],
-    "git.enabled": true,
+    "git.enabled": false,
     "files.exclude": {
         ".*~": true,
         "**/__pycache__": true,

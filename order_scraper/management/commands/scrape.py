@@ -19,6 +19,7 @@ from .scrapers.ebay import EbayScraper
 from .scrapers.tryout import TryOutScraper
 from .scrapers.imap import IMAPScraper
 
+
 class Command(BaseCommand):
     help = "Scrapes a webshop for orders using Selenium"
     requires_migrations_checks = True
@@ -114,9 +115,7 @@ class Command(BaseCommand):
         scraper.add_argument(
             "--scrape-imap",
             action="store_true",
-            help=(
-                "Will scrape a IMAP account for eBay order numbers."
-            ),
+            help="Will scrape a IMAP account for eBay order numbers.",
         )
         scraper.add_argument(
             "--load-to-db",
@@ -156,6 +155,7 @@ class Command(BaseCommand):
         elif options["verbosity"] == 3:
             # 3 = very verbose output
             log.setLevel(logging.DEBUG)
+        # pylint: disable=attribute-defined-outside-init
         self.log = log
 
     @no_translations
@@ -208,7 +208,10 @@ class Command(BaseCommand):
                     (
                         "Adafruit",
                         None,
-                        "https://www.adafruit.com/index.php?main_page=account_history_info&order_id={order_id}",
+                        (
+                            "https://www.adafruit.com/index.php?"
+                            "main_page=account_history_info&order_id={order_id}"
+                        ),
                         "https://www.adafruit.com/product/{item_id}",
                     ),
                     (

@@ -39,6 +39,66 @@ class EbayScraper(BaseScraper):
     # Scrape comand and __init__
 
     def command_scrape(self):
+        self.browser_go_to_order_list()
+        brws = self.browser
+        # Login complete
+        order_ids = self.load_or_scrape_order_ids()
+        self.pprint(order_ids)
+        assert brws
+
+    def __init__(self, command: BaseCommand, options: Dict):
+        super().__init__(command, options, __name__)
+
+        self.setup_cache("ebay")
+        self.setup_templates()
+        self.load_imap()
+
+    def command_db_to_csv(self):
+        pass
+
+    def command_load_to_db(self):
+        pass
+
+    def load_or_scrape_order_ids(self):
+        order_ids = []
+        json_filename = self.cache["ORDER_LISTS"] / "order-list.json"
+        if not self.options["use_cached_orderlist"] or not self.can_read(
+            json_filename
+        ):
+            # We do not want to use cached orderlist
+            # Or there is no cached orderlist
+            time.sleep(3)
+            while True:
+                order_ids += self.browser_scrape_individual_order_list()
+                next_link = self.find_element(
+                    By.CSS_SELECTOR, "a.m-pagination-simple-next"
+                )
+                if next_link.get_attribute("aria-disabled") == "true":
+                    self.log.debug("No more orders")
+                    break
+                next_link.click()
+                self.rand_sleep(2, 4)
+            self.log.debug(
+                "Writing order list to %s/%s",
+                json_filename.parent.name,
+                json_filename.name,
+            )
+            self.write(json_filename, order_ids)
+        else:
+            self.log.debug(
+                "Reading order list from %s/%s",
+                json_filename.parent.name,
+                json_filename.name,
+            )
+            order_ids = self.read(json_filename, from_json=True)
+        order_ids += self.IMAP_DATA
+        return order_ids
+
+    # LXML-heavy functions
+    # ...
+
+    # Selenium-heavy function
+    def browser_go_to_order_list(self):
         browser_kwargs = {
             "change_ua": (
                 "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U)"
@@ -69,22 +129,10 @@ class EbayScraper(BaseScraper):
 
             self.log.debug("Visiting homepage %s", self.ORDER_LIST_URL)
             self.browser_visit_page_v2(self.ORDER_LIST_URL)
-
-            time.sleep(3)
-            while True:
-                self.browser_scrape_individual_order_list()
-                next_link = self.find_element(
-                    By.CSS_SELECTOR, "a.m-pagination-simple-next"
-                )
-                if next_link.get_attribute("aria-disabled") == "true":
-                    self.log.debug("No more orders")
-                    break
-                next_link.click()
-                self.rand_sleep(2, 4)
-
-        assert brws
+        return brws
 
     def browser_scrape_individual_order_list(self):
+        order_ids = []
         for item_container in self.find_elements(
             By.CSS_SELECTOR, "div.m-mweb-item-container"
         ):
@@ -95,89 +143,10 @@ class EbayScraper(BaseScraper):
                 r".*\?orderId=(?P<order_id>[0-9-]*).*", order_href
             )
             order_id = re_matches.group("order_id")
-            print("Order ID", order_id)
-            # thumb_img = self.find_element(
-            #     By.CSS_SELECTOR, "div.m-image img", item_container
-            # )
-            # print("Item thumb", thumb_img.get_attribute("src"))
-            # item_details = self.find_element(
-            #     By.CSS_SELECTOR, "div.item-details", item_container
-            # )
-            # status = self.find_element(
-            #     By.CSS_SELECTOR, "div.item-banner-text", item_details
-            # ).text
-            # print("Status", status)
-            # name = self.find_element(
-            #     By.CSS_SELECTOR, "h2.item-title", item_details
-            # ).text
-            # print("Name", name)
-            # item_sku = ""
-            # item_sku_div = self.find_element(
-            #     By.CSS_SELECTOR, "div.item-variation", item_details
-            # )
-            # if item_sku_div:
-            #     item_sku = item_sku_div.text
-            # print("Item sku", item_sku)
-            # div_item_info = self.find_element(
-            #     By.CSS_SELECTOR, "div.item-div.item-info", item_container
-            # )
-            # price1 = self.find_element(
-            #     By.CSS_SELECTOR,
-            #     "span.info-displayprice span.BOLD",
-            #     div_item_info,
-            # ).text
-            # print("Price 1", price1)
-            # price2 = self.find_element(
-            #     By.CSS_SELECTOR,
-            #     "span.info-displayprice span.clipped",
-            #     div_item_info,
-            # ).text
-            # print("Price 2", price2)
-            # if price1 != price2:
-            #     self.log.debug(
-            #         self.command.style.SUCCESS(
-            #             "PRICES DIFFER! TELL KAGEE!: '%s' '%s'"
-            #         ),
-            #         price1,
-            #         price2,
-            #     )
-            # date = self.find_element(
-            #     By.CSS_SELECTOR,
-            #     "span.info-orderdate",
-            #     div_item_info,
-            # ).text
-            # print("Date", date)
+            self.log.debug("Found order id %s", order_id)
+            order_ids.append(order_id)
+        return order_ids
 
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
-
-        self.setup_cache("ebay")
-        self.setup_templates()
-        self.load_imap()
-
-    def load_imap(self):
-        # pylint: disable=invalid-name
-        self.IMAP_DATA = []
-        if self.can_read(self.IMAP_JSON):
-            self.IMAP_DATA = self.read(self.IMAP_JSON, from_json=True)
-
-    def setup_cache(self, base_folder: Path):
-        super().setup_cache(base_folder)
-        # pylint: disable=invalid-name
-        self.IMAP_JSON = Path(
-            settings.SCRAPER_CACHE_BASE, "imap", "imap-ebay.json"
-        )
-
-    def command_db_to_csv(self):
-        pass
-
-    def command_load_to_db(self):
-        pass
-
-    # LXML-heavy functions
-    # ...
-
-    # Selenium-heavy function
     def browser_detect_handle_interrupt(self, expected_url):
         time.sleep(2)
         gdpr_accept = self.find_element(
@@ -191,7 +160,11 @@ class EbayScraper(BaseScraper):
             self.log.debug("No GDPR/cookies to accept")
         if re.match(r".*captcha.*", self.browser.current_url):
             if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
-                self.log.info("Please complete captcha and press enter.")
+                self.log.info(
+                    self.command.style.NOTICE(
+                        "Please complete captcha and press enter: ..."
+                    )
+                )
                 input()
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.browser_login(expected_url)
@@ -304,10 +277,11 @@ class EbayScraper(BaseScraper):
         elif switch_to_mode == "classic" and to_classic_link:
             to_classic_link.click()
             return True
-        elif not to_mobile_link and to_classic_link:
+        elif not to_mobile_link and not to_classic_link:
             self.log.debug("Failed to find a mode change link!!")
             raise CommandError("Failed to find a mode change link!!")
         else:
+            # We are already where we want to be
             return False
 
     # Utility functions
@@ -320,7 +294,10 @@ class EbayScraper(BaseScraper):
         self.ORDER_LIST_URLv2 = "https://www.ebay.com/mye/myebay/v2/purchase"
         self.ITEM_URL_TEMPLATE = "https://www.ebay.com/itm/{item_id}"
 
-        self.ORDER_URL_TEMPLATE_TRANS = "https://order.ebay.com/ord/show?transid={order_trans_id}&itemid={order_item_id}#/"
+        self.ORDER_URL_TEMPLATE_TRANS = (
+            "https://order.ebay.com/ord/show?"
+            "transid={order_trans_id}&itemid={order_item_id}#/"
+        )
         self.ORDER_URL_TEMPLATE = (
             "https://order.ebay.com/ord/show?orderId={order_id}#/"
         )
@@ -339,3 +316,19 @@ class EbayScraper(BaseScraper):
         elif part == PagePart.ORDER_ITEM:
             template = self.ORDER_ITEM_FILENAME_TEMPLATE
         return Path(template.format(**kwargs))
+
+    def load_imap(self):
+        # pylint: disable=invalid-name
+        self.IMAP_DATA = []
+        if self.can_read(self.IMAP_JSON):
+            self.IMAP_DATA = self.read(self.IMAP_JSON, from_json=True)
+            self.log.debug(
+                "Loaded %s order tuples from IMAP data", len(self.IMAP_DATA)
+            )
+
+    def setup_cache(self, base_folder: Path):
+        super().setup_cache(base_folder)
+        # pylint: disable=invalid-name
+        self.IMAP_JSON = Path(
+            settings.SCRAPER_CACHE_BASE, "imap", "imap-ebay.json"
+        )
