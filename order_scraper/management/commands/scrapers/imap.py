@@ -43,9 +43,9 @@ class IMAPScraper(object):
         except LoginError as login_error:
             raise CommandError("Invalid credentials", login_error)
         mailboxes = []
-        if settings.SCRAPER_IMAP_FLAGS:
+        if len(settings.SCRAPER_IMAP_FLAGS) > 0:
             self.log.debug(
-                "Using SCRAPER_IMAP_FLAG, ignoring SCRAPER_IMAP_FOLDER"
+                "Using SCRAPER_IMAP_FLAG (%s), ignoring SCRAPER_IMAP_FOLDER", settings.SCRAPER_IMAP_FLAGS
             )
 
             for folder in imap_client.list_folders():
@@ -107,7 +107,14 @@ class IMAPScraper(object):
                 else:
                     if "transid" in rover:
                         # just get transid + itemid
-                        res.add("WEB SCRAPE")
+                        t = re.match(r".*transid(?:%3D|=)([0-9-]+)[^0-9]", rover, re.IGNORECASE)
+                        ti = re.match(r".*itemid(?:%3D|=)([0-9-]+)[^0-9].*", rover, re.IGNORECASE)
+                        url = "Failed to find bot transid and itemid"
+                        if t and ti:
+                            transid = t.group(1)
+                            itemid = ti.group(1)
+                            url = f"https://order.ebay.com/ord/show?transid={transid}&itemid={itemid}"
+                        res.add("WEB SCRAPE: " +url)
             if res:
                 return res
             return None
@@ -149,7 +156,8 @@ class IMAPScraper(object):
                     "We should take a look at",
                     uid,
                     email.header.decode_header(email_message.get("Date"))[0][0],
-                    look_at,
                 )
+                for look in look_at:
+                    print(uid, look)
 
         self.log.debug(imap_client.logout().decode("utf-8"))
