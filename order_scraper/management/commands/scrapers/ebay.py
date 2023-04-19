@@ -38,23 +38,6 @@ from .base import BaseScraper, PagePart
 class EbayScraper(BaseScraper):
     # Scrape comand and __init__
 
-    def website_mode(self, to=None):
-        to_mobile_link = self.find_element(By.CSS_SELECTOR, "a#mobileCTALink")
-        to_classic_link = self.find_element(
-            By.CSS_SELECTOR, "div.gh-mwebfooter__siteswitch a"
-        )
-        if to == "mobile" and to_mobile_link:
-            to_mobile_link.click()
-            return True
-        elif to == "classic" and to_classic_link:
-            to_classic_link.click()
-            return True
-        elif not to_mobile_link and to_classic_link:
-            self.log.debug("Failed to find a mode change link!!")
-            # raise CommandError("Failed to find a mode change link!!")
-        else:
-            return False
-
     def command_scrape(self):
         browser_kwargs = {
             "change_ua": (
@@ -79,7 +62,8 @@ class EbayScraper(BaseScraper):
             self.browser_visit_page_v2(self.HOMEPAGE)
 
             self.log.debug(
-                "Switching to mobile: %s", self.website_mode("mobile")
+                "Switching to mobile: %s",
+                self.browser_website_switch_mode("mobile"),
             )
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
 
@@ -89,22 +73,14 @@ class EbayScraper(BaseScraper):
             time.sleep(3)
             while True:
                 self.browser_scrape_individual_order_list()
-                next = self.find_element(
+                next_link = self.find_element(
                     By.CSS_SELECTOR, "a.m-pagination-simple-next"
                 )
-                if next.get_attribute("aria-disabled") == "true":
+                if next_link.get_attribute("aria-disabled") == "true":
                     self.log.debug("No more orders")
                     break
-                next.click()
+                next_link.click()
                 self.rand_sleep(2, 4)
-
-        #
-        ##
-        #
-
-        #
-
-        #
 
         assert brws
 
@@ -174,8 +150,23 @@ class EbayScraper(BaseScraper):
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
+
         self.setup_cache("ebay")
         self.setup_templates()
+        self.load_imap()
+
+    def load_imap(self):
+        # pylint: disable=invalid-name
+        self.IMAP_DATA = []
+        if self.can_read(self.IMAP_JSON):
+            self.IMAP_DATA = self.read(self.IMAP_JSON, from_json=True)
+
+    def setup_cache(self, base_folder: Path):
+        super().setup_cache(base_folder)
+        # pylint: disable=invalid-name
+        self.IMAP_JSON = Path(
+            settings.SCRAPER_CACHE_BASE, "imap", "imap-ebay.json"
+        )
 
     def command_db_to_csv(self):
         pass
@@ -302,6 +293,23 @@ class EbayScraper(BaseScraper):
             input()
         self.log.info("Login to eBay was successful.")
 
+    def browser_website_switch_mode(self, switch_to_mode=None):
+        to_mobile_link = self.find_element(By.CSS_SELECTOR, "a#mobileCTALink")
+        to_classic_link = self.find_element(
+            By.CSS_SELECTOR, "div.gh-mwebfooter__siteswitch a"
+        )
+        if switch_to_mode == "mobile" and to_mobile_link:
+            to_mobile_link.click()
+            return True
+        elif switch_to_mode == "classic" and to_classic_link:
+            to_classic_link.click()
+            return True
+        elif not to_mobile_link and to_classic_link:
+            self.log.debug("Failed to find a mode change link!!")
+            raise CommandError("Failed to find a mode change link!!")
+        else:
+            return False
+
     # Utility functions
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -310,9 +318,13 @@ class EbayScraper(BaseScraper):
         self.LOGIN_PAGE_RE = rf"{login_url}.*"
         self.ORDER_LIST_URL = "https://www.ebay.com/mye/myebay/purchase"
         self.ORDER_LIST_URLv2 = "https://www.ebay.com/mye/myebay/v2/purchase"
-        self.ORDERS_CSV = self.cache["BASE"] / "order_history.csv"
-        self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"
-        self.ITEM_URL_TEMPLATE = "https://www.adafruit.com/product/{item_id}"
+        self.ITEM_URL_TEMPLATE = "https://www.ebay.com/itm/{item_id}"
+
+        self.ORDER_URL_TEMPLATE_TRANS = "https://order.ebay.com/ord/show?transid={order_trans_id}&itemid={order_item_id}#/"
+        self.ORDER_URL_TEMPLATE = (
+            "https://order.ebay.com/ord/show?orderId={order_id}#/"
+        )
+
         self.ORDER_FILENAME_TEMPLATE: Path = str(
             self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
         )
