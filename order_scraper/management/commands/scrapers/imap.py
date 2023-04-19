@@ -76,10 +76,15 @@ class IMAPScraper(object):
                 mailboxes.append(folder[2])
 
         messages = []
+        search_list = ["FROM", "ebay@ebay.com"]
+        for ebay_email in [ f"ebay@ebay.{tld}" for tld in [ "co.uk", "de", "fr", "ch", "nl", "com.au" ] ]:
+            search_list.insert(0, "OR")
+            search_list.append("FROM")
+            search_list.append(ebay_email)
         for folder in mailboxes:
             self.log.debug("Selecting folder %s", folder)
             imap_client.select_folder(folder)
-            folder_mg = imap_client.search(["FROM", "ebay@ebay.com"])
+            folder_mg = imap_client.search(search_list)
             print(f"Found {len(folder_mg)} messages from eBay")
             messages.append((folder, folder_mg))
 
@@ -142,6 +147,12 @@ class IMAPScraper(object):
                         message_data[b"RFC822"], policy=default_policy
                     )
                 )
+                email_from = email.header.decode_header(email_message.get("From"))[0][0]
+                email_subj = email.header.decode_header(email_message.get("Subject"))[0][0]
+                email_date = email.header.decode_header(email_message.get("Date"))[0][0]
+                if "ebay@ebay.com" not in email_from:
+                    print(uid, "Not from ebay@ebay.com, detection may fail:")
+                    print(uid, email_from, email_date, email_subj)
                 look_at = None
                 if email_message.is_multipart():
                     for part in email_message.walk():
@@ -154,7 +165,7 @@ class IMAPScraper(object):
                     print(
                         "We should take a look at",
                         uid,
-                        email.header.decode_header(email_message.get("Date"))[0][0],
+                        email_date,
                     )
                     for look in look_at:
                         print(uid, look)
