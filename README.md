@@ -121,9 +121,18 @@ python manage.py migrate
 ## Acknowledgements
 
 For steadfast bug fixing, having orders that totally scramble my scraping, and coming up with those excellent ideas when I have been struggling with a bug for an hour.
+<table>
+<tr><td>
 
 [![neslekkim](https://github.com/neslekkim.png/?size=50)  
 neslekkim](https://github.com/neslekkim)
+</td>
+<td>
+
+[![rkarlsba](https://github.com/rkarlsba.png/?size=50)  
+rkarlsba](https://github.com/rkarlsba)
+</td></tr>
+</table>
 
 ## Why
 
