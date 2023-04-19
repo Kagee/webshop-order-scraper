@@ -101,7 +101,7 @@ class IMAPScraper(object):
         def find_in_html(uid, content):
             soup = BeautifulSoup(content, features="lxml")
             rovers = re.findall(
-                r".*rover\.ebay\.com.*",
+                    r".*\.ebay\.(?:com|co\.uk|de|fr|ch|nl|com\.au).*",
                 soup.prettify(),
                 re.IGNORECASE,
             )
