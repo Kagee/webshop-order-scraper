@@ -61,6 +61,16 @@ SCRAPER_ADA_ITEMS = [
 SCRAPER_EBY_MANUAL_LOGIN = env.bool("SCRAPER_EBY_MANUAL_LOGIN", False)
 SCRAPER_EBY_USERNAME: str = env("SCRAPER_EBY_USERNAME", default=None)
 SCRAPER_EBY_PASSWORD: str = env("SCRAPER_EBY_PASSWORD", default=None)
+SCRAPER_EBY_ORDERS_MAX: int = env("SCRAPER_EBY_ORDERS_MAX", default=-1)
+# Format: SCRAPER_EBY_ORDERS=order_id|order_trans_id-order_item_id[,order_id|order_trans_id-order_item_id]
+SCRAPER_EBY_ORDERS = {
+    x.strip() for x in env.list("SCRAPER_EBY_ORDERS", default=[])
+}
+# Strip any whitespace
+SCRAPER_EBY_ORDERS_SKIP = [
+    x.strip() for x in env.list("SCRAPER_EBY_ORDERS_SKIP", default=[])
+]
+
 
 SCRAPER_IMAP_SERVER: str = env("SCRAPER_IMAP_SERVER", default="imap.gmail.com")
 SCRAPER_IMAP_PORT: int = env.int("SCRAPER_IMAP_PORT", default=993)

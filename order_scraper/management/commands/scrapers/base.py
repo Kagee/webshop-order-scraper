@@ -364,7 +364,9 @@ class BaseScraper(object):
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
                     self.log.error("Encountered error when reading %s", path)
-                    raise CommandError(f"Encountered error when reading {path}", jde) from jde
+                    raise CommandError(
+                        f"Encountered error when reading {path}", jde
+                    ) from jde
             elif from_html:
                 contents = fromstring(contents)
             return contents
