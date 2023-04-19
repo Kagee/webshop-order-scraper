@@ -39,12 +39,8 @@ class EbayScraper(BaseScraper):
     # Scrape comand and __init__
 
     def command_scrape(self):
-        self.browser_go_to_order_list()
-        brws = self.browser
-        # Login complete
         order_ids = self.load_or_scrape_order_ids()
         self.pprint(order_ids)
-        assert brws
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
@@ -52,6 +48,7 @@ class EbayScraper(BaseScraper):
         self.setup_cache("ebay")
         self.setup_templates()
         self.load_imap()
+        self.browser = None
 
     def command_db_to_csv(self):
         pass
@@ -65,6 +62,8 @@ class EbayScraper(BaseScraper):
         if not self.options["use_cached_orderlist"] or not self.can_read(
             json_filename
         ):
+            if not self.browser:
+                self.browser_go_to_order_list()
             # We do not want to use cached orderlist
             # Or there is no cached orderlist
             time.sleep(3)
@@ -83,7 +82,7 @@ class EbayScraper(BaseScraper):
                 json_filename.parent.name,
                 json_filename.name,
             )
-            self.write(json_filename, order_ids)
+            self.write(json_filename, order_ids, to_json=True)
         else:
             self.log.debug(
                 "Reading order list from %s/%s",
