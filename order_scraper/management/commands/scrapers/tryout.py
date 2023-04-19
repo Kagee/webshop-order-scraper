@@ -29,7 +29,6 @@ class TryOutScraper(BaseScraper):
         return None
 
     def command_scrape(self):
-
         brws = self.browser_get_instance(emulate_mobile_browser=True)
 
         time.sleep(3000)

@@ -104,22 +104,22 @@ class BaseScraper(object):
         )
 
     def find_element(
-        self, by: str, value: Union[str, None], element=None
+        self, by_obj: str, value: Union[str, None], element=None
     ) -> Union[WebElement, None]:
         try:
             if not element:
                 element = self.browser
-            return element.find_element(by, value)
+            return element.find_element(by_obj, value)
         except NoSuchElementException:
             return None
 
     def find_elements(
-        self, by: str, value: Union[str, None], element=None
+        self, by_obj: str, value: Union[str, None], element=None
     ) -> Union[WebElement, None]:
         try:
             if not element:
                 element = self.browser
-            return element.find_elements(by, value)
+            return element.find_elements(by_obj, value)
         except NoSuchElementException:
             return []
 
@@ -192,7 +192,7 @@ class BaseScraper(object):
                     "general.useragent.override",
                     change_ua,
                 )
-        
+
             self.browser = webdriver.Firefox(options=options, service=service)
 
             self.browser_status = "created"
@@ -398,12 +398,12 @@ class BaseScraper(object):
 
     def browser_cleanup_page(
         self,
-        xpaths: List = [],
-        ids: List = [],
-        css_selectors: List = [],
-        element_tuples: List = [],
+        xpaths: List = None,
+        ids: List = None,
+        css_selectors: List = None,
+        element_tuples: List = None,
     ) -> None:
-        if not len(xpaths + ids + css_selectors + element_tuples):
+        if len(xpaths + ids + css_selectors + element_tuples) == 0:
             self.log.debug(
                 "browser_cleanup_page called, but no cleanup defined"
             )
