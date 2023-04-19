@@ -100,11 +100,11 @@ class IMAPScraper(object):
             )
             res = set()
             for rover in rovers:
-                if "payments.ebay.com" in rover and (
-                    "transid" in rover or "chartid" in rover
-                ):
-                    res.add("MAIL SCRAPE")
-                else:
+                #if "payments.ebay.com" in rover and (
+                #    "transid" in rover or "chartid" in rover
+                #):
+                #    res.add("MAIL SCRAPE")
+                #else:
                     if "transid" in rover:
                         # just get transid + itemid
                         t = re.match(r".*transid(?:%3D|=)([0-9-]+)[^0-9]", rover, re.IGNORECASE)
@@ -113,8 +113,11 @@ class IMAPScraper(object):
                         if t and ti:
                             transid = t.group(1)
                             itemid = ti.group(1)
+                            foo = ""
+                            if len(transid) < 13:
+                                foo = "Probably to old, but try: "
                             url = f"https://order.ebay.com/ord/show?transid={transid}&itemid={itemid}"
-                        res.add("WEB SCRAPE: " +url)
+                        res.add("WEB SCRAPE: " + foo + url)
             if res:
                 return res
             return None
@@ -130,9 +133,14 @@ class IMAPScraper(object):
                 if r:
                     return r
             else:
-                body = part.get_content()[0:1000].split("\n")[0:10]
-                for line in body:
-                    print(line)
+                print("WTF IS THIS?? " + part.get_content_type())
+                try:
+                    print(part.get_content()[0:250])
+                except TypeError:
+                    pass
+                #body = part.get_content()[0:1000].split("\n")[0:10]
+                #for line in body:
+                #    print(line)
             return None
 
         for uid, message_data in reversed(
