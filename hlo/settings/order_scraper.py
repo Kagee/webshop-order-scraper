@@ -67,5 +67,5 @@ SCRAPER_IMAP_PORT: int = env.int("SCRAPER_IMAP_PORT", default=993)
 SCRAPER_IMAP_USERNAME: str = env("SCRAPER_IMAP_USERNAME", default=None)
 SCRAPER_IMAP_PASSWORD: str = env("SCRAPER_IMAP_PASSWORD", default=None)
 # We use this flag to find the localized Gmail "All Main" folder
-SCRAPER_IMAP_FLAGS: list = env.list("SCRAPER_IMAP_FLAGS", default=list)
-SCRAPER_IMAP_FOLDERS: list = env.list("SCRAPER_IMAP_FOLDERS", default=list)
+SCRAPER_IMAP_FLAGS: list = env.list("SCRAPER_IMAP_FLAGS", default=None)
+SCRAPER_IMAP_FOLDERS: list = env.list("SCRAPER_IMAP_FOLDERS", default=None)

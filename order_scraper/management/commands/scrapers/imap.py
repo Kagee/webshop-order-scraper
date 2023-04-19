@@ -43,7 +43,7 @@ class IMAPScraper(object):
         except LoginError as login_error:
             raise CommandError("Invalid credentials", login_error)
         mailboxes = []
-        if len(settings.SCRAPER_IMAP_FLAGS) > 0:
+        if settings.SCRAPER_IMAP_FLAGS:
             self.log.debug(
                 "Using SCRAPER_IMAP_FLAG (%s), ignoring SCRAPER_IMAP_FOLDER", settings.SCRAPER_IMAP_FLAGS
             )
