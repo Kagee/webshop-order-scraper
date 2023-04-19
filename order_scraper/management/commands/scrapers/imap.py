@@ -85,7 +85,7 @@ class IMAPScraper(object):
             self.log.debug("Selecting folder %s", folder)
             imap_client.select_folder(folder)
             folder_mg = imap_client.search(search_list)
-            print(f"Found {len(folder_mg)} messages from eBay")
+            self.log.debug("Found %s messages from eBay", len(folder_mg))
             messages.append((folder, folder_mg))
 
         def find_in_plaintext(uid, content):
@@ -151,8 +151,8 @@ class IMAPScraper(object):
                 email_subj = email.header.decode_header(email_message.get("Subject"))[0][0]
                 email_date = email.header.decode_header(email_message.get("Date"))[0][0]
                 if "ebay@ebay.com" not in email_from:
-                    print(uid, "Not from ebay@ebay.com, detection may fail:")
-                    print(uid, email_from, email_date, email_subj)
+                    self.log.debug("%s %s", uid, "Not from ebay@ebay.com, detection may fail:")
+                    self.log.debug("%s %s %s %s", uid, email_from, email_date, email_subj)
                 look_at = None
                 if email_message.is_multipart():
                     for part in email_message.walk():
@@ -162,12 +162,12 @@ class IMAPScraper(object):
                     look_at = process_not_multipart(email_message)
 
                 if look_at:
-                    print(
+                    self.log.debug("%s %s %s",
                         "We should take a look at",
                         uid,
                         email_date,
                     )
                     for look in look_at:
-                        print(uid, look)
+                        self.log.debug("%s %s", uid, look)
 
-        self.log.debug(imap_client.logout().decode("utf-8"))
+        self.log.debug("%s", imap_client.logout().decode("utf-8"))
