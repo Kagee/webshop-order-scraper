@@ -129,7 +129,7 @@ class IMAPScraper(object):
             return None
 
         for uid, message_data in reversed(
-            imap_client.fetch(messages, "RFC822").items()
+            imap_client.fetch(set(messages), "RFC822").items()
         ):
             email_message: email.message.EmailMessage = (
                 email.message_from_bytes(
