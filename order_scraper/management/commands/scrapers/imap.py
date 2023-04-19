@@ -107,7 +107,7 @@ class IMAPScraper(object):
             )
             res = set()
             for rover in rovers:
-                    if "transid" in rover:
+                    if "transid" in rover.lower():
                         # just get transid + itemid
                         t = re.match(r".*transid(?:%3D|=)([0-9-]+)[^0-9]", rover, re.IGNORECASE)
                         ti = re.match(r".*itemid(?:%3D|=)([0-9-]+)[^0-9].*", rover, re.IGNORECASE)
