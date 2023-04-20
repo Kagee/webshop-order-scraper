@@ -141,7 +141,7 @@ class PimoroniScraper(BaseScraper):
                 self.log.debug("Looking for %s", xpath_sel)
                 username = wait.until(
                     EC.presence_of_element_located((By.XPATH, xpath_sel)),
-                    "Could not find {xpath_sel}",
+                    "Could not find " + xpath_sel,
                 )
                 username.click()
                 username.send_keys(username_data)
@@ -153,7 +153,7 @@ class PimoroniScraper(BaseScraper):
                 self.log.debug("Looking for %s", xpath_sel)
                 password = wait.until(
                     EC.presence_of_element_located((By.XPATH, xpath_sel)),
-                    f"Could not find {xpath_sel}",
+                    "Could not find " + xpath_sel,
                 )
                 password.click()
                 password.send_keys(password_data)
@@ -168,7 +168,7 @@ class PimoroniScraper(BaseScraper):
                     EC.presence_of_element_located(
                         (By.XPATH, xpath_sel),
                     ),
-                    f"Could not find {xpath_sel}",
+                    "Could not find " + xpath_sel,
                 ).click()
                 self.rand_sleep(0, 2)
 

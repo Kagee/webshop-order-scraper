@@ -328,39 +328,36 @@ class EbayScraper(BaseScraper):
             try:
                 self.rand_sleep(0, 2)
                 captcha_test()
-                self.log.debug("Looking for %s", "input#userid")
+                css_sel = "input#userid"
+                self.log.debug("Looking for %s", css_sel)
                 username = wait.until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "input#userid")
-                    ),
-                    "Could not find input#userid",
+                    EC.presence_of_element_located((By.CSS_SELECTOR, css_sel)),
+                    "Could not find " + css_sel,
                 )
                 captcha_test()
                 username.click()
-                username.send_keys(src_username)
+                username.send_keys(username_data)
                 self.rand_sleep(0, 2)
                 captcha_test()
-                self.log.debug("Looking for %s", "button#signin-continue-btn")
+                css_sel = "button#signin-continue-btn"
+                self.log.debug("Looking for %s", css_sel)
                 wait.until(
-                    EC.element_to_be_clickable(
-                        ((By.CSS_SELECTOR, "button#signin-continue-btn"))
-                    ),
-                    "Could not find button#signin-continue-btn",
+                    EC.element_to_be_clickable(((By.CSS_SELECTOR, css_sel))),
+                    "Could not find " + css_sel,
                 ).click()
                 self.rand_sleep(0, 2)
 
                 captcha_test()
-                self.log.debug("Looking for %s", "input#pass")
+                css_sel = "input#pass"
+                self.log.debug("Looking for %s", css_sel)
                 password = wait.until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "input#pass")
-                    ),
-                    "Could not find input#pass",
+                    EC.presence_of_element_located((By.CSS_SELECTOR, css_sel)),
+                    "Could not find " + css_sel,
                 )
                 self.rand_sleep(2, 2)
                 captcha_test()
                 password.click()
-                password.send_keys(src_password)
+                password.send_keys(password_data)
                 self.rand_sleep(0, 2)
 
                 self.log.debug("Looking for %s", "button#sgnBt")
