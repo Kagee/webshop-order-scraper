@@ -102,6 +102,14 @@ class EbayScraper(BaseScraper):
                 shipment_info = order_box.find_element(
                     By.CSS_SELECTOR, "div.shipment-info"
                 )
+                #div.delivery-address-text => text
+                # div.payment-instruments
+                #     div.payment-instrument-description -> text?
+                #     div. payment-instrument-top => US$
+                #     div.payment-instrument-subtext -> date?
+                #!!!! div.payment-line-item div.eui-label-value-line )> dt/dd => text
+                #div.order-summary > dt/dd => text
+                # div.order-foot-notes -> p -> text (not "Learn more")
                 order_info_items = {}
                 for value_line in section_data_items.find_elements(
                     By.CSS_SELECTOR, "div.eui-label-value-line"
@@ -350,9 +358,11 @@ class EbayScraper(BaseScraper):
                     ),
                     "Could not find input#userid",
                 )
+                captcha_test()
                 username.click()
                 username.send_keys(src_username)
                 self.rand_sleep(0, 2)
+                captcha_test()
                 self.log.debug("Looking for %s", "button#signin-continue-btn")
                 wait.until(
                     EC.element_to_be_clickable(
@@ -371,6 +381,7 @@ class EbayScraper(BaseScraper):
                     "Could not find input#pass",
                 )
                 self.rand_sleep(2, 2)
+                captcha_test()
                 password.click()
                 password.send_keys(src_password)
                 self.rand_sleep(0, 2)
