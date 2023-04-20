@@ -2,7 +2,7 @@ import os
 import os.path
 from pathlib import Path
 
-from .django import env, BASE_DIR
+from .django import env
 
 # Config for scraper command
 SCRAPER_CACHE_BASE: str = Path(
@@ -62,13 +62,25 @@ SCRAPER_EBY_MANUAL_LOGIN = env.bool("SCRAPER_EBY_MANUAL_LOGIN", False)
 SCRAPER_EBY_USERNAME: str = env("SCRAPER_EBY_USERNAME", default=None)
 SCRAPER_EBY_PASSWORD: str = env("SCRAPER_EBY_PASSWORD", default=None)
 SCRAPER_EBY_ORDERS_MAX: int = env("SCRAPER_EBY_ORDERS_MAX", default=-1)
-# Format: SCRAPER_EBY_ORDERS=order_id|order_trans_id-order_item_id[,order_id|order_trans_id-order_item_id]
+# Format: SCRAPER_EBY_ORDERS=order_id|order_trans_id-order_item_id
+#                            [,order_id|order_trans_id-order_item_id]
 SCRAPER_EBY_ORDERS = {
     x.strip() for x in env.list("SCRAPER_EBY_ORDERS", default=[])
 }
 # Strip any whitespace
 SCRAPER_EBY_ORDERS_SKIP = [
     x.strip() for x in env.list("SCRAPER_EBY_ORDERS_SKIP", default=[])
+]
+
+SCRAPER_PIM_MANUAL_LOGIN = env.bool("SCRAPER_PIM_MANUAL_LOGIN", False)
+SCRAPER_PIM_USERNAME: str = env("SCRAPER_PIM_USERNAME", default=None)
+SCRAPER_PIM_PASSWORD: str = env("SCRAPER_PIM_PASSWORD", default=None)
+SCRAPER_PIM_ORDERS_MAX: int = env("SCRAPER_PIM_ORDERS_MAX", default=-1)
+SCRAPER_PIM_ORDERS = {
+    x.strip() for x in env.list("SCRAPER_PIM_ORDERS", default=[])
+}
+SCRAPER_PIM_ORDERS_SKIP = [
+    x.strip() for x in env.list("SCRAPER_PIM_ORDERS_SKIP", default=[])
 ]
 
 

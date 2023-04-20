@@ -35,15 +35,39 @@ from ....models.shop import Shop
 from .base import BaseScraper, PagePart
 
 
-class EbayScraper(BaseScraper):
+class PimoroniScraper(BaseScraper):
     # Scrape comand and __init__
 
     def command_scrape(self):
-        pass
+        # ORDER_LIST_HTML_FILENAME_TEMPLATE
+        # order_list_htmls = len(
+        #    list(self.cache["ORDER_LISTS"].glob("order-list-*.html"))
+        # )
+        # if not self.options["use_cached_orderlist"] or not self.can_read(
+        #    json_filename
+        # ):
+        def browser_save_order_lists():
+            self.browser_visit_page_v2(self.ORDER_LIST_URL)
+            more_pages = True
+            while more_pages:
+                order_divs = self.find_elements(By.CSS_SELECTOR, "div.order")
+                self.log.debug("Found %s orders on this page", len(order_divs))
+                more_pages = self.find_elements(
+                    By.XPATH, "//a[contains(text(),'Next ')]"
+                )
+                if not more_pages:
+                    self.log.debug("There are no more pages")
+                else:
+                    self.log.debug("Going to next page")
+                    more_pages.click()
+
+        browser_save_order_lists()
+
+    name = "Pimoroni"
+    tla = "PIM"
 
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
-
         self.setup_cache("pimoroni")
         self.setup_templates()
         self.browser = None
@@ -91,144 +115,95 @@ class EbayScraper(BaseScraper):
         # pylint: disable=unused-import
 
     def browser_detect_handle_interrupt(self, expected_url):
-        time.sleep(2)
-        gdpr_accept = self.find_element(
-            By.CSS_SELECTOR, "button#gdpr-banner-accept"
+        time.sleep(1)
+        country_sel: WebElement = self.find_element(
+            By.XPATH, "//button[text()='Continue']"
         )
-        if gdpr_accept:
-            self.log.debug("Accepting GDPR/cookies")
-            gdpr_accept.click()
+        if country_sel:
+            self.log.debug("Accepting country")
+            country_sel.click()
             time.sleep(0.5)
 
-        if re.match(r".*captcha.*", self.browser.current_url):
-            if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
-                self.log.info(
-                    self.command.style.NOTICE(
-                        "Please complete captcha and press enter: ..."
-                    )
-                )
-                input()
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.browser_login(expected_url)
 
     def browser_login(self, _):
         """
-        Uses Selenium to log in eBay.
-        Returns when the browser is at url, after login.
-
-        Raises and alert in the browser if user action
-        is required.
+        Uses Selenium to log in.
         """
-        if settings.SCRAPER_EBY_MANUAL_LOGIN:
-            self.log.debug(
-                self.command.style.ERROR(
-                    "Please log in to eBay and press enter when ready."
-                )
-            )
-            input()
-        else:
-            # We (optionally) ask for this here and not earlier, since we
-            # may not need to go live
-            src_username = (
-                input("Enter eBay username:")
-                if not settings.SCRAPER_EBY_USERNAME
-                else settings.SCRAPER_EBY_USERNAME
-            )
-            src_password = (
-                getpass("Enter eBay password:")
-                if not settings.SCRAPER_EBY_PASSWORD
-                else settings.SCRAPER_EBY_PASSWORD
-            )
+        brws, username_data, password_data = self.browser_setup_login_values()
 
-            self.log.info(self.command.style.NOTICE("Trying to log in to eBay"))
-            brws = self.browser_get_instance()
-
+        if username_data and password_data:
             wait = WebDriverWait(brws, 10)
-
-            def captcha_test():
-                if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
-                    self.log.info("Please complete captcha and press enter.")
-                    input()
-
             try:
                 self.rand_sleep(0, 2)
-                captcha_test()
-                self.log.debug("Looking for %s", "input#userid")
+                xpath_sel = "//form[@id='customer_login']//input[@type='email']"
+                self.log.debug("Looking for %s", xpath_sel)
                 username = wait.until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "input#userid")
-                    ),
-                    "Could not find input#userid",
+                    EC.presence_of_element_located((By.XPATH, xpath_sel)),
+                    "Could not find {xpath_sel}",
                 )
-                captcha_test()
                 username.click()
-                username.send_keys(src_username)
-                self.rand_sleep(0, 2)
-                captcha_test()
-                self.log.debug("Looking for %s", "button#signin-continue-btn")
-                wait.until(
-                    EC.element_to_be_clickable(
-                        ((By.CSS_SELECTOR, "button#signin-continue-btn"))
-                    ),
-                    "Could not find button#signin-continue-btn",
-                ).click()
+                username.send_keys(username_data)
                 self.rand_sleep(0, 2)
 
-                captcha_test()
-                self.log.debug("Looking for %s", "input#pass")
-                password = wait.until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "input#pass")
-                    ),
-                    "Could not find input#pass",
+                xpath_sel = (
+                    "//form[@id='customer_login']//input[@type='password']"
                 )
-                self.rand_sleep(2, 2)
-                captcha_test()
+                self.log.debug("Looking for %s", xpath_sel)
+                password = wait.until(
+                    EC.presence_of_element_located((By.XPATH, xpath_sel)),
+                    f"Could not find {xpath_sel}",
+                )
                 password.click()
-                password.send_keys(src_password)
+                password.send_keys(password_data)
                 self.rand_sleep(0, 2)
 
-                self.log.debug("Looking for %s", "button#sgnBt")
+                xpath_sel = (
+                    "//form[@id='customer_login']//button[contains(@class,"
+                    " 'login')]"
+                )
+                self.log.debug("Looking for %s", xpath_sel)
                 wait.until(
                     EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "button#sgnBt"),
+                        (By.XPATH, xpath_sel),
                     ),
-                    "Could not find button#sgnBt",
+                    f"Could not find {xpath_sel}",
                 ).click()
                 self.rand_sleep(0, 2)
-                captcha_test()
+
             except TimeoutException as toe:
                 # self.browser_safe_quit()
                 raise CommandError(
-                    "Login to eBay was not successful "
+                    f"Login to {self.name} was not successful "
                     "because we could not find a expected element.."
                 ) from toe
+        time.sleep(2)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(
-                "Login to eBay was not successful. If you want continue,"
-                " complete login, and then press enter. Press Ctrl-Z to cancel."
+                (
+                    "Login to %s was not successful. If you want continue,"
+                    " complete login, and then press enter. Press Ctrl-Z to"
+                    " cancel."
+                ),
+                self.name,
             )
             input()
-        self.log.info("Login to eBay was successful.")
-
+        self.log.info("Login to %s was successful.", self.name)
 
     # Utility functions
     def setup_templates(self):
         # pylint: disable=invalid-name
-        login_url = re.escape("https://signin.ebay.com")
-        self.HOMEPAGE = "https://ebay.com"
+        # https://shop.pimoroni.com/account/login?return_url=%2Faccount
+        login_url = re.escape("https://shop.pimoroni.com/account/login")
+        self.HOMEPAGE = "https://shop.pimoroni.com/"
         self.LOGIN_PAGE_RE = rf"{login_url}.*"
-        self.ORDER_LIST_URL = "https://www.ebay.com/mye/myebay/purchase"
-        self.ITEM_URL_TEMPLATE = "https://www.ebay.com/itm/{item_id}"
+        self.ORDER_LIST_URL = "https://shop.pimoroni.com/account"
+        self.ITEM_URL_TEMPLATE = "https://shop.pimoroni.com/products/{item_name}?variant={item_variant}"
 
-        self.ORDER_URL_TEMPLATE_TRANS = (
-            "https://order.ebay.com/ord/show?"
-            "transid={order_trans_id}&itemid={order_item_id}#/"
+        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDER_LISTS"] / Path("/order-list-{page}.html")
         )
-        self.ORDER_URL_TEMPLATE = (
-            "https://order.ebay.com/ord/show?orderId={order_id}#/"
-        )
-
         self.ORDER_FILENAME_TEMPLATE: Path = str(
             self.cache["ORDERS"] / Path("{key}/order.{ext}")
         )
@@ -243,10 +218,3 @@ class EbayScraper(BaseScraper):
         elif part == PagePart.ORDER_ITEM:
             template = self.ORDER_ITEM_FILENAME_TEMPLATE
         return Path(template.format(**kwargs))
-
-
-    def setup_cache(self, base_folder: Path):
-        super().setup_cache(base_folder)
-        # pylint: disable=invalid-name
-
-
