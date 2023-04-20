@@ -17,3 +17,4 @@ storage/
 */migrations/*
 logos/
 scraper-cache
+.vscode/
