@@ -11,6 +11,7 @@ import re
 import time
 from datetime import date
 from decimal import Decimal
+from getpass import getpass
 
 # datetime as dt
 from enum import Enum
@@ -54,6 +55,8 @@ class BaseScraper(object):
     command: BaseCommand
     options: Dict
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
+    name: str = "Base"
+    tla: str = "BSE"
 
     def __init__(
         self,
@@ -122,6 +125,35 @@ class BaseScraper(object):
             return element.find_elements(by_obj, value)
         except NoSuchElementException:
             return []
+
+    def browser_setup_login_values(self):
+        if getattr(settings, f"SCRAPER_{self.tla}_MANUAL_LOGIN"):
+            self.log.debug(
+                self.command.style.ERROR(
+                    f"Please log in manually to {self.name} and press enter"
+                    " when ready."
+                )
+            )
+            input()
+            return self.browser_get_instance(), None, None
+        else:
+            # We (optionally) ask for this here and not earlier, since we
+            # may not need to go live
+            username_data = (
+                input(f"Enter {self.name} username:")
+                if not getattr(settings, f"SCRAPER_{self.tla}_USERNAME")
+                else getattr(settings, f"SCRAPER_{self.tla}_USERNAME")
+            )
+            password_data = (
+                getpass(f"Enter {self.name} password:")
+                if not getattr(settings, f"SCRAPER_{self.tla}_PASSWORD")
+                else getattr(settings, f"SCRAPER_{self.tla}_PASSWORD")
+            )
+
+            self.log.info(
+                self.command.style.NOTICE(f"Trying to log in to {self.name}")
+            )
+            return self.browser_get_instance(), username_data, password_data
 
     def browser_get_instance(self, change_ua=None):
         """

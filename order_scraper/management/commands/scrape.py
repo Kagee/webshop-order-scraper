@@ -11,13 +11,7 @@ from django.core.management.base import (
 )
 
 from ...models.shop import Shop
-from .scrapers.adafruit import AdafruitScraper
-from .scrapers.aliexpress import AliExpressScraper
-from .scrapers.amazon import AmazonScraper
-from .scrapers.distrelec import DistrelecScraper
-from .scrapers.ebay import EbayScraper
-from .scrapers.tryout import TryOutScraper
-from .scrapers.imap import IMAPScraper
+from .scrapers import *  # pylint: disable=wildcard-import
 
 
 class Command(BaseCommand):
@@ -77,6 +71,7 @@ class Command(BaseCommand):
                 "distrelec",
                 "adafruit",
                 "ebay",
+                "pimoroni",
                 "tryout",
             ],
             help="The online webshop to scrape orders from. (REQUIRED)",
@@ -196,6 +191,13 @@ class Command(BaseCommand):
                 raise CommandError("DB to CSV not supported for Adafruit")
             else:
                 AdafruitScraper(self, options).command_scrape()
+        elif options["webshop"] == "pimoroni":
+            if options["load_to_db"] or options["db_to_csv"]:
+                raise CommandError(
+                    "Load to DB and DB to CSV not supported for Pimoroni"
+                )
+            else:
+                PimoroniScraper(self, options).command_scrape()
         elif options["webshop"] == "tryout":
             TryOutScraper(self, options).command_scrape()
         else:

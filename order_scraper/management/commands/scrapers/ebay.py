@@ -37,6 +37,8 @@ from .base import BaseScraper, PagePart
 
 class EbayScraper(BaseScraper):
     # Scrape comand and __init__
+    name = "eBay"
+    tla = "EBY"
 
     def command_scrape(self):
         order_ids = self.load_or_scrape_order_ids()
@@ -102,13 +104,13 @@ class EbayScraper(BaseScraper):
                 shipment_info = order_box.find_element(
                     By.CSS_SELECTOR, "div.shipment-info"
                 )
-                #div.delivery-address-text => text
+                # div.delivery-address-text => text
                 # div.payment-instruments
                 #     div.payment-instrument-description -> text?
                 #     div. payment-instrument-top => US$
                 #     div.payment-instrument-subtext -> date?
                 #!!!! div.payment-line-item div.eui-label-value-line )> dt/dd => text
-                #div.order-summary > dt/dd => text
+                # div.order-summary > dt/dd => text
                 # div.order-foot-notes -> p -> text (not "Learn more")
                 order_info_items = {}
                 for value_line in section_data_items.find_elements(
@@ -311,36 +313,11 @@ class EbayScraper(BaseScraper):
 
     def browser_login(self, _):
         """
-        Uses Selenium to log in eBay.
-        Returns when the browser is at url, after login.
-
-        Raises and alert in the browser if user action
-        is required.
+        Uses Selenium to log in.
         """
-        if settings.SCRAPER_EBY_MANUAL_LOGIN:
-            self.log.debug(
-                self.command.style.ERROR(
-                    "Please log in to eBay and press enter when ready."
-                )
-            )
-            input()
-        else:
-            # We (optionally) ask for this here and not earlier, since we
-            # may not need to go live
-            src_username = (
-                input("Enter eBay username:")
-                if not settings.SCRAPER_EBY_USERNAME
-                else settings.SCRAPER_EBY_USERNAME
-            )
-            src_password = (
-                getpass("Enter eBay password:")
-                if not settings.SCRAPER_EBY_PASSWORD
-                else settings.SCRAPER_EBY_PASSWORD
-            )
+        brws, username_data, password_data = self.browser_setup_login_values()
 
-            self.log.info(self.command.style.NOTICE("Trying to log in to eBay"))
-            brws = self.browser_get_instance()
-
+        if username_data and password_data:
             wait = WebDriverWait(brws, 10)
 
             def captcha_test():
