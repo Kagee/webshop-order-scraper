@@ -65,7 +65,7 @@ class AmazonScraper(BaseScraper):
     def __init__(self, command: BaseCommand, options: Dict):
         super().__init__(command, options, __name__)
         # pylint: disable=invalid-name
-        self.DO_CACHE_ORDERLIST = options["cache_orderlist"]
+        self.DO_CACHE_ORDERLIST = options["use_cached_orderlist"]
         self.TLD = self.check_tld(options["tld"])
         self.LOGIN_PAGE_RE = rf"^https://www\.amazon\.{self.TLD}/ap/signin"
         self.SCRAPER_AMZ_ORDERS = (

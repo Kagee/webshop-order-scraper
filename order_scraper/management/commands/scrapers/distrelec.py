@@ -26,7 +26,7 @@ class DistrelecScraper(BaseScraper):
         # pylint: disable=invalid-name
         self.DOMAIN = options["domain"]
         self.LOGIN_PAGE_RE = rf"^https://{re.escape(self.DOMAIN)}/login.+"
-        self.DO_CACHE_ORDERLIST = options["cache_orderlist"]
+        self.DO_CACHE_ORDERLIST = options["use_cached_orderlist"]
         self.setup_cache(self.DOMAIN)
         self.setup_templates()
 
