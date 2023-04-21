@@ -1,27 +1,22 @@
 # pylint: disable=unused-import
-import os
 import re
 import time
-from pathlib import Path
 from typing import Dict, List
-from lxml.etree import tostring
-from lxml.html.soupparser import fromstring
-from django.conf import settings
-from django.core.management.base import BaseCommand
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+# from django.conf import settings
+# from django.core.management.base import BaseCommand
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-import random
-import string
 from .base import BaseScraper, PagePart
 
 
 # Scraper for trying out code for other scrapers
 class TryOutScraper(BaseScraper):
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         self.LOGIN_PAGE_RE = r"^https://www\.amazon\.de/ap/signin"
         self.setup_cache("tryout")
 
@@ -29,10 +24,7 @@ class TryOutScraper(BaseScraper):
         return None
 
     def command_scrape(self):
-        brws = self.browser_get_instance(emulate_mobile_browser=True)
-
-        time.sleep(3000)
-        self.browser_safe_quit()
+        self.log.debug("I am running!")
 
     def browser_cleanup_item_page(self):
         brws = self.browser

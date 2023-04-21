@@ -6,50 +6,52 @@ import re
 from email.policy import default as default_policy
 from getpass import getpass
 from pathlib import Path
-
+from typing import Dict
 from bs4 import BeautifulSoup
-from django.conf import settings
-from django.core.management.base import CommandError
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
 
+from . import settings
+
 
 class IMAPScraper(object):
-    def __init__(self) -> None:
+    def __init__(self, options: Dict) -> None:
         self.log = logging.getLogger(__name__)
+        self.log.setLevel(options.loglevel)
 
     def command_scrape(self):
         imap_username = (
-            input(f"Enter username for {settings.SCRAPER_IMAP_SERVER}: ")
-            if not settings.SCRAPER_IMAP_USERNAME
-            else settings.SCRAPER_IMAP_USERNAME
+            input(f"Enter username for {settings.IMAP_SERVER}: ")
+            if not settings.IMAP_USERNAME
+            else settings.IMAP_USERNAME
         )
         imap_password = (
             getpass(
                 f"Enter password for {imap_username} at"
-                f" {settings.SCRAPER_IMAP_SERVER}: "
+                f" {settings.IMAP_SERVER}: "
             )
-            if not settings.SCRAPER_IMAP_PASSWORD
-            else settings.SCRAPER_IMAP_PASSWORD
+            if not settings.IMAP_PASSWORD
+            else settings.IMAP_PASSWORD
         )
 
-        self.log.debug(
-            "IMAPClient for %s:%s",
-            settings.SCRAPER_IMAP_SERVER,
-            settings.SCRAPER_IMAP_PORT,
+        self.log.info(
+            "Connecting to %s:%s",
+            settings.IMAP_SERVER,
+            settings.IMAP_PORT,
         )
         imap_client = IMAPClient(
-            host=settings.SCRAPER_IMAP_SERVER, port=settings.SCRAPER_IMAP_PORT
+            host=settings.IMAP_SERVER, port=settings.IMAP_PORT
         )
         try:
             imap_client.login(imap_username, imap_password)
         except LoginError as login_error:
-            raise CommandError("Invalid credentials") from login_error
+            self.log.error("Invalid credentials")
+            raise login_error
         mailboxes = []
-        if settings.SCRAPER_IMAP_FLAGS:
+        if settings.IMAP_FLAGS:
             self.log.debug(
                 "Using SCRAPER_IMAP_FLAG (%s), ignoring SCRAPER_IMAP_FOLDER",
-                settings.SCRAPER_IMAP_FLAGS,
+                settings.IMAP_FLAGS,
             )
 
             for mailbox in imap_client.list_folders():
@@ -59,7 +61,7 @@ class IMAPScraper(object):
                         for flag in mailbox[0]
                         if any(
                             f
-                            for f in settings.SCRAPER_IMAP_FLAGS
+                            for f in settings.IMAP_FLAGS
                             if flag.decode("utf-8") == f
                         )
                     ]
@@ -67,15 +69,15 @@ class IMAPScraper(object):
                     self.log.debug(
                         "Folder '%s' has one of flags '%s'",
                         mailbox[2],
-                        ", ".join(settings.SCRAPER_IMAP_FLAGS),
+                        ", ".join(settings.IMAP_FLAGS),
                     )
                     mailboxes.append(mailbox[2])
 
-        elif settings.SCRAPER_IMAP_FOLDERS:
+        elif settings.IMAP_FOLDERS:
             self.log.debug("Using SCRAPER_IMAP_FOLDER")
-            mailboxes = settings.SCRAPER_IMAP_FOLDERS
+            mailboxes = settings.IMAP_FOLDERS
         else:
-            self.log.debug("Looking in AAAAAALLLL mailboxes")
+            self.log.debug("Looking in all mailboxes manually")
             for mailbox in imap_client.list_folders():
                 mailboxes.append(mailbox[2])
 
@@ -93,7 +95,7 @@ class IMAPScraper(object):
             self.log.debug("Selecting folder %s", mailbox)
             imap_client.select_folder(mailbox)
             mailbox_msgs = imap_client.search(search_list)
-            self.log.debug("Found %s messages from eBay", len(mailbox_msgs))
+            self.log.info("Found %s messages from eBay", len(mailbox_msgs))
             messages.append((mailbox, mailbox_msgs))
 
         def find_in_html(content):
@@ -159,7 +161,7 @@ class IMAPScraper(object):
 
                 else:
                     self.log.debug(
-                        '%s Nothin found in "%s"',
+                        '%s Nothing found in message with title "%s"',
                         uid,
                         email.header.decode_header(
                             email_message.get("Subject")
@@ -168,8 +170,8 @@ class IMAPScraper(object):
 
         self.log.debug("%s", imap_client.logout().decode("utf-8"))
         # (transid, itemid)
-        self.log.debug("Orders: %s", len(orders))
-        imap_folder = Path(settings.SCRAPER_CACHE_BASE, "imap")
+        self.log.info("Found %s possible eBay order number tuples", len(orders))
+        imap_folder = Path(settings.CACHE_BASE, "imap")
         try:
             os.makedirs(imap_folder)
         except FileExistsError:

@@ -1,5 +1,0 @@
-#! /bin/bash
-# Requires HLO_INSTALLED_APPS=django_extensions in .env
-# and a certificate and key in tls/
-[ -z "$VIRTUAL_ENV" ] && source ./venv/bin/activate
-python manage.py runserver_plus 0.0.0.0:8000 --cert-file tls/*.pem --key-file tls/*.key

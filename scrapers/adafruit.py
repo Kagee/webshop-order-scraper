@@ -4,112 +4,18 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
-from django.core.files import File
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from djmoney.money import Money
-from ....models.attachement import Attachement
-from ....models.order import Order
-from ....models.orderitem import OrderItem
-from ....models.shop import Shop
 from .base import BaseScraper, PagePart
+from . import settings
 
 
 class AdafruitScraper(BaseScraper):
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         self.setup_cache("adafruit")
         self.setup_templates()
-
-    def command_load_to_db(self):
-        if settings.SCRAPER_ADA_DB_SHOP_ID != -1:
-            self.log.debug("Using db shop ID from SCRAPER_ADA_DB_SHOP_ID")
-            db_shop_id = int(settings.SCRAPER_ADA_DB_ID)
-        elif self.options["db_shop_id"] != -1:
-            self.log.debug("Using db shop ID from --db-shop-id")
-            db_shop_id = int(self.options["db_shop_id"])
-        else:
-            self.log.debug(
-                "No value for db shop ID found, unable to load to db. Need"
-                " either SCRAPER_ADA_DB_SHOP_ID or --db-shop-id"
-            )
-            raise CommandError(
-                "No value for db shop ID found, unable to load to db."
-            )
-        shop = Shop.objects.get(id=db_shop_id)
-        self.log.debug("Loaded shop from model: %s", shop)
-
-        self.log.debug("Loading on-disk data")
-        for json_file in self.cache["ORDERS"].glob("*/*.json"):
-            self.log.debug(
-                "Processing file %s/%s", json_file.parent.name, json_file.name
-            )
-            order_dict = self.read(json_file, from_json=True)
-
-            for order_id, order in order_dict.items():
-                items = order["items"].copy()
-                del order["items"]
-                date = order["date_purchased"]
-                del order["date_purchased"]
-                # self.pprint(items)
-                prices = {
-                    "total": Money(0, "USD"),
-                    "subtotal": Money(0, "USD"),
-                    "tax": Money(0, "USD"),
-                    "shipping": Money(0, "USD"),
-                }
-                defaults = {
-                    "date": datetime.fromisoformat(date),
-                    "extra_data": order,
-                }
-                defaults.update(prices)
-                order_object, created = Order.objects.update_or_create(
-                    shop=shop,
-                    order_id=order_id,
-                    defaults=defaults,
-                )
-
-                for item_id, item in items.items():
-                    # print(item_id, item)
-                    name = item["product name"]
-                    del item["product name"]
-
-                    quantity = item["quantity"]
-                    del item["quantity"]
-
-                    thumb_path = self.cache["BASE"] / item["png"]
-                    thumb_img = File(open(thumb_path, "rb"), thumb_path.name)
-                    del item["png"]
-
-                    # TODO: Save html and pdf as attachements
-                    # del item["html"]
-                    # del item["pdf"]
-
-                    item_object, created = OrderItem.objects.update_or_create(
-                        order=order_object,
-                        item_id=item_id,
-                        item_sku="",  # Adafruit has no SKUs?
-                        defaults={
-                            "name": name,
-                            "count": quantity,
-                            "extra_data": item,
-                        },
-                    )
-
-                    if item_object.thumbnail:
-                        item_object.thumbnail.delete()
-                    item_object.thumbnail = thumb_img
-                    item_object.save()
-
-                    if thumb_img:
-                        thumb_img.close()
-                if created:
-                    self.log.debug("Created order %s", order_id)
-                else:
-                    self.log.debug("Created or updated order %s", order_object)
 
     def usage(self):
         print(f"""
@@ -152,10 +58,10 @@ class AdafruitScraper(BaseScraper):
     def command_scrape(self):
         if not self.can_read(self.ORDERS_CSV):
             self.usage()
-            raise CommandError("Could not find order_history.csv")
+            raise IOError("Could not find order_history.csv")
         if not self.can_read(self.ITEMS_CSV):
             self.usage()
-            raise CommandError("Could not find products_history.csv")
+            raise IOError("Could not find products_history.csv")
 
         orders = self.combine_orders_items(self.parse_order_csv())
         self.browser_save_item_info(orders)
@@ -166,7 +72,7 @@ class AdafruitScraper(BaseScraper):
             self.write(order_json_filename, {order_id: order}, to_json=True)
 
     def browser_save_item_info(self, orders):
-        max_items = settings.SCRAPER_ADA_ITEMS_MAX + 1
+        max_items = settings.ADA_ITEMS_MAX + 1
         counter = 0
         for order_id, order in orders.items():
             self.log.info("Working on order %s", order_id)
@@ -175,15 +81,9 @@ class AdafruitScraper(BaseScraper):
             for item_id, item in order["items"].items():
                 self.log.debug("Parsing item id %s", item_id)
                 counter += 1
-                if (
-                    settings.SCRAPER_ADA_ITEMS
-                    and item_id not in settings.SCRAPER_ADA_ITEMS
-                ):
+                if settings.ADA_ITEMS and item_id not in settings.ADA_ITEMS:
                     self.log.debug(
-                        (
-                            "Skipping item id %s because it is not in"
-                            " SCRAPER_ADA_ITEMS"
-                        ),
+                        "Skipping item id %s because it is not in ADA_ITEMS",
                         item_id,
                     )
                     continue
@@ -191,7 +91,7 @@ class AdafruitScraper(BaseScraper):
                     if counter == max_items:
                         self.log.debug(
                             "Stopping after %s items",
-                            settings.SCRAPER_ADA_ITEMS_MAX,
+                            settings.ADA_ITEMS_MAX,
                         )
                         continue
                     elif counter > max_items:

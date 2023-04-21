@@ -5,21 +5,21 @@ import os
 import re
 import time
 import urllib.request
-from getpass import getpass
 from pathlib import Path
 from typing import Dict, Final, List
 from urllib.parse import urlparse
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-
+from . import settings
 from .base import BaseScraper, PagePart
+
+# pylint: disable=unused-import
+from .utils import RED, BLUE, GREEN, AMBER
 
 
 class AmazonScraper(BaseScraper):
@@ -35,15 +35,13 @@ class AmazonScraper(BaseScraper):
         self.save_order_lists_to_json(order_lists)
         order_lists = self.load_order_lists_from_json()
 
-        if settings.SCRAPER_AMZ_ORDERS_SKIP:
+        if settings.AMZ_ORDERS_SKIP:
             self.log.debug(
                 "Skipping scraping order IDs: %s",
-                settings.SCRAPER_AMZ_ORDERS_SKIP,
+                settings.AMZ_ORDERS_SKIP,
             )
-        if self.SCRAPER_AMZ_ORDERS:
-            self.log.debug(
-                "Scraping only order IDs: %s", self.SCRAPER_AMZ_ORDERS
-            )
+        if self.AMZ_ORDERS:
+            self.log.debug("Scraping only order IDs: %s", self.AMZ_ORDERS)
         count = 0
         for year in self.YEARS:
             self.log.debug("Year: %s", year)
@@ -62,22 +60,24 @@ class AmazonScraper(BaseScraper):
     def command_load_to_db(self):
         pass
 
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         # pylint: disable=invalid-name
-        self.DO_CACHE_ORDERLIST = options["use_cached_orderlist"]
-        self.TLD = self.check_tld(options["tld"])
+        self.DO_CACHE_ORDERLIST = options.use_cached_orderlist
+        self.TLD = self.check_tld(options.tld)
         self.LOGIN_PAGE_RE = rf"^https://www\.amazon\.{self.TLD}/ap/signin"
-        self.SCRAPER_AMZ_ORDERS = (
-            settings.SCRAPER_AMZ_ORDERS[self.TLD]
-            if self.TLD in settings.SCRAPER_AMZ_ORDERS
+        self.AMZ_ORDERS = (
+            settings.AMZ_ORDERS[self.TLD]
+            if self.TLD in settings.AMZ_ORDERS
             else []
         )
         super().setup_cache(Path(f'amazon_{self.TLD.replace(".","_")}'))
         self.YEARS = self.check_year(
-            options["year"], options["start_year"], options["not_archived"]
+            options.year, options.start_year, options.not_archived
         )
         self.setup_templates()
+        self.name = f"amazon.{options.tld}"
+        self.tla = "AMZ"
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -133,21 +133,18 @@ class AmazonScraper(BaseScraper):
                 order_id,
             )
             return True
-        if (
-            (
-                self.SCRAPER_AMZ_ORDERS
-                and order_id not in self.SCRAPER_AMZ_ORDERS
-            )
-        ) or (order_id in settings.SCRAPER_AMZ_ORDERS_SKIP):
+        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
+            order_id in settings.AMZ_ORDERS_SKIP
+        ):
             self.log.info("Skipping order ID %s", order_id)
             return True
-        if settings.SCRAPER_AMZ_ORDERS_MAX > 0:
-            if count == (settings.SCRAPER_AMZ_ORDERS_MAX + 1):
+        if settings.AMZ_ORDERS_MAX > 0:
+            if count == (settings.AMZ_ORDERS_MAX + 1):
                 self.log.info(
                     "Scraped %s order(s), breaking",
-                    settings.SCRAPER_ALI_ORDERS_MAX,
+                    settings.ALI_ORDERS_MAX,
                 )
-            if count > settings.SCRAPER_AMZ_ORDERS_MAX:
+            if count > settings.AMZ_ORDERS_MAX:
                 return True
 
     def parse_order(self, order_id: Dict, order_id_dict: Dict):
@@ -325,7 +322,7 @@ class AmazonScraper(BaseScraper):
                 "We found no order summary, invoices or other attachementes to"
                 " save. This is possibly a bug."
             )
-            raise CommandError(
+            raise RuntimeError(
                 "We found no order summary, invoices or other attachementes to"
                 " save. This is possibly a bug."
             )
@@ -418,9 +415,7 @@ class AmazonScraper(BaseScraper):
                 )
             else:
                 self.log.warning(
-                    self.command.style.WARNING(
-                        "Unknown attachement, not saving: %s, %s"
-                    ),
+                    AMBER("Unknown attachement, not saving: %s, %s"),
                     text,
                     href,
                 )
@@ -464,7 +459,7 @@ class AmazonScraper(BaseScraper):
                                 txtvalue,
                             )
                             if not matches:
-                                raise CommandError(
+                                raise RuntimeError(
                                     f"We failed to match '{txtvalue}' "
                                     "to one of id/date/total"
                                 )
@@ -510,7 +505,7 @@ class AmazonScraper(BaseScraper):
                             value_matches["date"].strftime("%Y-%m-%d"),
                         )
         else:
-            self.log.info("No order HTML to parse")
+            self.log.debug("No order HTML to parse")
         return order_lists
 
     def save_order_list_cache_html_file(self, year, start_index):
@@ -582,11 +577,11 @@ class AmazonScraper(BaseScraper):
                 if found_year:
                     missing_years.remove(year)
 
-        self.log.info(
+        self.log.debug(
             "Found HTML cache for order list: %s",
             ", ".join([str(x) for x in self.YEARS if x not in missing_years]),
         )
-        self.log.info(
+        self.log.debug(
             "Found JSON cache for order list: %s",
             ", ".join([str(x) for x in json_cache]),
         )
@@ -634,36 +629,12 @@ class AmazonScraper(BaseScraper):
 
     def browser_login(self, _):
         """
-        Uses Selenium to log in Amazon.
-        Returns when the browser is at url, after login.
-
-        Raises and alert in the browser if user action
-        is required.
+        Uses Selenium to log in
         """
-        if settings.SCRAPER_AMZ_MANUAL_LOGIN:
-            self.log.debug(
-                self.command.style.ERROR(
-                    f"Please log in to amazon.{self.TLD} and press enter when"
-                    " ready."
-                )
-            )
-            input()
-        else:
-            # We (optionally) ask for this here and not earlier, since we
-            # may not need to go live
-            amz_username = (
-                input(f"Enter Amazon.{self.TLD} username: ")
-                if not settings.SCRAPER_AMZ_USERNAME
-                else settings.SCRAPER_AMZ_USERNAME
-            )
-            amz_password = (
-                getpass(f"Enter Amazon.{self.TLD} password: ")
-                if not settings.SCRAPER_AMZ_PASSWORD
-                else settings.SCRAPER_AMZ_PASSWORD
-            )
-
+        brws, username_data, password_data = self.browser_setup_login_values()
+        if username_data and password_data:
             self.log.info(
-                self.command.style.NOTICE("We need to log in to amazon.%s"),
+                AMBER("We need to log in to amazon.%s"),
                 self.TLD,
             )
             brws = self.browser_get_instance()
@@ -674,7 +645,7 @@ class AmazonScraper(BaseScraper):
                 username = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_email"))
                 )
-                username.send_keys(amz_username)
+                username.send_keys(username_data)
                 self.rand_sleep()
                 wait.until(
                     EC.element_to_be_clickable(((By.ID, "continue")))
@@ -683,7 +654,7 @@ class AmazonScraper(BaseScraper):
                 password = wait.until(
                     EC.presence_of_element_located((By.ID, "ap_password"))
                 )
-                password.send_keys(amz_password)
+                password.send_keys(password_data)
                 self.rand_sleep()
                 remember = wait.until(
                     EC.presence_of_element_located((By.NAME, "rememberMe"))
@@ -698,25 +669,33 @@ class AmazonScraper(BaseScraper):
                 sign_in.click()
                 self.rand_sleep()
 
-            except TimeoutException:
+            except TimeoutException as tee:
                 self.browser_safe_quit()
-                # pylint: disable=raise-missing-from
-                raise CommandError(
-                    "Login to Amazon was not successful "
-                    "because we could not find a expected element.."
+                self.log.error(
+                    RED(
+                        "Login to Amazon was not successful "
+                        "because we could not find a expected element.."
+                    )
                 )
+                raise tee
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.error("Login to Amazon was not successful.")
             self.log.error(
-                "If you want to continue, fix the login, and then press enter."
+                RED(
+                    "If you want to continue, fix the login, and then press"
+                    " enter."
+                )
             )
             input()
             if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
-                raise CommandError(
-                    "Login to Amazon was not successful, even after user"
-                    " interaction."
+                self.log.error(
+                    RED(
+                        "Login to Amazon was not successful, even after user"
+                        " interaction."
+                    )
                 )
-        self.log.info("Login to Amazon was successful.")
+                raise RuntimeError()
+        self.log.info(GREEN("Login to Amazon was successful."))
 
     def browser_scrape_order(
         self, order_id: str, order_cache_dir: Path
@@ -820,7 +799,7 @@ class AmazonScraper(BaseScraper):
                     )
                 except TimeoutException:
                     # pylint: disable=raise-missing-from
-                    raise CommandError(
+                    raise RuntimeError(
                         "Invoice popup did not open as expected, or did not"
                         " find invoice link. We need this open to save it to"
                         " HTML cache."
@@ -868,28 +847,28 @@ class AmazonScraper(BaseScraper):
 
             # Javascript above happens async
             time.sleep(11)
-            try:
-                brws.find_element(
+            see_more: WebElement = self.find_element(
                     By.XPATH,
                     (
                         "//div[@id = 'productOverview_feature_div']"
                         "//span[contains(@class, 'a-expander-prompt')]"
                         "[contains(text(), 'See more')]"
                     ),
-                ).click()
-            except NoSuchElementException:
-                pass
-            try:
-                brws.find_element(
+                )
+            if see_more and see_more.is_displayed():
+                see_more.click()
+
+            read_more: WebElement = self.find_element(
                     By.XPATH,
                     (
                         "//div[@id = 'bookDescription_feature_div']"
                         "//span[contains(@class, 'a-expander-prompt')]"
                         "[contains(text(), 'Read more')]"
                     ),
-                ).click()
-            except NoSuchElementException:
-                pass
+                )
+            if read_more and read_more.is_displayed():
+                read_more.click()
+
             self.browser_cleanup_item_page()
             item_html_filename = self.part_to_filename(
                 PagePart.ORDER_ITEM,
@@ -1115,7 +1094,7 @@ class AmazonScraper(BaseScraper):
                     'But we found a "Next" button. '
                     "Don't know how to handle this..."
                 )
-                raise CommandError("See critical error above")
+                raise RuntimeError("See critical error above")
             return False
 
         return found_next_button and next_button_works
@@ -1126,7 +1105,7 @@ class AmazonScraper(BaseScraper):
         years = list()
         if opt_years and start_year:
             self.log.error("cannot use both --year and --start-year")
-            raise CommandError("cannot use both --year and --start-year")
+            raise RuntimeError("cannot use both --year and --start-year")
         if opt_years:
             opt_years = sorted(set(int(year) for year in opt_years.split(",")))
             if any(
@@ -1139,7 +1118,7 @@ class AmazonScraper(BaseScraper):
                     f" {', '.join(str(year) for year in opt_years)}"
                 )
                 self.log.error(err)
-                raise CommandError(err)
+                raise RuntimeError(err)
             years = opt_years
         elif start_year:
             if start_year > datetime.date.today().year or start_year < 1990:
@@ -1148,7 +1127,7 @@ class AmazonScraper(BaseScraper):
                     f" past: {start_year}"
                 )
                 self.log.error(err)
-                raise CommandError(err)
+                raise RuntimeError(err)
             years = sorted(range(start_year, datetime.date.today().year + 1))
         else:
             years = [datetime.date.today().year]
@@ -1198,27 +1177,27 @@ class AmazonScraper(BaseScraper):
         }
         if tld not in amazones:
             self.log.error(
-                self.command.style.ERROR("Site: amazon.%s. %s"),
+                RED("Site: amazon.%s. %s"),
                 tld,
                 statuses[4],
             )
         elif amazones[tld][1] in [2, 3]:
             self.log.warning(
-                self.command.style.NOTICE("Site: amazon.%s. %s. %s"),
+                AMBER("Site: amazon.%s. %s. %s"),
                 tld,
                 amazones[tld][0],
                 statuses[amazones[tld][1]],
             )
         elif amazones[tld][1] == 1:
             self.log.warning(
-                self.command.style.WARNING("Site: amazon.%s. %s. %s"),
+                BLUE("Site: amazon.%s. %s. %s"),
                 tld,
                 amazones[tld][0],
                 statuses[amazones[tld][1]],
             )
         else:
             self.log.info(
-                self.command.style.SUCCESS("Site: amazon.%s. %s. %s"),
+                GREEN("Site: amazon.%s. %s. %s"),
                 tld,
                 amazones[tld][0],
                 statuses[amazones[tld][1]],

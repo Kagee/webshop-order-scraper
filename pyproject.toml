@@ -1,39 +1,29 @@
 [project]
-name = "homelab-organizer"
-version = "0.2023.2"
-description = "Web app for organizing stuff in your homelab"
+name = "webshop-scraper"
+version = "0.2023.1"
+description = "Command line tool for scraping orders from multiple web shops"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
+# https://pypi.org/classifiers/
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Environment :: Web Environment",
   "Environment :: Console",
-  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
-  "Framework :: Django :: 3.2"
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 ]
 
 [project.urls]
-repository = "https://github.com/Kagee/homelab-organizer.git"
-
-[tool.mypy]
-plugins = ["mypy_django_plugin.main"]
-
-[tool.django-stubs]
-django_settings_module = "hlo.settings"
-
-# https://www.codeac.io/documentation/pylint-configuration.html
+repository = "https://github.com/Kagee/webshop-scraper.git"
 
 [tool.pylint.'MAIN']
 extension-pkg-allow-list = [
   "lxml",
 ]
-load-plugins = "pylint_django"
 
 [tool.pyright]
-# This makes pyright not mark code behind thinks like
-# os.name != "nt" as unreacable.
+# This makes pyright not mark code behind
+# things like os.name != "nt" as unreacable.
 pythonPlatform = ""
 
 [tool.pylint.'MESSAGES CONTROL']
@@ -48,12 +38,6 @@ disable = [
 
 [tool.pylint.miscellaneous]
 notes = ["FIXME", "XXX", "TODO", "NOTE"]
-
-[tool.pylint."django foreign keys referenced by strings"]
-# A module containing Django settings to be used while linting.
-django-settings-module = "hlo.settings"
-
-
 
 [tool.black]
 line-length = 80

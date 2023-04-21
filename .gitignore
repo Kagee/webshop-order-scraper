@@ -18,3 +18,5 @@ storage/
 logos/
 scraper-cache
 .vscode/
+# symlink = "file"
+.vscode

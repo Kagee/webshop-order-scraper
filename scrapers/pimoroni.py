@@ -1,38 +1,16 @@
-# pylint: disable=unused-import
-import csv
-import random
 import re
-import string
-import sys
 import time
-from datetime import datetime
-from getpass import getpass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
-from django.conf import settings
-from django.core.files import File
-from django.core.management.base import BaseCommand, CommandError
-from selenium.common.exceptions import (
-    ElementClickInterceptedException,
-    NoAlertPresentException,
-    NoSuchElementException,
-    NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
-)
-from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from ....models.attachement import Attachement
-from ....models.order import Order
-from ....models.orderitem import OrderItem
-from ....models.shop import Shop
 from .base import BaseScraper, PagePart
+from .utils import *
 
 
 class PimoroniScraper(BaseScraper):
@@ -66,8 +44,8 @@ class PimoroniScraper(BaseScraper):
     name = "Pimoroni"
     tla = "PIM"
 
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         self.setup_cache("pimoroni")
         self.setup_templates()
         self.browser = None
@@ -173,11 +151,14 @@ class PimoroniScraper(BaseScraper):
                 self.rand_sleep(0, 2)
 
             except TimeoutException as toe:
-                # self.browser_safe_quit()
-                raise CommandError(
-                    f"Login to {self.name} was not successful "
-                    "because we could not find a expected element.."
-                ) from toe
+                self.log.error(
+                    (
+                        "Login to %s was not successful "
+                        "because we could not find a expected element.."
+                    ),
+                    self.name,
+                )
+                raise toe
         time.sleep(2)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(
@@ -189,7 +170,7 @@ class PimoroniScraper(BaseScraper):
                 self.name,
             )
             input()
-        self.log.info("Login to %s was successful.", self.name)
+        self.log.info(GREEN("Login to %s was successful."), self.name)
 
     # Utility functions
     def setup_templates(self):

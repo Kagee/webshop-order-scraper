@@ -1,38 +1,17 @@
-# pylint: disable=unused-import
-import csv
-import random
 import re
-import string
-import sys
 import time
-from datetime import datetime
-from getpass import getpass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
-from django.conf import settings
-from django.core.files import File
-from django.core.management.base import BaseCommand, CommandError
-from selenium.common.exceptions import (
-    ElementClickInterceptedException,
-    NoAlertPresentException,
-    NoSuchElementException,
-    NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
-)
-from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from ....models.attachement import Attachement
-from ....models.order import Order
-from ....models.orderitem import OrderItem
-from ....models.shop import Shop
 from .base import BaseScraper, PagePart
+from . import settings
+from .utils import *
 
 
 class EbayScraper(BaseScraper):
@@ -50,8 +29,8 @@ class EbayScraper(BaseScraper):
         order_data = {}
         for order_id in order_ids:
             if (
-                settings.SCRAPER_EBY_ORDERS_MAX > 0
-                and counter == settings.SCRAPER_EBY_ORDERS_MAX
+                settings.EBY_ORDERS_MAX > 0
+                and counter == settings.EBY_ORDERS_MAX
             ):
                 break
             is_old_style_order_id = True
@@ -74,15 +53,12 @@ class EbayScraper(BaseScraper):
                 key=key, ext="json"
             )
 
-            if (
-                settings.SCRAPER_EBY_ORDERS
-                and key not in settings.SCRAPER_EBY_ORDERS
-            ):
+            if settings.EBY_ORDERS and key not in settings.EBY_ORDERS:
                 self.log.debug("Not in allowlist: %s", key)
                 continue
             if (
-                len(settings.SCRAPER_EBY_ORDERS_SKIP)
-                and key in settings.SCRAPER_EBY_ORDERS_SKIP
+                len(settings.EBY_ORDERS_SKIP)
+                and key in settings.EBY_ORDERS_SKIP
             ):
                 self.log.debug("Not in blocklist: %s", key)
                 continue
@@ -180,9 +156,8 @@ class EbayScraper(BaseScraper):
 
         # self.pprint(order_ids)
 
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
-
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         self.setup_cache("ebay")
         self.setup_templates()
         self.load_imap()
@@ -199,7 +174,7 @@ class EbayScraper(BaseScraper):
     def load_or_scrape_order_ids(self):
         order_ids = []
         json_filename = self.cache["ORDER_LISTS"] / "order-list.json"
-        if not self.options["use_cached_orderlist"] or not self.can_read(
+        if not self.options.use_cached_orderlist or not self.can_read(
             json_filename
         ):
             # We do not want to use cached orderlist
@@ -218,7 +193,7 @@ class EbayScraper(BaseScraper):
                     break
                 next_link.click()
                 self.rand_sleep(2, 4)
-            self.log.debug(
+            self.log.info(
                 "Loaded %s new style order ids from eBay.com", len(order_ids)
             )
             self.log.debug(
@@ -228,18 +203,17 @@ class EbayScraper(BaseScraper):
             )
             self.write(json_filename, order_ids, to_json=True)
         else:
-            self.log.debug(
+            self.log.info(
                 "Reading order list from %s/%s",
                 json_filename.parent.name,
                 json_filename.name,
             )
             order_ids = self.read(json_filename, from_json=True)
-            self.log.debug(
+            self.log.info(
                 "Loaded %s new style order ids from json", len(order_ids)
             )
 
         order_ids += self.IMAP_DATA
-        print(len(order_ids))
         return order_ids
 
     # LXML-heavy functions
@@ -257,11 +231,9 @@ class EbayScraper(BaseScraper):
                     " Safari/537.36"
                 )
             }
-        if settings.SCRAPER_EBY_MANUAL_LOGIN:
+        if settings.EBY_MANUAL_LOGIN:
             self.log.debug(
-                self.command.style.ERROR(
-                    "Please log in to eBay and press enter when ready."
-                )
+                RED("Please log in to eBay and press enter when ready.")
             )
             input()
             brws = self.browser_get_instance(**browser_kwargs)
@@ -303,9 +275,7 @@ class EbayScraper(BaseScraper):
         if re.match(r".*captcha.*", self.browser.current_url):
             if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
                 self.log.info(
-                    self.command.style.NOTICE(
-                        "Please complete captcha and press enter: ..."
-                    )
+                    AMBER("Please complete captcha and press enter: ...")
                 )
                 input()
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
@@ -371,7 +341,7 @@ class EbayScraper(BaseScraper):
                 captcha_test()
             except TimeoutException as toe:
                 # self.browser_safe_quit()
-                raise CommandError(
+                raise RuntimeError(
                     "Login to eBay was not successful "
                     "because we could not find a expected element.."
                 ) from toe
@@ -381,7 +351,7 @@ class EbayScraper(BaseScraper):
                 " complete login, and then press enter. Press Ctrl-Z to cancel."
             )
             input()
-        self.log.info("Login to eBay was successful.")
+        self.log.info(GREEN("Login to eBay was successful."))
 
     def browser_website_switch_mode(self, switch_to_mode=None):
         if self.WEBSITE_MODE == switch_to_mode:
@@ -458,6 +428,4 @@ class EbayScraper(BaseScraper):
     def setup_cache(self, base_folder: Path):
         super().setup_cache(base_folder)
         # pylint: disable=invalid-name
-        self.IMAP_JSON = Path(
-            settings.SCRAPER_CACHE_BASE, "imap", "imap-ebay.json"
-        )
+        self.IMAP_JSON = Path(settings.CACHE_BASE, "imap", "imap-ebay.json")

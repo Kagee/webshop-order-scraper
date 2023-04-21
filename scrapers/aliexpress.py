@@ -4,91 +4,33 @@ import random
 import re
 import time
 from datetime import datetime
-from getpass import getpass
 from pathlib import Path
 from typing import Any, Dict, Final, List
-import csv
-from datetime import date
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
-from price_parser import Price
-from selenium.common.exceptions import (
-    ElementClickInterceptedException,
-    NoAlertPresentException,
-    NoSuchElementException,
-    NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
-)
+from selenium.common.exceptions import (ElementClickInterceptedException,
+                                        NoAlertPresentException,
+                                        NoSuchElementException,
+                                        NoSuchWindowException,
+                                        StaleElementReferenceException,
+                                        TimeoutException)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from djmoney.money import Money
 
-from ....models.attachement import Attachement
-from ....models.order import Order
-from ....models.orderitem import OrderItem
-from ....models.shop import Shop
+from . import settings
 from .base import BaseScraper
-from decimal import Decimal
+# pylint: disable=unused-import
+from .utils import AMBER, BLUE, GREEN, RED
 
 
 class AliExpressScraper(BaseScraper):
-    def command_db_to_csv(self):
-        curr_dict = self.load_currency_to_nok_dict()
-
-        def curr_val(curr_day_dict, curr, val):
-            return (Decimal(val) / curr_day_dict[curr][0]) * curr_day_dict[
-                curr
-            ][1]
-
-        shop = self.get_shop()
-        queryset = Order.objects.filter(shop=shop).values()
-        orders_with_nok = []
-        for value in queryset:
-            value.pop("extra_data", None)
-            curr_day_dict = curr_dict[str(value["date"])]
-            for value_name in ["total", "subtotal", "tax", "shipping"]:
-                value[f"{value_name}_nok"] = round(
-                    curr_val(
-                        curr_day_dict,
-                        value[f"{value_name}_currency"],
-                        value[f"{value_name}"],
-                    ),
-                    2,
-                )
-            orders_with_nok.append(value)
-        self.remove(self.ORDER_CSV_FILENAME)
-        with open(
-            self.ORDER_CSV_FILENAME, "w", newline="", encoding="utf-8"
-        ) as csvfile:
-            fieldnames = [
-                "date",
-                "order_id",
-                "subtotal",
-                "subtotal_currency",
-                "subtotal_nok",
-                "shipping",
-                "shipping_currency",
-                "shipping_nok",
-                "tax",
-                "tax_currency",
-                "tax_nok",
-                "total",
-                "total_currency",
-                "total_nok",
-            ]
-            writer = csv.DictWriter(
-                csvfile, fieldnames=fieldnames, extrasaction="ignore"
-            )
-            writer.writeheader()
-            for order in orders_with_nok:
-                writer.writerow(order)
+    tla: Final[str] = "ALI"
+    name: Final[str] = "Aliexpress"
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -120,143 +62,6 @@ class AliExpressScraper(BaseScraper):
         self.ORDER_CSV_FILENAME = self.cache["BASE"] / "aliexpress-orders.csv"
         self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
 
-    def get_shop(self):
-        if settings.SCRAPER_ALI_DB_SHOP_ID != -1:
-            self.log.debug("Using db shop ID from SCRAPER_ALI_DB_SHOP_ID")
-            shop_id = int(settings.SCRAPER_ALI_DB_SHOP_ID)
-        elif self.options["db_shop_id"] != -1:
-            self.log.debug("Using db shop ID from --db-shop-id")
-            shop_id = int(self.options["db_shop_id"])
-        else:
-            self.log.debug(
-                "No value for db shop ID found, unable to load to db. Need"
-                " either SCRAPER_ALI_DB_SHOP_ID or --db-shop-id"
-            )
-            raise CommandError(
-                "No value for db shop ID found, unable to load to db."
-            )
-        return Shop.objects.get(id=shop_id)
-
-    def command_load_to_db(self):
-        shop = self.get_shop()
-        self.log.debug("Loaded shop from model: %s", shop)
-
-        self.log.debug("Loading on-disk data")
-        counter = 0
-        max_title_length = 0
-
-        for json_file in self.cache["ORDERS"].glob("*/*.json"):
-            counter += 1
-            # self.log.debug(
-            #    "Processing file %s/%s", json_file.parent.name, json_file.name
-            # )
-            order_dict = self.read(json_file, from_json=True)
-            items = order_dict["items"].copy()
-            del order_dict["items"]
-            date = order_dict["date"]
-            del order_dict["date"]
-            order_id = order_dict["id"]
-            del order_dict["id"]
-
-            prices = {
-                "total": Money(0, "USD"),
-                "subtotal": Money(0, "USD"),
-                "tax": Money(0, "USD"),
-                "shipping": Money(0, "USD"),
-            }
-            price_items = order_dict["price_items"].copy()
-            for key in price_items:
-                value = Price.fromstring(order_dict["price_items"][key])
-                if value.amount == 0 and not value.currency:
-                    self.log.debug(
-                        "Value is 0 and currency in None, forcing to $: %s",
-                        order_dict["price_items"][key],
-                    )
-                    value.currency = "$"
-                try:
-                    assert value.currency in ["$", "€"]
-                except AssertionError as err:
-                    self.log.debug(
-                        "Ops, value was %s => %s %s",
-                        order_dict["price_items"][key],
-                        value.amount,
-                        value.currency,
-                    )
-                    raise err
-
-                if key.lower() in prices.keys():
-                    prices[key.lower()] = Money(
-                        value.amount, "USD" if value.currency == "$" else "EUR"
-                    )
-                    del order_dict["price_items"][key]
-
-            if order_dict["status"] not in ["finished", "closed"]:
-                self.log.info(
-                    self.command.style.WARNING(
-                        "Not loading order %s to DB because status is %s"
-                    ),
-                    order_id,
-                    order_dict["status"],
-                )
-                continue
-
-            for key, value in items.items():
-                max_title_length = max(max_title_length, len(value["title"]))
-                #
-                if not (
-                    all(
-                        [
-                            (
-                                self.can_read(
-                                    self.cache["BASE"] / value["thumbnail"]
-                                )
-                            ),
-                            (
-                                self.can_read(
-                                    self.cache["BASE"]
-                                    / value["snapshot"]["pdf"]
-                                )
-                            ),
-                            (
-                                self.can_read(
-                                    self.cache["BASE"]
-                                    / value["snapshot"]["html"]
-                                )
-                            ),
-                        ]
-                    )
-                ):
-                    self.log.error(
-                        self.command.style.ERROR(
-                            "Not importing item %s in order %s because some"
-                            " files were missing"
-                        ),
-                        key,
-                        order_id,
-                    )
-            defaults = {
-                "date": datetime.fromisoformat(date),
-                "extra_data": order_dict,
-            }
-            defaults.update(prices)
-
-            order_object, created = Order.objects.update_or_create(
-                shop=shop,
-                order_id=order_id,
-                defaults=defaults,
-            )
-            if created:
-                self.log.debug(
-                    self.command.style.SUCCESS("Created order %s"), order_object
-                )
-            # else:
-            #    self.log.debug("Created or updated order %s", order_object)
-
-        self.log.info(
-            "Loaded %s orders. The longest item title was %s characters.",
-            counter,
-            max_title_length,
-        )
 
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
@@ -377,53 +182,51 @@ class AliExpressScraper(BaseScraper):
 
     def get_individual_order_details(self, orders):
         """
-        Will loop though orders (possibly limited by SCRAPER_ALI_ORDERS),
+        Will loop though orders (possibly limited by ALI_ORDERS),
         and save thumbnails, PDF and json of data.
         """
-        if len(settings.SCRAPER_ALI_ORDERS):
+        if len(settings.ALI_ORDERS):
             self.log.info(
-                "Scraping only order IDs from SCRAPER_ALI_ORDERS: %s",
-                settings.SCRAPER_ALI_ORDERS,
+                "Scraping only order IDs from ALI_ORDERS: %s",
+                settings.ALI_ORDERS,
             )
-        if len(settings.SCRAPER_ALI_ORDERS_SKIP):
+        if len(settings.ALI_ORDERS_SKIP):
             self.log.info(
-                "Skipping orders IDs in SCRAPER_ALI_ORDERS_SKIP: %s",
-                settings.SCRAPER_ALI_ORDERS_SKIP,
+                "Skipping orders IDs in ALI_ORDERS_SKIP: %s",
+                settings.ALI_ORDERS_SKIP,
             )
 
-        if settings.SCRAPER_ALI_ORDERS_MAX > 0:
+        if settings.ALI_ORDERS_MAX > 0:
             self.log.info(
                 (
                     "Scraping only a total of %s orders because of"
-                    " SCRAPER_ALI_ORDERS_MAX"
+                    " ALI_ORDERS_MAX"
                 ),
-                settings.SCRAPER_ALI_ORDERS_MAX,
+                settings.ALI_ORDERS_MAX,
             )
 
         if (
-            settings.SCRAPER_ALI_ORDERS_MAX == -1
-            and len(settings.SCRAPER_ALI_ORDERS) == 0
+            settings.ALI_ORDERS_MAX == -1
+            and len(settings.ALI_ORDERS) == 0
         ):
             self.log.info("Scraping all order IDs")
 
         counter = 0
-        if self.options["random"]:
-            random.shuffle(orders)
         max_orders_reached = False
         for order in orders:
-            if settings.SCRAPER_ALI_ORDERS_MAX > 0:
-                if counter >= settings.SCRAPER_ALI_ORDERS_MAX:
+            if settings.ALI_ORDERS_MAX > 0:
+                if counter >= settings.ALI_ORDERS_MAX:
                     if not max_orders_reached:
                         self.log.info(
                             "Scraped %s order, stopping scraping",
-                            settings.SCRAPER_ALI_ORDERS_MAX,
+                            settings.ALI_ORDERS_MAX,
                         )
                         max_orders_reached = True
                     continue
             if (
-                len(settings.SCRAPER_ALI_ORDERS)
-                and order["id"] not in settings.SCRAPER_ALI_ORDERS
-            ) or order["id"] in settings.SCRAPER_ALI_ORDERS_SKIP:
+                len(settings.ALI_ORDERS)
+                and order["id"] not in settings.ALI_ORDERS
+            ) or order["id"] in settings.ALI_ORDERS_SKIP:
                 self.log.info("Skipping order ID %s", order["id"])
                 continue
             counter += 1
@@ -435,9 +238,9 @@ class AliExpressScraper(BaseScraper):
             if self.can_read(Path(json_filename)):
                 self.log.info("Json for order %s found, skipping", order["id"])
                 continue
-            self.log.info("#" * 30)
-            self.log.info(
-                self.command.style.WARNING("Scraping order ID %s"), order["id"]
+            self.log.debug("#" * 30)
+            self.log.debug(
+                "Scraping order ID %s", order["id"]
             )
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
@@ -486,7 +289,7 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         """
-        if self.options["use_cached_orderlist"] and os.access(
+        if self.options.use_cached_orderlist and os.access(
             self.ORDER_LIST_FILENAME, os.R_OK
         ):
             self.log.info(
@@ -905,8 +708,8 @@ class AliExpressScraper(BaseScraper):
             self.browser.close()
         if not debug_found_snapshot:
             self.log.debug(
-                self.command.style.ERROR(
-                    "Failed to find snapshot, sleeping 100 seconds for debug"
+                RED(
+                    "Failed to find snapshot, sleeping 100000 seconds for debug"
                 )
             )
             time.sleep(100000)
@@ -1123,7 +926,7 @@ class AliExpressScraper(BaseScraper):
         return brws.page_source
 
     # Browser util methods
-    def browser_login(self, target_url):
+    def browser_login(self, expected_url):
         """
         Uses Selenium to log in AliExpress.
         Returns when the browser is at url, after login.
@@ -1132,35 +935,13 @@ class AliExpressScraper(BaseScraper):
         is required.
         """
         self.log.info(
-            self.command.style.NOTICE("We need to log in to Aliexpress")
+            AMBER("We need to log in to Aliexpress")
         )
 
-        url_re_escaped = re.escape(target_url)
+        url_re_escaped = re.escape(expected_url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
-        if settings.SCRAPER_ALI_MANUAL_LOGIN:
-            self.log.debug(
-                self.command.style.ERROR(
-                    "Please log in to aliexpress.com and press enter when"
-                    " ready."
-                )
-            )
-            input()
-            brws = self.browser_get_instance()
-        else:
-            # We (optionally) ask for this here and not earlier, since we
-            # may not need to go live
-            self.username = (
-                input("Enter Aliexpress username: ")
-                if not settings.SCRAPER_ALI_USERNAME
-                else settings.SCRAPER_ALI_USERNAME
-            )
-            self.password = (
-                getpass("Enter Aliexpress password: ")
-                if not settings.SCRAPER_ALI_PASSWORD
-                else settings.SCRAPER_ALI_PASSWORD
-            )
-
-            brws = self.browser_get_instance()
+        brws, username_data, password_data = self.browser_setup_login_values()
+        if username_data and password_data:
             # We go to the order list, else ... maybe russian?
             brws.get(self.ORDER_LIST_URL)
 
@@ -1172,8 +953,8 @@ class AliExpressScraper(BaseScraper):
                 password = wait.until(
                     EC.presence_of_element_located((By.ID, "fm-login-password"))
                 )
-                username.send_keys(self.username)
-                password.send_keys(self.password)
+                username.send_keys(username_data)
+                password.send_keys(password_data)
                 wait.until(
                     EC.element_to_be_clickable(
                         (By.XPATH, "//button[@type='submit'][not(@disabled)]")
@@ -1214,8 +995,8 @@ class AliExpressScraper(BaseScraper):
                     pass
                 self.browser_safe_quit()
                 # pylint: disable=raise-missing-from
-                raise CommandError("Login to Aliexpress was not successful.")
-        brws.get(target_url)
+                raise RuntimeError("Login to Aliexpress was not successful.")
+        brws.get(expected_url)
         self.log.info("Waiting up to 120 seconds for %s", url_re_escaped)
         WebDriverWait(brws, 120).until(EC.url_matches(url_re_escaped))
 
@@ -1231,8 +1012,8 @@ class AliExpressScraper(BaseScraper):
             orders = self.lxml_parse_orderlist_html(order_list_html)
             self.get_individual_order_details(orders)
         except NoSuchWindowException:
-            self.command.stdout.write(
-                self.command.style.ERROR(
+            self.log.error(
+                RED(
                     "Login to Aliexpress was not successful. "
                     "Please do not close the browser window."
                 )
@@ -1241,13 +1022,11 @@ class AliExpressScraper(BaseScraper):
 
     # Class init
 
-    def __init__(self, command: BaseCommand, options: Dict):
-        super().__init__(command, options, __name__)
-        self.command = command
-
-        self.log = self.setup_logger(__name__)
+    def __init__(self, options: Dict):
+        super().__init__(options, __name__)
         super().setup_cache(Path("aliexpress"))
         self.setup_templates()
+
 
     def part_to_filename(self, _, **__):
         # Not used here yet

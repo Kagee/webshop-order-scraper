@@ -11,17 +11,13 @@ import re
 import time
 from datetime import date
 from decimal import Decimal
-from getpass import getpass
-
-# datetime as dt
 from enum import Enum
+from getpass import getpass
+from json.encoder import JSONEncoder
 from logging import Logger
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
-from django.core.serializers.json import DjangoJSONEncoder
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from price_parser import Price
@@ -35,6 +31,10 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
+from . import settings
+
+# pylint: disable=unused-import
+from .utils import RED, BLUE, GREEN, AMBER
 
 
 class PagePart(Enum):
@@ -52,7 +52,6 @@ class BaseScraper(object):
     password: str
     cache: Dict[str, Path]
     log: Logger
-    command: BaseCommand
     options: Dict
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
     name: str = "Base"
@@ -60,36 +59,19 @@ class BaseScraper(object):
 
     def __init__(
         self,
-        command: BaseCommand,
         options: Dict,
         logname: str,
     ):
         self.options = options
-        self.log = self.setup_logger(logname)
-        self.command = command
-
+        self.log = logging.getLogger(logname)
+        self.log.setLevel(options.loglevel)
         # pylint: disable=invalid-name
-        self.makedir(Path(settings.SCRAPER_CACHE_BASE))
-
-    def setup_logger(self, logname: str) -> Logger:
-        log = logging.getLogger(logname)
-        if self.options["verbosity"] == 0:
-            # 0 = minimal output
-            log.setLevel(logging.ERROR)
-        elif self.options["verbosity"] == 1:
-            # 1 = normal output
-            log.setLevel(logging.WARNING)
-        elif self.options["verbosity"] == 2:
-            # 2 = verbose output
-            log.setLevel(logging.INFO)
-        elif self.options["verbosity"] == 3:
-            # 3 = very verbose output
-            log.setLevel(logging.DEBUG)
-        return log
+        self.makedir(Path(settings.CACHE_BASE))
+        self.log.debug("Init complete: %s/%s", __name__, logname)
 
     def setup_cache(self, base_folder: Path):
         self.cache: Dict[str, Path] = {
-            "BASE": Path(settings.SCRAPER_CACHE_BASE, base_folder)
+            "BASE": Path(settings.CACHE_BASE, base_folder)
         }
         self.cache.update(
             {
@@ -127,9 +109,9 @@ class BaseScraper(object):
             return []
 
     def browser_setup_login_values(self):
-        if getattr(settings, f"SCRAPER_{self.tla}_MANUAL_LOGIN"):
+        if getattr(settings, f"{self.tla}_MANUAL_LOGIN"):
             self.log.debug(
-                self.command.style.ERROR(
+                BLUE(
                     f"Please log in manually to {self.name} and press enter"
                     " when ready."
                 )
@@ -141,18 +123,16 @@ class BaseScraper(object):
             # may not need to go live
             username_data = (
                 input(f"Enter {self.name} username:")
-                if not getattr(settings, f"SCRAPER_{self.tla}_USERNAME")
-                else getattr(settings, f"SCRAPER_{self.tla}_USERNAME")
+                if not getattr(settings, f"{self.tla}_USERNAME")
+                else getattr(settings, f"{self.tla}_USERNAME")
             )
             password_data = (
                 getpass(f"Enter {self.name} password:")
-                if not getattr(settings, f"SCRAPER_{self.tla}_PASSWORD")
-                else getattr(settings, f"SCRAPER_{self.tla}_PASSWORD")
+                if not getattr(settings, f"{self.tla}_PASSWORD")
+                else getattr(settings, f"{self.tla}_PASSWORD")
             )
 
-            self.log.info(
-                self.command.style.NOTICE(f"Trying to log in to {self.name}")
-            )
+            self.log.info(AMBER(f"Trying to log in to {self.name}"))
             return self.browser_get_instance(), username_data, password_data
 
     def browser_get_instance(self, change_ua=None):
@@ -166,7 +146,7 @@ class BaseScraper(object):
                 browser (WebDriver): the configured and initialized browser
         """
         if self.browser_status != "created":
-            self.log.info(
+            self.log.debug(
                 "Using Selenium webdriver_manager to download webdriver binary"
             )
             service = FirefoxService(
@@ -177,11 +157,9 @@ class BaseScraper(object):
 
             # Configure printing
             options.set_preference("print.always_print_silent", True)
-            options.set_preference(
-                "print_printer", settings.SCRAPER_PDF_PRINTER
-            )
-            self.log.debug("Printer set to %s", settings.SCRAPER_PDF_PRINTER)
-            printer_name = settings.SCRAPER_PDF_PRINTER.replace(" ", "_")
+            options.set_preference("print_printer", settings.PDF_PRINTER)
+            self.log.debug("Printer set to %s", settings.PDF_PRINTER)
+            printer_name = settings.PDF_PRINTER.replace(" ", "_")
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_file", True
             )
@@ -237,7 +215,7 @@ class BaseScraper(object):
         """
         try:
             if self.browser_status == "created":
-                if self.options["no_close_browser"]:
+                if self.options.no_close_browser:
                     self.log.info(
                         "Not cloding browser because of --no-close-browser"
                     )
@@ -363,7 +341,7 @@ class BaseScraper(object):
         if from_base64:
             content = base64.b64decode(content, validate=True)
         if to_json:
-            content = json.dumps(content, indent=4, cls=HLOEncoder)
+            content = json.dumps(content, indent=4, cls=WSJSONEncoder)
         if html:
             html_element = fromstring(content)
             content = tostring(html_element).decode("utf-8")
@@ -396,7 +374,7 @@ class BaseScraper(object):
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
                     self.log.error("Encountered error when reading %s", path)
-                    raise CommandError(
+                    raise IOError(
                         f"Encountered error when reading {path}", jde
                     ) from jde
             elif from_html:
@@ -428,7 +406,7 @@ class BaseScraper(object):
             )
             counter -= 1
             if counter == 0:
-                raise CommandError(
+                raise IOError(
                     f"Waited 40 seconds for {filename} to be stable, never"
                     " stabilized."
                 )
@@ -478,7 +456,7 @@ class BaseScraper(object):
     def load_currency_to_nok_dict(
         self,
     ) -> Dict[date, Dict[str, tuple[int, str]]]:
-        input_csv = settings.SCRAPER_CACHE_BASE / "EXR.csv"
+        input_csv = settings.CACHE_BASE / "EXR.csv"
         self.log.debug("Loading currency conversion data from %s", input_csv)
         index: dict = self.read(
             input_csv,
@@ -524,8 +502,10 @@ class BaseScraper(object):
         return {str(key): value for (key, value) in data_dict.items()}
 
 
-class HLOEncoder(DjangoJSONEncoder):
+class WSJSONEncoder(JSONEncoder):
     def default(self, o):
         if isinstance(o, Path):
+            return str(o)
+        if isinstance(o, datetime.datetime):
             return str(o)
         return super().default(o)
