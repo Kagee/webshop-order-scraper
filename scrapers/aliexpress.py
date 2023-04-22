@@ -90,15 +90,19 @@ class AliExpressScraper(BaseScraper):
                 .strip()
                 .replace("\xa0", " ")
             )
+            right = price_item.xpath('.//span[contains(@class, "right-col")]')
+            if not right:
+                right = price_item.xpath('.//div[contains(@class, "right-col")]')
             order["price_items"][left] = (
                 "".join(
-                    price_item.xpath('.//span[contains(@class, "right-col")]')[
+                    right[
                         0
                     ].itertext()
                 )
                 .strip()
                 .replace("\xa0", " ")
             )
+            
         if "items" not in order:
             order["items"] = {}
 

@@ -1,0 +1,26 @@
+{
+    "files.exclude": {
+        ".*~": true,
+        "**/__pycache__": true,
+        "**/__init__.py": true,
+        "venv/": true,
+        ".mypy_cache/": true,
+        "*.log": true,
+        "LICENSE": true,
+        "bootstrap.py": true,
+        "settings-example.json": true
+    },
+    "files.watcherExclude": {
+        "scraper-cache/": true
+    },
+    "search.exclude": {
+        "scraper-cache/": true
+    },
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "git.enabled": false,
+    "editor.formatOnSave": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.indexing": true,
+    "workbench.tree.indent": 25
+}

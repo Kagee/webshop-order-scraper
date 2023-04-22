@@ -2,22 +2,23 @@
 
 Command line scraper for orders and item info from webshop(s)
 
-## Status
+This project was separated from it's parent project [Homelab Organizer](https://gitlab.com/Kagee/homelab-organizer) (having outgrown it), a web-based tool (Django) for keeping control of items and tools in your homelab.
+
 ## Status
 * [Adafruit](#adafruit)
-  * Complete
+  * Complete. Requires no login. Requires minimal manual work before starting. Missing standarised JSON+zip output.
 * [Aliexpress](#aliexpress)
-  * Mostly complete
+  * Mostly complete. Login, parse order lists, save cache item info. Missing standarised JSON+zip output.
 * [Amazon](#amazon)
-  * Mostly complete
+  * Mostly complete. Login, parse order lists, cache item info.
 * [Distrelec](#distrelec)
-  * Initial
+  * Initial. Login.
 * [eBay](#ebay)
-  * Initial
+  * Started. Login, get all order numbers, get base info for orders. 
 * [IMAP](#imap)
-  * Complete. Used to extract old eBay order number from email.
+  * Complete. Currently only used to extract old eBay order numbers from email.
 * [Pimoroni](#pimoroni)
-  * Initial
+  * Initial. Loging, list and cache order lists.
 
 ## Requirements
 
@@ -142,6 +143,9 @@ rkarlsba](https://github.com/rkarlsba)
 </table>
 
 ## Why
+
+* Am i using Firefox and not Chrome/Other?
+  * Efficiently printg to PDF is much easier in Firefox. Chorome does also not appear to give actual text in PDFs after printing as Firefox does.
 
 * Am i not using `webdriver.print_page` to get a PDF?
   * In testing it created redonkulously large PDFs. We are talkin 40-60 MB when printing via Mozilla/Microsoft printers created sub 10MB PDFs
