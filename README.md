@@ -126,6 +126,11 @@ cp example.env .env
 notepad .env # Edit .env to your liking
 ````
 
+## JSON Schema
+{"format": "file-path"}
+https://docs.pydantic.dev/usage/schema/#json-schema-types
+https://gitlab.com/Kagee/webshop-scraper/-/raw/main/schema.json?inline=false
+
 ## Acknowledgements
 
 For steadfast bug fixing, having orders that totally scramble my scraping, and coming up with those excellent ideas when I have been struggling with a bug for an hour.
