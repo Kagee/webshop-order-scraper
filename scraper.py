@@ -41,11 +41,11 @@ def parse_args():
         required=True,
     )
 
-    def load_to_db(parser):
+    def to_std_json(parser):
         parser.add_argument(
-            "--load-to-db",
+            "--to-std-json",
             action="store_true",
-            help="Load all currently parsed data to DB.",
+            help="Generate schema-valid json for import into Homelag Organizer.",
         )
 
     def use_cached_orderlist(parser):
@@ -60,7 +60,7 @@ def parse_args():
 
     parser_adafruit = subparsers.add_parser("adafruit")
 
-    load_to_db(parser_adafruit)
+    to_std_json(parser_adafruit)
 
     parser_aliexpress = subparsers.add_parser("aliexpress")
 
@@ -131,7 +131,11 @@ def main():
         y for x, y in globals().items() if x.lower() == args.source + "scraper"
     ][0]
     log.debug("Loaded %s based on %s", scraper_class, args.source)
-    scraper_class(args).command_scrape()
+
+    if args.to_std_json:
+        scraper_class(args).command_to_std_json()
+    else:
+        scraper_class(args).command_scrape()
 
 
 if __name__ == "__main__":

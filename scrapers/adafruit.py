@@ -71,6 +71,14 @@ class AdafruitScraper(BaseScraper):
             )
             self.write(order_json_filename, {order_id: order}, to_json=True)
 
+    def command_to_std_json(self):
+        """
+            Convert all data we have to a JSON that validates with ../schema.json,
+             and a .zip with all attachements
+        """
+        for filename in self.cache["ORDERS"].glob("*/order.json"):
+            print(filename)
+
     def browser_save_item_info(self, orders):
         max_items = settings.ADA_ITEMS_MAX + 1
         counter = 0
@@ -355,7 +363,7 @@ class AdafruitScraper(BaseScraper):
         )
         time.sleep(2)
 
-    def browser_detect_handle_interrupt(self, url):
+    def browser_detect_handle_interrupt(self, expected_url):
         pass
 
     def browser_login(self, _):
