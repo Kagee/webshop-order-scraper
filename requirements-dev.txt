@@ -1,5 +1,6 @@
 -r requirements.txt
-pylint
 types-beautifulsoup4
+types-jsonschema
 types-lxml
+pylint
 black

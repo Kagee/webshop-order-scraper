@@ -848,24 +848,24 @@ class AmazonScraper(BaseScraper):
             # Javascript above happens async
             time.sleep(11)
             see_more: WebElement = self.find_element(
-                    By.XPATH,
-                    (
-                        "//div[@id = 'productOverview_feature_div']"
-                        "//span[contains(@class, 'a-expander-prompt')]"
-                        "[contains(text(), 'See more')]"
-                    ),
-                )
+                By.XPATH,
+                (
+                    "//div[@id = 'productOverview_feature_div']"
+                    "//span[contains(@class, 'a-expander-prompt')]"
+                    "[contains(text(), 'See more')]"
+                ),
+            )
             if see_more and see_more.is_displayed():
                 see_more.click()
 
             read_more: WebElement = self.find_element(
-                    By.XPATH,
-                    (
-                        "//div[@id = 'bookDescription_feature_div']"
-                        "//span[contains(@class, 'a-expander-prompt')]"
-                        "[contains(text(), 'Read more')]"
-                    ),
-                )
+                By.XPATH,
+                (
+                    "//div[@id = 'bookDescription_feature_div']"
+                    "//span[contains(@class, 'a-expander-prompt')]"
+                    "[contains(text(), 'Read more')]"
+                ),
+            )
             if read_more and read_more.is_displayed():
                 read_more.click()
 

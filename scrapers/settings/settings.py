@@ -51,6 +51,9 @@ with env.prefixed("WS_"):
             else "Mozilla Save to PDF"
         ),
     )
+    EXPORT_FOLDER: Path = Path(
+        env("EXPORT_FOLDER", default="./output")
+    ).resolve()
 
     NO_COLOR: str = env.bool(
         "NO_COLOR",

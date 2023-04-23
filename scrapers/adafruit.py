@@ -1,17 +1,23 @@
 import csv
+import json
 import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Final, List
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from .base import BaseScraper, PagePart
+
 from . import settings
+from .base import BaseScraper, PagePart
 
 
 class AdafruitScraper(BaseScraper):
+    tla: Final[str] = "ADA"
+    name: Final[str] = "Adafruit"
+    simple_name: Final[str] = "adafruit"
+
     def __init__(self, options: Dict):
         super().__init__(options, __name__)
         self.setup_cache("adafruit")
@@ -73,11 +79,89 @@ class AdafruitScraper(BaseScraper):
 
     def command_to_std_json(self):
         """
-            Convert all data we have to a JSON that validates with ../schema.json,
-             and a .zip with all attachements
+        Convert all data we have to a JSON that validates with ../schema.json,
+         and a .zip with all attachements
         """
+
+        structure = self.get_structure(
+            self.name,
+            None,
+            (
+                "https://www.adafruit.com/index.php"
+                "?main_page=account_history_info&order_id={order_id}"
+            ),
+            "https://www.adafruit.com/product/{item_id}",
+        )
+
+        raw_orders = []
         for filename in self.cache["ORDERS"].glob("*/order.json"):
-            print(filename)
+            with open(filename, encoding="utf-8") as input_file:
+                raw_orders.append(json.load(input_file))
+        filename_base = self.cache["BASE"]
+
+        for order_id_obj in raw_orders:
+            for order_id, order_obj in order_id_obj.items():
+                order_object = {
+                    "id": order_id,
+                    "date": (
+                        datetime.fromisoformat((order_obj["date_purchased"]))
+                        .date()
+                        .isoformat()
+                    ),
+                    "items": [],
+                    "total": {"value": order_obj["total"], "currency": "USD"},
+                    "subtotal": {
+                        "value": order_obj["subtotal"],
+                        "currency": "USD",
+                    },
+                    "shipping": {"value": order_obj["tax"], "currency": "USD"},
+                    "tax": {"value": order_obj["shipping"], "currency": "USD"},
+                }
+                for item_id, item_data in order_obj["items"].items():
+                    assert self.can_read(filename_base / item_data["png"])
+                    assert self.can_read(filename_base / item_data["html"])
+                    assert self.can_read(filename_base / item_data["pdf"])
+                    item_obj = {
+                        "id": item_id,
+                        "name": item_data["product name"],
+                        "quantity": int(item_data["quantity"]),
+                        "thumbnail": item_data["png"],
+                        "attachements": [
+                            {
+                                "name": "Item PDF",
+                                "path": item_data["pdf"],
+                                "comment": "PDF print of item page",
+                            },
+                            {
+                                "name": "Item HTML",
+                                "path": item_data["html"],
+                                "comment": "HTML Scrape of item page",
+                            },
+                        ],
+                    }
+                    del item_data["html"]
+                    del item_data["pdf"]
+                    del item_data["png"]
+                    del item_data["product name"]
+                    del item_data["quantity"]
+
+                    item_obj.update(item_data)
+                    order_object["items"].append(item_obj)
+
+                # Not deleting order_obj['date_purchased'] because it
+                # contains more data than we save in "date"
+                del order_obj["total"]
+                del order_obj["subtotal"]
+                del order_obj["tax"]
+                del order_obj["shipping"]
+
+                del order_obj["items"]
+                # Add all remaning keys to the new object
+                order_object.update(order_obj)
+
+                structure["orders"].append(order_object)
+
+        self.output_schema_json(structure)
 
     def browser_save_item_info(self, orders):
         max_items = settings.ADA_ITEMS_MAX + 1
@@ -335,7 +419,8 @@ class AdafruitScraper(BaseScraper):
                     }
                     let img = document.createElement("img");
                     let p = document.createElement("p");
-                    img.src = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+                    img.src = "https://www.gstatic.com/youtube/" 
+                      + "img/branding/favicon/favicon_144x144.png";
                     img.style.height = "4em";
                     img.style.marginRight = "1em";
                     p.appendChild(img);

@@ -1,4 +1,4 @@
-environs
+environs>=9.5
 selenium>=4.8
 beautifulsoup4>=4.12
 lxml>=4.9
@@ -6,4 +6,5 @@ webdriver_manager
 price-parser>=0.3.4
 imapclient>=2.3
 cssselect>=1.2
-colored
+colored>=1.4
+jsonschema>=4.17

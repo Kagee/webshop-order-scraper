@@ -9,6 +9,7 @@ import pprint
 import random
 import re
 import time
+import zipfile
 from datetime import date
 from decimal import Decimal
 from enum import Enum
@@ -18,6 +19,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
+from jsonschema import ValidationError, validate
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from price_parser import Price
@@ -31,10 +33,11 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
+
 from . import settings
 
 # pylint: disable=unused-import
-from .utils import RED, BLUE, GREEN, AMBER
+from .utils import AMBER, BLUE, GREEN, RED
 
 
 class PagePart(Enum):
@@ -55,6 +58,7 @@ class BaseScraper(object):
     options: Dict
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
     name: str = "Base"
+    simple_name: str = "base"
     tla: str = "BSE"
 
     def __init__(
@@ -68,6 +72,73 @@ class BaseScraper(object):
         # pylint: disable=invalid-name
         self.makedir(Path(settings.CACHE_BASE))
         self.log.debug("Init complete: %s/%s", __name__, logname)
+
+    def valid_json(self, structure):
+        with open("schema.json", encoding="utf-8") as schema_file:
+            schema = json.load(schema_file)
+            try:
+                validate(instance=structure, schema=schema)
+            except ValidationError as vde:
+                self.log.error(
+                    RED("JSON failed validation: %s at %s"),
+                    vde.message,
+                    vde.json_path,
+                )
+                return False
+        return True
+
+    def get_structure(self, name, branch_name, order_url, item_url):
+        return {
+            "metadata": {
+                "name": "Aliexpress",
+                "branch_name": name if not branch_name else branch_name,
+                "order_url": (
+                    "https://www.aliexpress.com/p/"
+                    "order/detail.html?orderId={order_id}"
+                ),
+                "item_url": "https://www.aliexpress.com/item/{item_id}.html",
+            },
+            "orders": [],
+        }
+
+    def output_schema_json(self, structure):
+        # Validate json structure
+        self.log.debug("Validating JSON structure")
+        if self.valid_json(structure):
+            self.makedir(settings.EXPORT_FOLDER)
+            json_file_path = Path(
+                settings.EXPORT_FOLDER, self.simple_name + ".json"
+            ).resolve()
+            zip_file_path = json_file_path.with_suffix(".zip")
+            self.log.debug(
+                "Removing old output filee %s and %s from %s",
+                json_file_path.name,
+                zip_file_path.name,
+                json_file_path.parent,
+            )
+
+            self.remove(json_file_path)
+            self.remove(zip_file_path)
+            self.log.debug("Writing JSON to %s", zip_file_path)
+            with open(json_file_path, "w", encoding="utf-8") as json_file:
+                json_file.write(json.dumps(structure, indent=4))
+
+            self.log.debug("Copying files to %s", zip_file_path)
+            with zipfile.ZipFile(zip_file_path, "a") as zip_file:
+                for order in structure["orders"]:
+                    for item in order["items"]:
+                        orig_file = self.cache["BASE"] / item["thumbnail"]
+                        zip_file.write(orig_file, item["thumbnail"])
+                        for attach in item["attachements"]:
+                            orig_file = self.cache["BASE"] / attach["path"]
+                            zip_file.write(orig_file, attach["path"])
+
+            self.log.info(
+                "Export successful to %s and %s in %s",
+                json_file_path.name,
+                zip_file_path.name,
+                json_file_path.parent,
+            )
 
     def setup_cache(self, base_folder: Path):
         self.cache: Dict[str, Path] = {

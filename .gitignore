@@ -9,14 +9,15 @@ chromedriver
 tls/*
 *cache*/
 geckodriver.log
-hlo/settings/logging.py
 *.log
 *~
 .idea
-storage/
 */migrations/*
-logos/
-scraper-cache
+# folders
+scraper-cache/
 .vscode/
-# symlink = "file"
+output/
+# symlinks
 .vscode
+scraper-cache
+output

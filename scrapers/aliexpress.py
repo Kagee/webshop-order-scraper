@@ -1,21 +1,25 @@
 import base64
+import json
 import os
-import random
 import re
 import time
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Final, List
 
+import jsonschema
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
-from selenium.common.exceptions import (ElementClickInterceptedException,
-                                        NoAlertPresentException,
-                                        NoSuchElementException,
-                                        NoSuchWindowException,
-                                        StaleElementReferenceException,
-                                        TimeoutException)
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoAlertPresentException,
+    NoSuchElementException,
+    NoSuchWindowException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -24,6 +28,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 
 from . import settings
 from .base import BaseScraper
+
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
 
@@ -31,6 +36,28 @@ from .utils import AMBER, BLUE, GREEN, RED
 class AliExpressScraper(BaseScraper):
     tla: Final[str] = "ALI"
     name: Final[str] = "Aliexpress"
+    simple_name: Final[str] = "aliexpress"
+
+    def command_to_std_json(self):
+        """
+        Convert all data we have to a JSON that validates with ../schema.json,
+         and a .zip with all attachements
+        """
+        structure = self.get_structure(
+            self.name,
+            None,
+            "https://www.aliexpress.com/p/order/detail.html?orderId={order_id}",
+            "https://www.aliexpress.com/item/{item_id}.html",
+        )
+
+        raw_orders = []
+        raise NotImplementedError("JSON Export for " + self.name + " is not complete")
+    
+        #for _raw_order in raw_orders:
+        #    pass
+        #    # TODO: Loop raw orders and add to structure
+
+        #self.output_schema_json(structure)
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -62,7 +89,6 @@ class AliExpressScraper(BaseScraper):
         self.ORDER_CSV_FILENAME = self.cache["BASE"] / "aliexpress-orders.csv"
         self.ORDER_LIST_FILENAME = self.cache["BASE"] / "order-list.html"
 
-
     def lxml_parse_individual_order(self, html, order_id):
         order = {}
         info_rows = html.xpath('//div[contains(@class, "info-row")]')
@@ -92,17 +118,13 @@ class AliExpressScraper(BaseScraper):
             )
             right = price_item.xpath('.//span[contains(@class, "right-col")]')
             if not right:
-                right = price_item.xpath('.//div[contains(@class, "right-col")]')
-            order["price_items"][left] = (
-                "".join(
-                    right[
-                        0
-                    ].itertext()
+                right = price_item.xpath(
+                    './/div[contains(@class, "right-col")]'
                 )
-                .strip()
-                .replace("\xa0", " ")
+            order["price_items"][left] = (
+                "".join(right[0].itertext()).strip().replace("\xa0", " ")
             )
-            
+
         if "items" not in order:
             order["items"] = {}
 
@@ -202,17 +224,11 @@ class AliExpressScraper(BaseScraper):
 
         if settings.ALI_ORDERS_MAX > 0:
             self.log.info(
-                (
-                    "Scraping only a total of %s orders because of"
-                    " ALI_ORDERS_MAX"
-                ),
+                "Scraping only a total of %s orders because of ALI_ORDERS_MAX",
                 settings.ALI_ORDERS_MAX,
             )
 
-        if (
-            settings.ALI_ORDERS_MAX == -1
-            and len(settings.ALI_ORDERS) == 0
-        ):
+        if settings.ALI_ORDERS_MAX == -1 and len(settings.ALI_ORDERS) == 0:
             self.log.info("Scraping all order IDs")
 
         counter = 0
@@ -243,9 +259,7 @@ class AliExpressScraper(BaseScraper):
                 self.log.info("Json for order %s found, skipping", order["id"])
                 continue
             self.log.debug("#" * 30)
-            self.log.debug(
-                "Scraping order ID %s", order["id"]
-            )
+            self.log.debug("Scraping order ID %s", order["id"])
             order_html: HtmlElement = HtmlElement()  # type: ignore
 
             order["cache_file"] = self.ORDER_FILENAME_TEMPLATE.format(
@@ -938,9 +952,7 @@ class AliExpressScraper(BaseScraper):
         Raises and alert in the browser if user action
         is required.
         """
-        self.log.info(
-            AMBER("We need to log in to Aliexpress")
-        )
+        self.log.info(AMBER("We need to log in to Aliexpress"))
 
         url_re_escaped = re.escape(expected_url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
@@ -1030,7 +1042,6 @@ class AliExpressScraper(BaseScraper):
         super().__init__(options, __name__)
         super().setup_cache(Path("aliexpress"))
         self.setup_templates()
-
 
     def part_to_filename(self, _, **__):
         # Not used here yet

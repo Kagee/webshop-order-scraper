@@ -45,7 +45,9 @@ def parse_args():
         parser.add_argument(
             "--to-std-json",
             action="store_true",
-            help="Generate schema-valid json for import into Homelag Organizer.",
+            help=(
+                "Generate schema-valid json for import into Homelag Organizer."
+            ),
         )
 
     def use_cached_orderlist(parser):
@@ -65,6 +67,7 @@ def parse_args():
     parser_aliexpress = subparsers.add_parser("aliexpress")
 
     use_cached_orderlist(parser_aliexpress)
+    to_std_json(parser_aliexpress)
 
     parser_amazon = subparsers.add_parser("amazon")
 
@@ -132,7 +135,7 @@ def main():
     ][0]
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
-    if args.to_std_json:
+    if hasattr(args, "to_std_json") and args.to_std_json:
         scraper_class(args).command_to_std_json()
     else:
         scraper_class(args).command_scrape()

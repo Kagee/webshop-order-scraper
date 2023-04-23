@@ -6,9 +6,9 @@ This project was separated from it's parent project [Homelab Organizer](https://
 
 ## Status
 * [Adafruit](#adafruit)
-  * Complete. Requires no login. Requires minimal manual work before starting. Missing standarised JSON+zip output.
+  * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
-  * Mostly complete. Login, parse order lists, save cache item info. Missing standarised JSON+zip output.
+  * Almost complete. Missing standarised JSON+zip output. Login, parse order lists, save cache item info finished.
 * [Amazon](#amazon)
   * Mostly complete. Login, parse order lists, cache item info.
 * [Distrelec](#distrelec)
