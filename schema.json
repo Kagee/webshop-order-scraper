@@ -143,6 +143,33 @@
                     },
                     "total": {
                         "$ref": "#/$defs/currency"
+                    },
+                    "attachements": {
+                        "type": "array",
+                        "required": [
+                            "name",
+                            "path"
+                        ],
+                        "items": {
+                            "title": "Attachement",
+                            "description": "A single attachement",
+                            "type": "object",
+                            "required": [
+                                "name",
+                                "path"
+                            ],
+                            "items": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "path": {
+                                    "$ref": "#/$defs/file-path"
+                                },
+                                "comment": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 },
                 "required": [
