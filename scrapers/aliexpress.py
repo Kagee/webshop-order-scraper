@@ -51,13 +51,76 @@ class AliExpressScraper(BaseScraper):
         )
 
         raw_orders = []
-        raise NotImplementedError("JSON Export for " + self.name + " is not complete")
-    
-        #for _raw_order in raw_orders:
+        for json_order_file in self.cache["ORDERS"].glob("**/*.json"):
+            oob = self.read(json_order_file, from_json=True)
+            order_obj = {
+                "id": oob["id"],
+                "date": (
+                    datetime.fromisoformat((oob["date"])).date().isoformat()
+                ),
+                "items": [],
+            }
+            for price_name, price_value in oob["price_items"].copy().items():
+                if price_name.lower() in [
+                    "total",
+                    "tax",
+                    "subtotal",
+                    "shipping",
+                ]:
+                    del oob["price_items"][price_name]
+                    order_obj[price_name.lower()] = self.get_value_currency(
+                        price_name, price_value
+                    )
+
+            if not oob["price_items"]:
+                del oob["price_items"]
+            if "total" in order_obj:
+                del oob["total"]
+            else:
+                raise NotImplementedError("Total not from price_items")
+
+            del oob["tracking"]
+            del oob["id"]
+            del oob["contact_info"]
+            # We do not delete date, since it in theory is a timestamp
+            # del oob["date"]
+            # TODO: add cache_file and tracking_cache_file
+            del oob["tracking_cache_file"]
+            del oob["cache_file"]
+
+            for item_sku_id, item_obj in oob["items"].items():
+                nio = {
+                    "id": item_sku_id.split("-")[0],
+                    "name": item_obj["title"],
+                    "variation": item_obj["sku"],
+                    "quantity": item_obj["count"],
+                    "price": self.get_value_currency(
+                        "price", item_obj["price"]
+                    ),
+                }
+
+                order_obj["items"].append(nio)
+                del oob["items"][item_sku_id]["price"]
+                del oob["items"][item_sku_id]["sku"]
+                del oob["items"][item_sku_id]["count"]
+                del oob["items"][item_sku_id]["title"]
+                # TODO: add snapshot / thumbnail
+                # del oob["items"][item_sku_id]["snapshot"]
+                # del oob["items"][item_sku_id]["thumbnail"]
+                self.pprint(item_obj)
+
+            # del oob["items"]
+            # self.pprint(oob)
+            structure["orders"].append(order_obj)
+            break
+        # raise NotImplementedError("JSON Export for " + self.name + " is not complete")
+        print()
+        self.pprint(structure)
+        # for _raw_order in raw_orders:
         #    pass
         #    # TODO: Loop raw orders and add to structure
-
-        #self.output_schema_json(structure)
+        self.valid_json(structure)
+        # self.output_schema_json(structure)
 
     def setup_templates(self):
         # pylint: disable=invalid-name

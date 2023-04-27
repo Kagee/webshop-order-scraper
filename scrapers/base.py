@@ -24,18 +24,16 @@ from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from price_parser import Price
 from selenium import webdriver
-from selenium.common.exceptions import (
-    NoSuchElementException,
-    WebDriverException,
-)
+from selenium.common.exceptions import (NoSuchElementException,
+                                        WebDriverException)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
-from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
+from webdriver_manager.firefox import \
+    GeckoDriverManager as FirefoxDriverManager
 
 from . import settings
-
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
 
@@ -100,6 +98,33 @@ class BaseScraper(object):
             },
             "orders": [],
         }
+
+    @classmethod
+    def get_value_currency(cls, name, value):
+        """Will assume $ is USD and € is EUR, we can do better"""
+        guess_price = Price.fromstring(value)
+        value_curr_dict = {
+            "value": (
+                guess_price.amount_text if guess_price.amount != 0 else "0.0"
+            )
+        }
+        if guess_price.currency == "$":
+            curr_dict = {"currency": "USD"}
+        elif guess_price.currency == "€":
+            curr_dict = {"currency": "EUR"}
+        elif value == "Free shipping":
+            curr_dict = {}
+        else:
+            raise NotImplementedError(
+                "Unexpected value/currency:"
+                f" {name}/{value}/{guess_price.currency}"
+            )
+        value_curr_dict.update(curr_dict)
+        return value_curr_dict
+
+    @classmethod
+    def get_iso_code(cls, currency, name, value):
+        return curr_dict
 
     def output_schema_json(self, structure):
         # Validate json structure
@@ -362,7 +387,8 @@ class BaseScraper(object):
             return {}
         return self.read(self.part_to_filename(part, **kwargs), from_json=True)
 
-    def pprint(self, value: Any) -> None:
+    @classmethod
+    def pprint(cls, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
 
     def rand_sleep(self, min_seconds: int = 0, max_seconds: int = 5) -> None:
