@@ -249,6 +249,9 @@ class BaseScraper(object):
             options = Options()
 
             # Configure printing
+            options.add_argument("-profile")
+            options.add_argument(settings.FF_PROFILE_PATH)
+            options.set_preference("profile", settings.FF_PROFILE_PATH)
             options.set_preference("print.always_print_silent", True)
             options.set_preference("print_printer", settings.PDF_PRINTER)
             self.log.debug("Printer set to %s", settings.PDF_PRINTER)

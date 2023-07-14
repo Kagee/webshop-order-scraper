@@ -60,6 +60,10 @@ with env.prefixed("WS_"):
         default=False,
     )
 
+    FF_PROFILE_PATH: Path = Path(
+        env("FF_PROFILE_PATH")
+    ).resolve()
+
     # Config for scraper aliexpress command
     ALI_MANUAL_LOGIN = env.bool("ALI_MANUAL_LOGIN", default=False)
     ALI_USERNAME: str = env("ALI_USERNAME", default=None)
