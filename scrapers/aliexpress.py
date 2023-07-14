@@ -378,7 +378,7 @@ class AliExpressScraper(BaseScraper):
             )
             return self.read(self.ORDER_LIST_FILENAME)
         else:
-            self.log.info("Tried to use order list cache, but found none")
+            self.log.info("Tried to use order list cache (%s), but found none" %(self.ORDER_LIST_FILENAME,))
         return self.browser_scrape_order_list_html()
 
     # Methods that use LXML to extract info from HTML
@@ -1034,7 +1034,8 @@ class AliExpressScraper(BaseScraper):
 
         url_re_escaped = re.escape(expected_url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
-        brws, username_data, password_data = self.browser_setup_login_values(manual_start=True)
+        brws, username_data, password_data = self.browser_setup_login_values()
+        self.log.debug("Login values setup")
         if username_data and password_data:
             # We go to the order list, else ... maybe russian?
             brws.get(self.ORDER_LIST_URL)
