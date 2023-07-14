@@ -243,8 +243,7 @@ class BaseScraper(object):
                 "Using Selenium webdriver_manager to download webdriver binary"
             )
             service = FirefoxService(
-                executable_path=FirefoxDriverManager().install(),
-                service_args=['--marionette-port', '2828', '--connect-existing']
+                executable_path=FirefoxDriverManager().install()
             )
             self.log.debug("Initializing browser")
             options = Options()
@@ -297,11 +296,7 @@ class BaseScraper(object):
                     change_ua,
                 )
             self.log.info("Starting browser")
-            if not manual_start:
-                self.browser = webdriver.Firefox(options=options, service=service)
-            else:
-                self.log.info("Start Firefox manuall: firefox.exe -marionette -start-debugger-server 2828")
-                self.browser = webdriver.Firefox(options=options, service=service)
+            self.browser = webdriver.Firefox(options=options, service=service)
 
             self.browser_status = "created"
             self.log.debug("Returning browser")
