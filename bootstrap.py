@@ -1,19 +1,20 @@
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path, WindowsPath
 from shutil import which
 
+# pylint: disable=consider-using-f-string
 
 def python_checks():
-    me = Path(sys.argv[0])
+    current_script = Path(sys.argv[0])
 
-    if me.is_absolute() and isinstance(me, WindowsPath):
+    if current_script.is_absolute() and isinstance(current_script, WindowsPath):
         print(
             "This script can not be ran directly, please restart as 'python"
-            f" {me.name}'"
+            f" {current_script.name}'"
         )
-        import time
 
         time.sleep(30)
         sys.exit(1)
@@ -49,7 +50,7 @@ def python_checks():
 
     if sys.version_info.major < 3 or sys.version_info.minor < 9:
         print(
-            f"Requires Python 3.9 or newer, this is %s.%s"
+            "Requires Python 3.9 or newer, this is %s.%s"
             % (sys.version_info.major, sys.version_info.minor)
         )
         newest_python = find_pythons()
@@ -66,10 +67,11 @@ def python_checks():
             " (Y/n): "
         )
         print(
-            f"Using python %s.%s"
+            "Using python %s.%s"
             % (sys.version_info.major, sys.version_info.minor)
         )
         if venv_inp.lower() == "y" or venv_inp == "":
+            # pylint: disable=import-outside-toplevel
             from importlib.util import find_spec
 
             venv_loader = find_spec("venv")

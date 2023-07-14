@@ -13,6 +13,7 @@ geckodriver.log
 *~
 .idea
 */migrations/*
+*.code-workspace
 # folders
 scraper-cache/
 .vscode/

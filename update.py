@@ -4,15 +4,14 @@ from bootstrap import python_checks
 
 python_checks()
 
-import os
+# pylint: disable=wrong-import-position,wrong-import-order
+
 import subprocess
 import sys
-from pathlib import Path, WindowsPath
-from shutil import which
 
 if len(sys.argv) == 1 or sys.argv[1] != "no-git":
-   print("git pull")
-   subprocess.run(["git", "pull"], check=False)
+    print("git pull")
+    subprocess.run(["git", "pull"], check=False)
 
 print("upgrade pip")
 subprocess.run(
