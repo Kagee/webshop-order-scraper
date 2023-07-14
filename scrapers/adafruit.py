@@ -254,6 +254,7 @@ class AdafruitScraper(BaseScraper):
                             "div#prod-stock",
                             "div#prod-stock-mobile",
                             "div.gallery-arrow",
+                            "div.messages-container" # UPS warning
                         ],
                         # element_tuples=[(By.TAG_NAME, "iframe")],
                     )
