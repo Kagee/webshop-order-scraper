@@ -88,13 +88,10 @@ class BaseScraper(object):
     def get_structure(self, name, branch_name, order_url, item_url):
         return {
             "metadata": {
-                "name": "Aliexpress",
+                "name": name,
                 "branch_name": name if not branch_name else branch_name,
-                "order_url": (
-                    "https://www.aliexpress.com/p/"
-                    "order/detail.html?orderId={order_id}"
-                ),
-                "item_url": "https://www.aliexpress.com/item/{item_id}.html",
+                "order_url": order_url,
+                "item_url": item_url,
             },
             "orders": [],
         }
@@ -122,9 +119,9 @@ class BaseScraper(object):
         value_curr_dict.update(curr_dict)
         return value_curr_dict
 
-    @classmethod
-    def get_iso_code(cls, currency, name, value):
-        return curr_dict
+    #@classmethod
+    #def get_iso_code(cls, currency, name, value):
+    #    return curr_dict
 
     def output_schema_json(self, structure):
         # Validate json structure
@@ -510,11 +507,13 @@ class BaseScraper(object):
         self.log.debug("File %s appears stable.", filename)
 
     def browser_cleanup_page(
+        # We are not modifying the values
+        # pylint: disable=dangerous-default-value
         self,
-        xpaths: List = None,
-        ids: List = None,
-        css_selectors: List = None,
-        element_tuples: List = None,
+        xpaths: List = [],
+        ids: List = [],
+        css_selectors: List = [],
+        element_tuples: List = [],
     ) -> None:
         if len(xpaths + ids + css_selectors + element_tuples) == 0:
             self.log.debug(

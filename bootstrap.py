@@ -10,7 +10,12 @@ from shutil import which
 def python_checks():
     current_script = Path(sys.argv[0])
 
-    if current_script.is_absolute() and isinstance(current_script, WindowsPath):
+    if current_script.is_absolute() \
+        and isinstance(current_script, WindowsPath) \
+        and 'TERM_PROGRAM' not in os.environ:
+        print(current_script.is_absolute(), current_script)
+        for key, value in os.environ.items():
+            print(key, value)
         print(
             "This script can not be ran directly, please restart as 'python"
             f" {current_script.name}'"
