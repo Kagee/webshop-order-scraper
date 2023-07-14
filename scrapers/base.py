@@ -201,7 +201,7 @@ class BaseScraper(object):
         except NoSuchElementException:
             return []
 
-    def browser_setup_login_values(self):
+    def browser_setup_login_values(self, change_ua=None, manual_start=False):
         if getattr(settings, f"{self.tla}_MANUAL_LOGIN"):
             self.log.debug(
                 BLUE(
@@ -210,7 +210,7 @@ class BaseScraper(object):
                 )
             )
             input()
-            return self.browser_get_instance(), None, None
+            return self.browser_get_instance(change_ua, manual_start), None, None
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
@@ -226,9 +226,9 @@ class BaseScraper(object):
             )
 
             self.log.info(AMBER(f"Trying to log in to {self.name}"))
-            return self.browser_get_instance(), username_data, password_data
+            return self.browser_get_instance(change_ua, manual_start), username_data, password_data
 
-    def browser_get_instance(self, change_ua=None):
+    def browser_get_instance(self, change_ua=None, manual_start=False):
         """
         Initializing and configures a browser (Firefox)
         using Selenium.
@@ -243,7 +243,8 @@ class BaseScraper(object):
                 "Using Selenium webdriver_manager to download webdriver binary"
             )
             service = FirefoxService(
-                executable_path=FirefoxDriverManager().install()
+                executable_path=FirefoxDriverManager().install(),
+                service_args=['--marionette-port', '2828', '--connect-existing']
             )
             self.log.debug("Initializing browser")
             options = Options()
@@ -295,8 +296,12 @@ class BaseScraper(object):
                     "general.useragent.override",
                     change_ua,
                 )
-
-            self.browser = webdriver.Firefox(options=options, service=service)
+            self.log.info("Starting browser")
+            if not manual_start:
+                self.browser = webdriver.Firefox(options=options, service=service)
+            else:
+                self.log.info("Start Firefox manuall: firefox.exe -marionette -start-debugger-server 2828")
+                self.browser = webdriver.Firefox(options=options, service=service)
 
             self.browser_status = "created"
             self.log.debug("Returning browser")

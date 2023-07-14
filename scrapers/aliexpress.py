@@ -32,7 +32,6 @@ from .base import BaseScraper
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
 
-
 class AliExpressScraper(BaseScraper):
     tla: Final[str] = "ALI"
     name: Final[str] = "Aliexpress"
@@ -506,16 +505,19 @@ class AliExpressScraper(BaseScraper):
                 order_total = float(info.group("dollas"))
             else:
                 order_total = float("0.00")
-            (order_store_id,) = order.xpath(
+
+            order_store_id,*_ = order.xpath(
                 './/span[@class="order-item-store-name"]/a'
             )
             info = re.match(
                 r".+/store/(?P<order_store_id>\d+)", order_store_id.get("href")
             )
             order_store_id = info.group("order_store_id") if info else "0"
-            (order_store_name,) = order.xpath(
+
+            order_store_name,*_ = order.xpath(
                 './/span[@class="order-item-store-name"]/a/span'
             )
+
             order_store_name = order_store_name.text
             orders.append(
                 {
@@ -921,6 +923,7 @@ class AliExpressScraper(BaseScraper):
         brws = self.browser_visit_page(self.ORDER_LIST_URL, False)
         wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
+        self.log.debug("Waiting for 'Completed' link")
         try:
             wait10.until(
                 EC.element_to_be_clickable(
@@ -964,16 +967,28 @@ class AliExpressScraper(BaseScraper):
         )
         time.sleep(5)
         self.log.debug("Loading order page")
-        while True:
-            try:
-                # Hide the good damn robot
-                god_damn_robot = brws.find_element(By.ID, "J_xiaomi_dialog")
-                brws.execute_script(
+        try:
+            # Hide the good damn robot
+            god_damn_robot = brws.find_element(By.ID, "J_xiaomi_dialog")
+            brws.execute_script(
+                "arguments[0].setAttribute('style', 'display: none;')",
+                god_damn_robot,
+            )
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        except NoSuchElementException:
+            pass
+        
+        time.sleep(3)
+        try:
+            god_damn_go_to_top = brws.find_element(By.CSS_SELECTOR, "div.comet-back-top")
+            brws.execute_script(
                     "arguments[0].setAttribute('style', 'display: none;')",
-                    god_damn_robot,
+                    god_damn_go_to_top,
                 )
-            except NoSuchElementException:
-                pass
+        except NoSuchElementException:
+            pass
+        
+        while True:
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(3)
             try:
@@ -1019,7 +1034,7 @@ class AliExpressScraper(BaseScraper):
 
         url_re_escaped = re.escape(expected_url)
         order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
-        brws, username_data, password_data = self.browser_setup_login_values()
+        brws, username_data, password_data = self.browser_setup_login_values(manual_start=True)
         if username_data and password_data:
             # We go to the order list, else ... maybe russian?
             brws.get(self.ORDER_LIST_URL)
