@@ -406,9 +406,16 @@ class BaseScraper(object):
                 Path(new_path).name,
             )
             return
-        if overwrite:
-            self.remove(new_path)
-        os.rename(old_path, new_path)
+        while True:
+            try:
+                if overwrite:
+                    self.remove(new_path)
+                os.rename(old_path, new_path)
+            except PermissionError as pe:
+                self.log.debug(pe)
+                time.sleep(3)
+                continue
+            break
 
     def makedir(self, path: Union[Path, str]) -> None:
         try:
