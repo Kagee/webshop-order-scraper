@@ -98,25 +98,31 @@ class BaseScraper(object):
         }
 
     @classmethod
-    def get_value_currency(cls, name, value):
+    def get_value_currency(cls, name, value, force_currency=None):
         """Will assume $ is USD and € is EUR, we can do better"""
         guess_price = Price.fromstring(value)
+        amount = guess_price.amount + Decimal("0.00")
         value_curr_dict = {
             "value": (
-                guess_price.amount_text if guess_price.amount != 0 else "0.0"
+                str(amount)
             )
         }
-        if guess_price.currency == "$":
-            curr_dict = {"currency": "USD"}
-        elif guess_price.currency == "€":
-            curr_dict = {"currency": "EUR"}
-        elif value == "Free shipping":
-            curr_dict = {}
+
+        if force_currency:
+            curr_dict = {"currency": force_currency}
         else:
-            raise NotImplementedError(
-                "Unexpected value/currency:"
-                f" {name}/{value}/{guess_price.currency}"
-            )
+            if guess_price.currency == "$":
+                curr_dict = {"currency": "USD"}
+            elif guess_price.currency == "€":
+                curr_dict = {"currency": "EUR"}
+            elif value == "Free shipping":
+                curr_dict = {}
+            else:
+                raise NotImplementedError(
+                    "Unexpected value/currency:"
+                    f" {name}/{value}/{guess_price.currency}"
+                )
+        
         value_curr_dict.update(curr_dict)
         return value_curr_dict
 
