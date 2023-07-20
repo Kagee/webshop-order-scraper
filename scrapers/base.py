@@ -128,9 +128,9 @@ class BaseScraper(object):
         # Validate json structure
         self.log.debug("Validating JSON structure")
         if self.valid_json(structure):
-            self.makedir(settings.EXPORT_FOLDER)
+            self.makedir(settings.OUTPUT_FOLDER)
             json_file_path = Path(
-                settings.EXPORT_FOLDER, self.simple_name + ".json"
+                settings.OUTPUT_FOLDER, self.simple_name + ".json"
             ).resolve()
             zip_file_path = json_file_path.with_suffix(".zip")
             self.log.debug(
