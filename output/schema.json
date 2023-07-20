@@ -102,6 +102,12 @@
                                 "thumbnail": {
                                     "$ref": "#/$defs/file-path"
                                 },
+                                "subtotal": {
+                                    "$ref": "#/$defs/currency"
+                                },
+                                "price": {
+                                    "$ref": "#/$defs/currency"
+                                },
                                 "attachements": {
                                     "type": "array",
                                     "required": [
