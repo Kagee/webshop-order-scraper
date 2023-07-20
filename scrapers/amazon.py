@@ -5,6 +5,7 @@ import os
 import re
 import time
 import urllib.request
+import argparse
 from pathlib import Path
 from typing import Dict, Final, List
 from urllib.parse import urlparse
@@ -60,7 +61,7 @@ class AmazonScraper(BaseScraper):
     def command_load_to_db(self):
         pass
 
-    def __init__(self, options: Dict):
+    def __init__(self, options: argparse.Namespace):
         super().__init__(options, __name__)
         # pylint: disable=invalid-name
         self.DO_CACHE_ORDERLIST = options.use_cached_orderlist
@@ -146,8 +147,9 @@ class AmazonScraper(BaseScraper):
                 )
             if count > settings.AMZ_ORDERS_MAX:
                 return True
+        return False
 
-    def parse_order(self, order_id: Dict, order_id_dict: Dict):
+    def parse_order(self, order_id: str, order_id_dict: Dict):
         order_json_filename = self.part_to_filename(
             PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
@@ -678,16 +680,16 @@ class AmazonScraper(BaseScraper):
                     )
                 )
                 raise tee
-        if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+        if re.match(self.LOGIN_PAGE_RE, self.browser.current_url) or "transactionapproval" in self.browser.current_url:
             self.log.error("Login to Amazon was not successful.")
             self.log.error(
                 RED(
-                    "If you want to continue, fix the login, and then press"
+                    "If you want to continue please complete log (CAPTCHA/2FA), and then press"
                     " enter."
                 )
             )
             input()
-            if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
+            if re.match(self.LOGIN_PAGE_RE, self.browser.current_url) or "transactionapproval" in self.browser.current_url:
                 self.log.error(
                     RED(
                         "Login to Amazon was not successful, even after user"
@@ -993,7 +995,12 @@ class AmazonScraper(BaseScraper):
             )
         except NoSuchElementException:
             # co.jp?
-            center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
+            try:
+                center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
+            except NoSuchElementException:
+                # amazon fasion / apparel ?
+                center_col = brws.find_element(By.CSS_SELECTOR, "div#centerCol")
+
         brws.execute_script(
             """
                 // remove spam/ad elements
