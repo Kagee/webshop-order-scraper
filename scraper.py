@@ -130,13 +130,17 @@ def parse_args():
 def main():
     args = parse_args()
     log.setLevel(level=args.loglevel)
+
     scraper_class = [
         y for x, y in globals().items() if x.lower() == args.source + "scraper"
     ][0]
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
-    if hasattr(args, "to_std_json") and args.to_std_json:
-        scraper_class(args).command_to_std_json()
+    if args.to_std_json:
+        if hasattr(args, "to_std_json"):
+            scraper_class(args).command_to_std_json()
+        else:
+            log.error("%s does not support to_std_json", args.source)
     else:
         scraper_class(args).command_scrape()
 

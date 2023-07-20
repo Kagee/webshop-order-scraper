@@ -10,6 +10,7 @@ import random
 import re
 import time
 import zipfile
+import argparse
 from datetime import date
 from decimal import Decimal
 from enum import Enum
@@ -53,7 +54,7 @@ class BaseScraper(object):
     password: str
     cache: Dict[str, Path]
     log: Logger
-    options: Dict
+    options: argparse.Namespace
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
     name: str = "Base"
     simple_name: str = "base"
@@ -61,7 +62,7 @@ class BaseScraper(object):
 
     def __init__(
         self,
-        options: Dict,
+        options: argparse.Namespace,
         logname: str,
     ):
         self.options = options
@@ -72,7 +73,7 @@ class BaseScraper(object):
         self.log.debug("Init complete: %s/%s", __name__, logname)
 
     def valid_json(self, structure):
-        with open("schema.json", encoding="utf-8") as schema_file:
+        with open(settings.JSON_SCHEMA, encoding="utf-8") as schema_file:
             schema = json.load(schema_file)
             try:
                 validate(instance=structure, schema=schema)
@@ -210,7 +211,7 @@ class BaseScraper(object):
                 )
             )
             input()
-            return self.browser_get_instance(change_ua, manual_start), None, None
+            return self.browser_get_instance(change_ua), None, None
         else:
             # We (optionally) ask for this here and not earlier, since we
             # may not need to go live
@@ -226,9 +227,9 @@ class BaseScraper(object):
             )
 
             self.log.info(AMBER(f"Trying to log in to {self.name}"))
-            return self.browser_get_instance(change_ua, manual_start), username_data, password_data
+            return self.browser_get_instance(change_ua), username_data, password_data
 
-    def browser_get_instance(self, change_ua=None, manual_start=False):
+    def browser_get_instance(self, change_ua=None):
         """
         Initializing and configures a browser (Firefox)
         using Selenium.
@@ -250,8 +251,8 @@ class BaseScraper(object):
 
             # Configure printing
             options.add_argument("-profile")
-            options.add_argument(settings.FF_PROFILE_PATH)
-            options.set_preference("profile", settings.FF_PROFILE_PATH)
+            options.add_argument(str(settings.FF_PROFILE_PATH))
+            options.set_preference("profile", str(settings.FF_PROFILE_PATH))
             options.set_preference("print.always_print_silent", True)
             options.set_preference("print_printer", settings.PDF_PRINTER)
             self.log.debug("Printer set to %s", settings.PDF_PRINTER)
@@ -409,8 +410,8 @@ class BaseScraper(object):
                 if overwrite:
                     self.remove(new_path)
                 os.rename(old_path, new_path)
-            except PermissionError as pe:
-                self.log.debug(pe)
+            except PermissionError as permerr:
+                self.log.debug(permerr)
                 time.sleep(3)
                 continue
             break
@@ -470,9 +471,8 @@ class BaseScraper(object):
     ) -> Any:
         with open(path, "r", encoding="utf-8-sig") as file:
             if from_csv:
-                contents = list(csv.DictReader(file, **kwargs))
-            else:
-                contents = file.read()
+                return list(csv.DictReader(file, **kwargs))
+            contents: str = file.read()
             if from_json:
                 try:
                     contents = json.loads(contents)

@@ -54,6 +54,10 @@ with env.prefixed("WS_"):
     EXPORT_FOLDER: Path = Path(
         env("EXPORT_FOLDER", default="./output")
     ).resolve()
+    
+    JSON_SCHEMA: Path = Path(
+        env("JSON_SCHEMA", default="./output/schema.json")
+    ).resolve()
 
     NO_COLOR: str = env.bool(
         "NO_COLOR",
