@@ -14,11 +14,14 @@ geckodriver.log
 .idea
 */migrations/*
 *.code-workspace
+output/*.json
+output/*.zip
 # folders
 scraper-cache/
 .vscode/
-output/
+
 # symlinks
 .vscode
 scraper-cache
-output
+# Do not ignore
+!output/schema.json
