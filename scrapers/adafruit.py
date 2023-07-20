@@ -126,6 +126,12 @@ class AdafruitScraper(BaseScraper):
                         "name": item_data["product name"],
                         "quantity": int(item_data["quantity"]),
                         "thumbnail": item_data["png"],
+                        "price": self.get_value_currency(
+                            "price", item_data["price"], "USD"
+                        ),
+                        "subtotal": self.get_value_currency(
+                            "subtotal", item_data["subtotal"], "USD"
+                        ),
                         "attachements": [
                             {
                                 "name": "Item PDF",
@@ -144,6 +150,8 @@ class AdafruitScraper(BaseScraper):
                     del item_data["png"]
                     del item_data["product name"]
                     del item_data["quantity"]
+                    del item_data["subtotal"]
+                    del item_data["price"]
 
                     item_obj.update(item_data)
                     order_object["items"].append(item_obj)
