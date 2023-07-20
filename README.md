@@ -50,6 +50,14 @@ python scrape.py adafruit
 
 Scrapes order list, item info and details to JSON, and saves a PDF copy of the Aliexpress item snapshot.
 
+Aliexpress has a really annoying CAPTCHA that failes even if you do it manually, as long as the browser is automated.
+
+Because of this you either have to use your normal Firefox profile (and not be able to use Firefox while scraping Aliexpress), or creating a new profile.
+
+Set `WS_FF_PROFILE_PATH` to the filesystem path of the Firefox profile you want to use.
+
+Whatever profile you choose, you must log in to Aliexpress manually using the profile before each scrape.
+
 Try not to resize or move the autmomated browser window while scraping. You will be
 prompted if you need to interract, i.e. accept a CAPTCHA. If you happen to watch and see that
 a page is "stuck" and not loading, you can *try* a quick F5.
