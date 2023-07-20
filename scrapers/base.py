@@ -148,19 +148,31 @@ class BaseScraper(object):
 
             self.remove(json_file_path)
             self.remove(zip_file_path)
-            self.log.debug("Writing JSON to %s", zip_file_path)
-            with open(json_file_path, "w", encoding="utf-8") as json_file:
-                json_file.write(json.dumps(structure, indent=4))
+
 
             self.log.debug("Copying files to %s", zip_file_path)
             with zipfile.ZipFile(zip_file_path, "a") as zip_file:
                 for order in structure["orders"]:
+                    for attach in order["attachements"]:
+                        orig_file = self.cache["BASE"] / attach["path"]
+                        path = Path(attach["path"])
+                        safe_order_id = base64.urlsafe_b64encode(order['id'].encode("utf-8")).decode("utf-8")
+                        if path.name == "order.html":
+                            attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
+                        elif path.name == "tracking.html":
+                            attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
+                        zip_file.write(orig_file, attach["path"])
                     for item in order["items"]:
                         orig_file = self.cache["BASE"] / item["thumbnail"]
                         zip_file.write(orig_file, item["thumbnail"])
                         for attach in item["attachements"]:
                             orig_file = self.cache["BASE"] / attach["path"]
+                            
                             zip_file.write(orig_file, attach["path"])
+
+            self.log.debug("Writing JSON to %s", zip_file_path)
+            with open(json_file_path, "w", encoding="utf-8") as json_file:
+                json_file.write(json.dumps(structure, indent=4))
 
             self.log.info(
                 "Export successful to %s and %s in %s",
