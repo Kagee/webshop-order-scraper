@@ -92,7 +92,7 @@ class AliExpressScraper(BaseScraper):
                     "id": item_sku_id.split("-")[0],
                     "name": item_obj["title"],
                     "variation": item_obj["sku"],
-                    "quantity": item_obj["count"],
+                    #"quantity": item_obj["count"],
                     "price": self.get_value_currency(
                         "price", item_obj["price"]
                     ),
@@ -112,13 +112,15 @@ class AliExpressScraper(BaseScraper):
             # self.pprint(oob)
             structure["orders"].append(order_obj)
             break
-        # raise NotImplementedError("JSON Export for " + self.name + " is not complete")
+        
         print()
+        
         self.pprint(structure)
         # for _raw_order in raw_orders:
         #    pass
         #    # TODO: Loop raw orders and add to structure
-        self.valid_json(structure)
+
+        self.log.debug("Structure is valid: %s", self.valid_json(structure))
         # self.output_schema_json(structure)
 
     def setup_templates(self):
