@@ -32,6 +32,7 @@ from .base import BaseScraper
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
 
+
 class AliExpressScraper(BaseScraper):
     tla: Final[str] = "ALI"
     name: Final[str] = "Aliexpress"
@@ -48,16 +49,38 @@ class AliExpressScraper(BaseScraper):
             "https://www.aliexpress.com/p/order/detail.html?orderId={order_id}",
             "https://www.aliexpress.com/item/{item_id}.html",
         )
-
-        raw_orders = []
+        filename_base = self.cache["BASE"]
         for json_order_file in self.cache["ORDERS"].glob("**/*.json"):
+            # if json_order_file.parent.name != "8170250148484043":
+            #    continue
+
             oob = self.read(json_order_file, from_json=True)
+            self.log.debug(
+                "Processing %s in %s/%s",
+                oob["id"],
+                json_order_file.parent.name,
+                json_order_file.name,
+            )
+            assert self.can_read(filename_base / oob["tracking_cache_file"])
+            assert self.can_read(filename_base / oob["cache_file"])
             order_obj = {
                 "id": oob["id"],
                 "date": (
                     datetime.fromisoformat((oob["date"])).date().isoformat()
                 ),
                 "items": [],
+                "attachements": [
+                    {
+                        "name": "Order tracking HTML",
+                        "path": oob["tracking_cache_file"],
+                        "comment": "HTML Scrape of item tracking page",
+                    },
+                    {
+                        "name": "Order HTML",
+                        "path": oob["cache_file"],
+                        "comment": "HTML Scrape of order page",
+                    },
+                ],
             }
             for price_name, price_value in oob["price_items"].copy().items():
                 if price_name.lower() in [
@@ -88,40 +111,75 @@ class AliExpressScraper(BaseScraper):
             del oob["cache_file"]
 
             for item_sku_id, item_obj in oob["items"].items():
-                nio = {
+                self.log.debug("path: %s", filename_base / item_obj["thumbnail"])
+                self.log.debug("pathlen: %s", len(str(filename_base / item_obj["thumbnail"])))
+                self.log.debug("filename: %s", len(str(Path(item_obj["thumbnail"]).name)))
+
+                # os, py
+                #  item-thumb-886978271-R3JlZW4gd2l0aCBzb2NrZXQsIE1vbWVudGFyeSBzZWxmLXJlc2V0LCAyNFY=.png
+                # Green with socket, Momentary self-reset, 24V
+                #  item-thumb-886978271-R3JlZW4gIHdpdGggc29ja2V0LCBNb21lbnRhcnkgc2VsZi1yZXNldCwgMjRW.png
+                # Green  with socket, Momentary self-reset, 24V
+                
+                assert self.can_read(filename_base / item_obj["thumbnail"]), (
+                    f"Could not find thumbnail for order {order_obj['id']},"
+                    " item"
+                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']}), {item_obj['thumbnail']}"
+                )
+                assert self.can_read(
+                    filename_base / item_obj["snapshot"]["html"]
+                ), (
+                    f"Could not find thumbnail for order {order_obj['id']},"
+                    " item"
+                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']})"
+                )
+                assert self.can_read(
+                    filename_base / item_obj["snapshot"]["pdf"]
+                ), (
+                    f"Could not find thumbnail for order {order_obj['id']},"
+                    " item"
+                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']})"
+                )
+                item_obj = {
                     "id": item_sku_id.split("-")[0],
                     "name": item_obj["title"],
                     "variation": item_obj["sku"],
-                    #"quantity": item_obj["count"],
+                    "quantity": item_obj["count"],
+                    "thumbnail": item_obj["thumbnail"],
                     "price": self.get_value_currency(
                         "price", item_obj["price"]
                     ),
+                    "attachements": [
+                        {
+                            "name": "Item PDF",
+                            "path": item_obj["snapshot"]["pdf"],
+                            "comment": "PDF print of item snapshot page",
+                        },
+                        {
+                            "name": "Item HTML",
+                            "path": item_obj["snapshot"]["html"],
+                            "comment": "HTML Scrape of item snapshot page",
+                        },
+                    ],
                 }
 
-                order_obj["items"].append(nio)
+                order_obj["items"].append(item_obj)
+
                 del oob["items"][item_sku_id]["price"]
                 del oob["items"][item_sku_id]["sku"]
                 del oob["items"][item_sku_id]["count"]
                 del oob["items"][item_sku_id]["title"]
-                # TODO: add snapshot / thumbnail
-                # del oob["items"][item_sku_id]["snapshot"]
-                # del oob["items"][item_sku_id]["thumbnail"]
-                self.pprint(item_obj)
+                del oob["items"][item_sku_id]["snapshot"]
+                del oob["items"][item_sku_id]["thumbnail"]
 
-            # del oob["items"]
-            # self.pprint(oob)
+                assert oob["items"][item_sku_id] == {}
+
+            del oob["items"]
             structure["orders"].append(order_obj)
-            break
-        
-        print()
-        
-        self.pprint(structure)
-        # for _raw_order in raw_orders:
-        #    pass
-        #    # TODO: Loop raw orders and add to structure
 
+        self.pprint(structure)
         self.log.debug("Structure is valid: %s", self.valid_json(structure))
-        # self.output_schema_json(structure)
+        self.output_schema_json(structure)
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -380,7 +438,10 @@ class AliExpressScraper(BaseScraper):
             )
             return self.read(self.ORDER_LIST_FILENAME)
         else:
-            self.log.info("Tried to use order list cache (%s), but found none" %(self.ORDER_LIST_FILENAME,))
+            self.log.info(
+                "Tried to use order list cache (%s), but found none"
+                % (self.ORDER_LIST_FILENAME,)
+            )
         return self.browser_scrape_order_list_html()
 
     # Methods that use LXML to extract info from HTML
@@ -491,10 +552,8 @@ class AliExpressScraper(BaseScraper):
                         order_id = info.group("order_id")
             if not all([order_date, order_id]):
                 self.log.error(
-                    (
-                        "Unexpected data from order, failed to parse "
-                        "order_id %s or order_date (%s)"
-                    ),
+                    "Unexpected data from order, failed to parse "
+                    "order_id %s or order_date (%s)",
                     order_id,
                     order_date,
                 )
@@ -508,7 +567,7 @@ class AliExpressScraper(BaseScraper):
             else:
                 order_total = float("0.00")
 
-            order_store_id,*_ = order.xpath(
+            order_store_id, *_ = order.xpath(
                 './/span[@class="order-item-store-name"]/a'
             )
             info = re.match(
@@ -516,7 +575,7 @@ class AliExpressScraper(BaseScraper):
             )
             order_store_id = info.group("order_store_id") if info else "0"
 
-            order_store_name,*_ = order.xpath(
+            order_store_name, *_ = order.xpath(
                 './/span[@class="order-item-store-name"]/a/span'
             )
 
@@ -600,10 +659,8 @@ class AliExpressScraper(BaseScraper):
                             By.ID, "J_xiaomi_dialog"
                         )
                         brws.execute_script(
-                            (
-                                "arguments[0].setAttribute('style', 'display:"
-                                " none;')"
-                            ),
+                            "arguments[0].setAttribute('style', 'display:"
+                            " none;')",
                             god_damn_robot,
                         )
                     except NoSuchElementException:
@@ -979,17 +1036,19 @@ class AliExpressScraper(BaseScraper):
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         except NoSuchElementException:
             pass
-        
+
         time.sleep(3)
         try:
-            god_damn_go_to_top = brws.find_element(By.CSS_SELECTOR, "div.comet-back-top")
+            god_damn_go_to_top = brws.find_element(
+                By.CSS_SELECTOR, "div.comet-back-top"
+            )
             brws.execute_script(
-                    "arguments[0].setAttribute('style', 'display: none;')",
-                    god_damn_go_to_top,
-                )
+                "arguments[0].setAttribute('style', 'display: none;')",
+                god_damn_go_to_top,
+            )
         except NoSuchElementException:
             pass
-        
+
         while True:
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(3)
