@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Final, List
 from urllib.parse import urlparse
 
+from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -48,14 +49,15 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Scraping only order IDs: %s", self.AMZ_ORDERS)
         count = 0
         for year in self.YEARS:
-            self.log.debug("Year: %s", year)
+            #self.log.debug("Year: %s", year)
             for order_id in order_lists[year]:
                 if self.skip_order(order_id, count):
                     continue
                 count += 1
                 self.parse_order(order_id, order_lists[year][order_id])
-                self.pprint(order_lists[year][order_id])
+                #self.pprint({ order_id: order_lists[year][order_id]})
                 # Write order to json here?
+        #self.pprint(order_lists)
         self.browser_safe_quit()
 
     def __init__(self, options: argparse.Namespace):
@@ -69,6 +71,7 @@ class AmazonScraper(BaseScraper):
             if self.TLD in settings.AMZ_ORDERS
             else []
         )
+
         super().setup_cache(Path(f'amazon_{self.TLD.replace(".","_")}'))
         self.YEARS = self.check_year(
             options.year, options.start_year, options.not_archived
@@ -115,7 +118,8 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Found HTML cache for order %s", order_id)
         order_id_dict = self.lxml_scrape_order(order_id, html_cache, order_cache_dir, order_id_dict)
 
-        self.pprint(order_id_dict)
+        #self.pprint(order_id_dict)
+        self.pprint({ order_id: order_id_dict})
 
     def lxml_scrape_order(self, order_id, html_cache_filename: Path, order_cache_dir: Path, order_id_dict: Dict):
         # TODO: Scrape order with LXML
@@ -129,10 +133,26 @@ class AmazonScraper(BaseScraper):
 
             order_id_dict["attachements"].append({
                 "name": base64.urlsafe_b64decode(m[1]).decode("utf-8"),
-                "path": attachement
+                "path": str(attachement.relative_to(self.cache["BASE"]))
             })
 
-        item_files = order_cache_dir.glob("item-*")
+        order_html = self.read(html_cache_filename, from_html=True)
+        a: HtmlElement = order_html.cssselect(".a-fixed-right-grid")[0]
+        b: HtmlElement = a.cssselect("#od-subtotals")[0]
+        price_rows: HtmlElement = b.cssselect(".a-row")
+        order_id_dict["pricing"] = {}
+        #del order_id_dict["total"]
+        for price_row in price_rows:
+            price_columns: List[HtmlElement] = price_row.xpath(".//div")
+            if len(price_columns) == 2:
+                price_name = price_columns[0].text_content().strip()
+                order_id_dict["pricing"][price_name] = self.get_value_currency(price_name, price_columns[1].text_content().strip())
+            #self.log.debug("".join(price_row.itertext()))
+        #.a-fixed-right-grid 
+        #    .od-shipping-address-container
+        #    #od-subtotals
+        
+        #item_files = order_cache_dir.glob("item-*")
 
         if "total" in order_id_dict and not isinstance(order_id_dict["total"], dict):
             order_id_dict["total"] = self.get_value_currency("total", order_id_dict["total"])
@@ -1210,25 +1230,24 @@ class AmazonScraper(BaseScraper):
 
     def skip_order(self, order_id: str, count: int) -> bool:
         if order_id.startswith("D01"):
-            self.log.info(
-                (
-                    "Digital orders (%s) is PITA to scrape, "
-                    "so we don't support them for now"
-                ),
-                order_id,
-            )
+            #self.log.info(
+            #    (
+            #        "Digital orders (%s) is PITA to scrape, "
+            #        "so we don't support them for now"
+            #    ),
+            #    order_id,
+            #)
             return True
-        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
-            order_id in settings.AMZ_ORDERS_SKIP
-        ):
-            self.log.info("Skipping order ID %s", order_id)
+        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or ( order_id in settings.AMZ_ORDERS_SKIP):
+            #self.log.info("Skipping order ID %s", order_id)
             return True
         if settings.AMZ_ORDERS_MAX > 0:
             if count == (settings.AMZ_ORDERS_MAX + 1):
-                self.log.info(
-                    "Scraped %s order(s), breaking",
-                    settings.ALI_ORDERS_MAX,
-                )
+                pass
+                #self.log.info(
+                #    "Scraped %s order(s), breaking",
+                #    settings.ALI_ORDERS_MAX,
+                #)
             if count > settings.AMZ_ORDERS_MAX:
                 return True
         return False
