@@ -136,10 +136,9 @@ def main():
     ][0]
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
-    if args.to_std_json:
-        if hasattr(args, "to_std_json"):
+    if hasattr(args, "to_std_json") and args.to_std_json:
             scraper_class(args).command_to_std_json()
-        else:
+    elif hasattr(args, "to_std_json"):
             log.error("%s does not support to_std_json", args.source)
     else:
         scraper_class(args).command_scrape()

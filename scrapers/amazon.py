@@ -29,6 +29,9 @@ class AmazonScraper(BaseScraper):
     # Xpath to individual order item parent element
     ORDER_CARD_XPATH: Final[str] = "//div[contains(@class, 'js-order-card')]"
 
+    def command_to_std_json(self):
+        raise NotImplementedError("Std export not implemented")
+
     # Scraper commands and __init__
     def command_scrape(self) -> None:
         order_lists_html = self.load_order_lists_html()
@@ -55,12 +58,6 @@ class AmazonScraper(BaseScraper):
                 # Write order to json here?
         self.browser_safe_quit()
 
-    def command_db_to_csv(self):
-        pass
-
-    def command_load_to_db(self):
-        pass
-
     def __init__(self, options: argparse.Namespace):
         super().__init__(options, __name__)
         # pylint: disable=invalid-name
@@ -80,42 +77,6 @@ class AmazonScraper(BaseScraper):
         self.name = f"amazon.{options.tld}"
         self.tla = "AMZ"
 
-    def setup_templates(self):
-        # pylint: disable=invalid-name
-        # URL Templates
-        self.ORDER_LIST_URL_TEMPLATE = (
-            f"https://www.amazon.{self.TLD}/gp/css/order-history?"
-            "orderFilter=year-{year}&startIndex={start_index}"
-        )
-        self.ORDER_LIST_ARCHIVED_URL_TEMPLATE = (
-            f"https://www.amazon.{self.TLD}/gp/your-account/order-history"
-            "?&orderFilter=archived&startIndex={start_index}"
-        )
-
-        self.ORDER_URL_TEMPLATE = (
-            f"https://www.amazon.{self.TLD}/"
-            "gp/your-account/order-details/?ie=UTF8&orderID={order_id}"
-        )
-
-        self.ITEM_URL_TEMPLATE = (
-            f"https://www.amazon.{self.TLD}/"
-            "-/en/gp/product/{item_id}/?ie=UTF8"
-        )
-        # File name templates
-        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"]
-            / Path("order-list-{year}-{start_index}.html")
-        )
-        self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json")
-        )
-        self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
-        )
-        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
-        )
-
     def load_order_lists_from_json(self):
         order_lists = {}
         for year in self.YEARS:
@@ -124,30 +85,6 @@ class AmazonScraper(BaseScraper):
             )
         return order_lists
 
-    def skip_order(self, order_id: str, count: int) -> bool:
-        if order_id.startswith("D01"):
-            self.log.info(
-                (
-                    "Digital orders (%s) is PITA to scrape, "
-                    "so we don't support them for now"
-                ),
-                order_id,
-            )
-            return True
-        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
-            order_id in settings.AMZ_ORDERS_SKIP
-        ):
-            self.log.info("Skipping order ID %s", order_id)
-            return True
-        if settings.AMZ_ORDERS_MAX > 0:
-            if count == (settings.AMZ_ORDERS_MAX + 1):
-                self.log.info(
-                    "Scraped %s order(s), breaking",
-                    settings.ALI_ORDERS_MAX,
-                )
-            if count > settings.AMZ_ORDERS_MAX:
-                return True
-        return False
 
     def parse_order(self, order_id: str, order_id_dict: Dict):
         order_json_filename = self.part_to_filename(
@@ -169,26 +106,37 @@ class AmazonScraper(BaseScraper):
 
         self.makedir(order_cache_dir)
 
-        if self.can_read(html_cache):
-            self.log.debug("Found HTML cache for order %s", order_id)
-            self.lxml_scrape_order(order_id, html_cache)
-        else:
+        if not self.can_read(html_cache):
             self.log.debug("Did not find HTML cache for order %s", order_id)
             order_id_dict.update(
                 self.browser_scrape_order(order_id, order_cache_dir)
             )
+
+        self.log.debug("Found HTML cache for order %s", order_id)
+        order_id_dict = self.lxml_scrape_order(order_id, html_cache, order_cache_dir, order_id_dict)
+
         self.pprint(order_id_dict)
 
-    def lxml_scrape_order(self, order_id, html_cache_filename: Path):
+    def lxml_scrape_order(self, order_id, html_cache_filename: Path, order_cache_dir: Path, order_id_dict: Dict):
         # TODO: Scrape order with LXML
-        self.log.debug(
-            (
-                "We want to scrape order id %s with "
-                "LXML, but not impemented yet (%s)"
-            ),
-            order_id,
-            html_cache_filename.name,
-        )
+
+        attachements = order_cache_dir.glob("attachement-*.pdf")
+        for attachement in attachements:
+            if "attachements" not in order_id_dict:
+                order_id_dict["attachements"] = []
+            
+            m = re.match(r'attachement-(.*)\.pdf', attachement.name)
+
+            order_id_dict["attachements"].append({
+                "name": base64.urlsafe_b64decode(m[1]).decode("utf-8"),
+                "path": attachement
+            })
+
+        item_files = order_cache_dir.glob("item-*")
+
+        if "total" in order_id_dict and not isinstance(order_id_dict["total"], dict):
+            order_id_dict["total"] = self.get_value_currency("total", order_id_dict["total"])
+        return order_id_dict
 
     def append_thumnails_to_item_html(self):
         brws = self.browser
@@ -1059,6 +1007,7 @@ class AmazonScraper(BaseScraper):
         if empty_order_list:
             # Empty order list, shotcut and save
             self.log.info("No orders on %s", year)
+
             order_list_html[(year, start_index)] = (
                 self.save_order_list_cache_html_file(year, start_index)
             )
@@ -1222,3 +1171,64 @@ class AmazonScraper(BaseScraper):
         elif part == PagePart.ORDER_ITEM:
             template = self.ORDER_ITEM_FILENAME_TEMPLATE
         return Path(template.format(**kwargs))
+
+    def setup_templates(self):
+        # pylint: disable=invalid-name
+        # URL Templates
+        self.ORDER_LIST_URL_TEMPLATE = (
+            f"https://www.amazon.{self.TLD}/gp/css/order-history?"
+            "orderFilter=year-{year}&startIndex={start_index}"
+        )
+        self.ORDER_LIST_ARCHIVED_URL_TEMPLATE = (
+            f"https://www.amazon.{self.TLD}/gp/your-account/order-history"
+            "?&orderFilter=archived&startIndex={start_index}"
+        )
+
+        self.ORDER_URL_TEMPLATE = (
+            f"https://www.amazon.{self.TLD}/"
+            "gp/your-account/order-details/?ie=UTF8&orderID={order_id}"
+        )
+
+        self.ITEM_URL_TEMPLATE = (
+            f"https://www.amazon.{self.TLD}/"
+            "-/en/gp/product/{item_id}/?ie=UTF8"
+        )
+        # File name templates
+        self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDER_LISTS"]
+            / Path("order-list-{year}-{start_index}.html")
+        )
+        self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json")
+        )
+        self.ORDER_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
+        )
+        self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+        )
+
+    def skip_order(self, order_id: str, count: int) -> bool:
+        if order_id.startswith("D01"):
+            self.log.info(
+                (
+                    "Digital orders (%s) is PITA to scrape, "
+                    "so we don't support them for now"
+                ),
+                order_id,
+            )
+            return True
+        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
+            order_id in settings.AMZ_ORDERS_SKIP
+        ):
+            self.log.info("Skipping order ID %s", order_id)
+            return True
+        if settings.AMZ_ORDERS_MAX > 0:
+            if count == (settings.AMZ_ORDERS_MAX + 1):
+                self.log.info(
+                    "Scraped %s order(s), breaking",
+                    settings.ALI_ORDERS_MAX,
+                )
+            if count > settings.AMZ_ORDERS_MAX:
+                return True
+        return False
