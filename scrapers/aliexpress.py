@@ -1,20 +1,16 @@
 import base64
-import json
 import os
 import re
 import time
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Final, List
 
-import jsonschema
 from lxml.etree import tostring
 from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
-    NoAlertPresentException,
     NoSuchElementException,
     NoSuchWindowException,
     StaleElementReferenceException,
@@ -51,7 +47,7 @@ class AliExpressScraper(BaseScraper):
         )
         filename_base = self.cache["BASE"]
         for json_order_file in self.cache["ORDERS"].glob("**/*.json"):
-            # if json_order_file.parent.name != "8170250148484043":
+            #if json_order_file.parent.name != "8134930031914043":
             #    continue
 
             oob = self.read(json_order_file, from_json=True)
@@ -106,7 +102,6 @@ class AliExpressScraper(BaseScraper):
             del oob["contact_info"]
             # We do not delete date, since it in theory is a timestamp
             # del oob["date"]
-            # TODO: add cache_file and tracking_cache_file
             del oob["tracking_cache_file"]
             del oob["cache_file"]
 
@@ -115,12 +110,6 @@ class AliExpressScraper(BaseScraper):
                 self.log.debug("pathlen: %s", len(str(filename_base / item_obj["thumbnail"])))
                 self.log.debug("filename: %s", len(str(Path(item_obj["thumbnail"]).name)))
 
-                # os, py
-                #  item-thumb-886978271-R3JlZW4gd2l0aCBzb2NrZXQsIE1vbWVudGFyeSBzZWxmLXJlc2V0LCAyNFY=.png
-                # Green with socket, Momentary self-reset, 24V
-                #  item-thumb-886978271-R3JlZW4gIHdpdGggc29ja2V0LCBNb21lbnRhcnkgc2VsZi1yZXNldCwgMjRW.png
-                # Green  with socket, Momentary self-reset, 24V
-                
                 assert self.can_read(filename_base / item_obj["thumbnail"]), (
                     f"Could not find thumbnail for order {order_obj['id']},"
                     " item"
@@ -177,7 +166,6 @@ class AliExpressScraper(BaseScraper):
             del oob["items"]
             structure["orders"].append(order_obj)
 
-        self.pprint(structure)
         self.log.debug("Structure is valid: %s", self.valid_json(structure))
         self.output_schema_json(structure)
 
@@ -264,17 +252,13 @@ class AliExpressScraper(BaseScraper):
             sku_list = item.xpath('.//div[contains(@class, "item-sku-attr")]')
 
             if len(sku_list) == 0:
-                sku_hash = base64.urlsafe_b64encode(
-                    "no-sku".encode("utf-8")
-                ).decode("utf-8")
+                sku_hash = self.make_make_sku_hash("no-sku")
                 sku = ""
             else:
                 sku = (
                     "".join(sku_list[0].itertext()).strip().replace("\xa0", " ")
                 )
-                sku_hash = base64.urlsafe_b64encode(sku.encode("utf-8")).decode(
-                    "utf-8"
-                )
+                sku_hash =  self.make_make_sku_hash(sku)
 
             price_count = (
                 "".join(
@@ -328,6 +312,11 @@ class AliExpressScraper(BaseScraper):
             )
         return order
 
+    @classmethod
+    def make_make_sku_hash(cls, sku_text):
+        sku = re.sub(' {2,}', ' ', "".join(sku_text).strip().replace("\xa0", " "))
+        return base64.urlsafe_b64encode(sku.encode("utf-8")).decode("utf-8")
+             
     def get_individual_order_details(self, orders):
         """
         Will loop though orders (possibly limited by ALI_ORDERS),
@@ -440,7 +429,7 @@ class AliExpressScraper(BaseScraper):
         else:
             self.log.info(
                 "Tried to use order list cache (%s), but found none"
-                % (self.ORDER_LIST_FILENAME,)
+                ,self.ORDER_LIST_FILENAME
             )
         return self.browser_scrape_order_list_html()
 
@@ -678,14 +667,14 @@ class AliExpressScraper(BaseScraper):
             '//div[contains(@class, "order-detail-item-content-wrap")]',
         ):
             # Retrieve item ID from URL
-            thumb = item_content.find_elements(
+            thumb_element = item_content.find_elements(
                 By.XPATH,
                 './/a[contains(@class, "order-detail-item-content-img")]',
             )[0]
             info = re.match(
                 # https://www.aliexpress.com/item/32824370509.html
                 r".+item/([0-9]+)\.html.*",
-                thumb.get_attribute("href"),
+                thumb_element.get_attribute("href"),
             )
             item_id = info.group(1)
             self.log.debug("Current item id is %s", item_id)
@@ -696,39 +685,40 @@ class AliExpressScraper(BaseScraper):
 
             # URL and filename-safe base64, so we can
             # reverse the sku to text if we need
+
             if (
                 len(sku_element) == 0
                 or len(sku_element[0].text.replace("\xa0", " ").strip()) == 0
             ):
-                sku_hash = base64.urlsafe_b64encode(
-                    "no-sku".encode("utf-8")
-                ).decode("utf-8")
+                sku_hash = self.make_make_sku_hash("no-sku")
                 sku_element = ""
             else:
-                sku_element = sku_element[0].text
-                sku_hash = base64.urlsafe_b64encode(
-                    sku_element.strip().replace("\xa0", " ").encode("utf-8")
-                ).decode("utf-8")
+                sku_element_text = sku_element[0].text.strip().replace("\xa0", " ")
+                sku_hash = self.make_make_sku_hash(sku_element_text)
+
+                self.log.debug("Sku hash: %s", sku_hash)
 
             self.log.debug(
                 "Sku for item %s is %s, hash %s",
                 item_id,
-                sku_element.strip().replace("\xa0", " "),
+                sku_element_text,
                 sku_hash,
             )
 
             item_sku_id = f"{item_id}-{sku_hash}"
             if not item_sku_id in order["items"]:
+                self.log.debug("Creating order item %s", item_sku_id)
                 order["items"][item_sku_id] = {}
 
             # Get snapshot of order page from Ali's archives
             move_mouse = self.browser_save_item_sku_snapshot(
-                order, thumb, item_sku_id
+                order, thumb_element, item_sku_id
             )
+
             # Thumbnail MUST happen after snapshot, as we hide the snapshot button
             # before saving thumbnail
             self.browser_save_item_thumbnail(
-                order, thumb, item_sku_id, move_mouse
+                order, thumb_element, item_sku_id, move_mouse
             )
 
         return fromstring(brws.page_source)
@@ -766,6 +756,8 @@ class AliExpressScraper(BaseScraper):
                 order_id=order["id"], item_id=item_sku_id
             )
         )
+        self.log.debug("Writing thumbnail to %s for item_sku_id %s",
+                       order["items"][item_sku_id]["thumbnail"],item_sku_id)
         self.write(
             order["items"][item_sku_id]["thumbnail"],
             base64.b64decode(thumb_data),
@@ -1092,69 +1084,9 @@ class AliExpressScraper(BaseScraper):
         is required.
         """
         self.log.info(AMBER("We need to log in to Aliexpress"))
-
-        url_re_escaped = re.escape(expected_url)
-        order_list_url_re_espaced = re.escape(self.ORDER_LIST_URL)
-        brws, username_data, password_data = self.browser_setup_login_values()
-        self.log.debug("Login values setup")
-        if username_data and password_data:
-            # We go to the order list, else ... maybe russian?
-            brws.get(self.ORDER_LIST_URL)
-
-            wait = WebDriverWait(brws, 10)
-            try:
-                username = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-id"))
-                )
-                password = wait.until(
-                    EC.presence_of_element_located((By.ID, "fm-login-password"))
-                )
-                username.send_keys(username_data)
-                password.send_keys(password_data)
-                wait.until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, "//button[@type='submit'][not(@disabled)]")
-                    )
-                ).click()
-                order_list_page = False
-                try:
-                    WebDriverWait(brws, 15).until(
-                        EC.url_matches(order_list_url_re_espaced)
-                    )
-                    order_list_page = True
-                except TimeoutException:
-                    pass
-                if not order_list_page:
-                    brws.execute_script(
-                        "alert('Please complete login (CAPTCHA etc.). You have"
-                        " two minutes.');"
-                    )
-                    self.log.warning(
-                        "Please complete log in to Aliexpress in the browser"
-                        " window.."
-                    )
-                    WebDriverWait(brws, 30).until_not(
-                        EC.alert_is_present(),
-                        "Please close alert an continue login!",
-                    )
-                    self.log.info(
-                        "Waiting up to 120 seconds for %s",
-                        order_list_url_re_espaced,
-                    )
-                    WebDriverWait(brws, 120).until(
-                        EC.url_matches(order_list_url_re_espaced)
-                    )
-            except TimeoutException:
-                try:
-                    brws.switch_to.alert.accept()
-                except NoAlertPresentException:
-                    pass
-                self.browser_safe_quit()
-                # pylint: disable=raise-missing-from
-                raise RuntimeError("Login to Aliexpress was not successful.")
-        brws.get(expected_url)
-        self.log.info("Waiting up to 120 seconds for %s", url_re_escaped)
-        WebDriverWait(brws, 120).until(EC.url_matches(url_re_escaped))
+        self.log.error(RED("Manual profile update required, terminating."))
+        self.browser_safe_quit()
+        raise NotImplementedError("Automatic loging for newer Aliexpress not implemented.")
 
     # Command functions, used in scrape.py
 
