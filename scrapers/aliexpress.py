@@ -52,8 +52,7 @@ class AliExpressScraper(BaseScraper):
 
             oob = self.read(json_order_file, from_json=True)
             self.log.debug(
-                "Processing %s in %s/%s",
-                oob["id"],
+                "Processing %s/%s",
                 json_order_file.parent.name,
                 json_order_file.name,
             )
@@ -106,10 +105,6 @@ class AliExpressScraper(BaseScraper):
             del oob["cache_file"]
 
             for item_sku_id, item_obj in oob["items"].items():
-                self.log.debug("path: %s", filename_base / item_obj["thumbnail"])
-                self.log.debug("pathlen: %s", len(str(filename_base / item_obj["thumbnail"])))
-                self.log.debug("filename: %s", len(str(Path(item_obj["thumbnail"]).name)))
-
                 assert self.can_read(filename_base / item_obj["thumbnail"]), (
                     f"Could not find thumbnail for order {order_obj['id']},"
                     " item"
@@ -166,7 +161,6 @@ class AliExpressScraper(BaseScraper):
             del oob["items"]
             structure["orders"].append(order_obj)
 
-        self.log.debug("Structure is valid: %s", self.valid_json(structure))
         self.output_schema_json(structure)
 
     def setup_templates(self):
