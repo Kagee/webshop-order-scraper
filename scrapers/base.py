@@ -150,27 +150,37 @@ class BaseScraper(object):
             self.remove(zip_file_path)
 
 
-            self.log.debug("Copying files to %s", zip_file_path)
-            with zipfile.ZipFile(zip_file_path, "a") as zip_file:
-                for order in structure["orders"]:
-                    for attach in order["attachements"]:
+            self.log.debug("Generating zip file list... ")
+            files_from_to = []
+            for order in structure["orders"]:
+                for attach in order["attachements"]:
+                    orig_file = self.cache["BASE"] / attach["path"]
+                    path = Path(attach["path"])
+                    safe_order_id = base64.urlsafe_b64encode(
+                        order['id'].encode("utf-8")
+                        ).decode("utf-8")
+                    if path.name == "order.html":
+                        attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
+                    elif path.name == "tracking.html":
+                        attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
+                    files_from_to.append((orig_file, attach["path"]))
+                for item in order["items"]:
+                    orig_file = self.cache["BASE"] / item["thumbnail"]
+                    files_from_to.append((orig_file, item["thumbnail"]))
+                    for attach in item["attachements"]:
                         orig_file = self.cache["BASE"] / attach["path"]
-                        path = Path(attach["path"])
-                        safe_order_id = base64.urlsafe_b64encode(order['id'].encode("utf-8")).decode("utf-8")
-                        if path.name == "order.html":
-                            attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
-                        elif path.name == "tracking.html":
-                            attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
-                        zip_file.write(orig_file, attach["path"])
-                    for item in order["items"]:
-                        orig_file = self.cache["BASE"] / item["thumbnail"]
-                        zip_file.write(orig_file, item["thumbnail"])
-                        for attach in item["attachements"]:
-                            orig_file = self.cache["BASE"] / attach["path"]
-                            
-                            zip_file.write(orig_file, attach["path"])
+                        files_from_to.append((orig_file, attach["path"]))
 
-            self.log.debug("Writing JSON to %s", zip_file_path)
+            self.log.debug("Copying files to %s", zip_file_path)
+            count_files = len(files_from_to)
+            per_count = math.ceil(count_files / 20)
+            with zipfile.ZipFile(zip_file_path, "a") as zip_file:
+                for count, data in enumerate(files_from_to):
+                    if count % per_count == 0:
+                        self.log.info("File %s of %s", count, count_files)
+                    zip_file.write(data[0], data[1])
+
+            self.log.debug("Writing JSON to %s", json_file_path)
             with open(json_file_path, "w", encoding="utf-8") as json_file:
                 json_file.write(json.dumps(structure, indent=4))
 
@@ -220,7 +230,7 @@ class BaseScraper(object):
         except NoSuchElementException:
             return []
 
-    def browser_setup_login_values(self, change_ua=None, manual_start=False):
+    def browser_setup_login_values(self, change_ua=None):
         if getattr(settings, f"{self.tla}_MANUAL_LOGIN"):
             self.log.debug(
                 BLUE(
