@@ -153,17 +153,18 @@ class BaseScraper(object):
             self.log.debug("Generating zip file list... ")
             files_from_to = []
             for order in structure["orders"]:
-                for attach in order["attachements"]:
-                    orig_file = self.cache["BASE"] / attach["path"]
-                    path = Path(attach["path"])
-                    safe_order_id = base64.urlsafe_b64encode(
-                        order['id'].encode("utf-8")
-                        ).decode("utf-8")
-                    if path.name == "order.html":
-                        attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
-                    elif path.name == "tracking.html":
-                        attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
-                    files_from_to.append((orig_file, attach["path"]))
+                if "attachements" in order:
+                    for attach in order["attachements"]:
+                        orig_file = self.cache["BASE"] / attach["path"]
+                        path = Path(attach["path"])
+                        safe_order_id = base64.urlsafe_b64encode(
+                            order['id'].encode("utf-8")
+                            ).decode("utf-8")
+                        if path.name == "order.html":
+                            attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
+                        elif path.name == "tracking.html":
+                            attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
+                        files_from_to.append((orig_file, attach["path"]))
                 for item in order["items"]:
                     orig_file = self.cache["BASE"] / item["thumbnail"]
                     files_from_to.append((orig_file, item["thumbnail"]))
@@ -173,7 +174,7 @@ class BaseScraper(object):
 
             self.log.debug("Copying files to %s", zip_file_path)
             count_files = len(files_from_to)
-            per_count = math.ceil(count_files / 20)
+            per_count = max(10, math.ceil(count_files / 20))
             with zipfile.ZipFile(zip_file_path, "a") as zip_file:
                 for count, data in enumerate(files_from_to):
                     if count % per_count == 0:
