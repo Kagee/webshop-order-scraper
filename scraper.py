@@ -102,6 +102,17 @@ def parse_args():
         help="Don't scrape archived orders.",
     )
 
+    parser_kjell = subparsers.add_parser("kjell")
+
+    use_cached_orderlist(parser_kjell)
+
+    parser_kjell.add_argument(
+        "--country",
+        type=str.lower,
+        default="no",
+        help="What country webshop to scrape. Default `no`",
+    )
+
     parser_distrelec = subparsers.add_parser("distrelec")
 
     use_cached_orderlist(parser_distrelec)

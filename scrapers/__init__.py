@@ -7,5 +7,6 @@ from .distrelec import DistrelecScraper
 from .imap import IMAPScraper
 from .pimoroni import PimoroniScraper
 from .ebay import EbayScraper
+from .kjell import KjellScraper
 from .tryout import TryOutScraper
 from .utils import RED, BLUE, AMBER, GREEN

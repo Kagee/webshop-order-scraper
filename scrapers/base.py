@@ -401,15 +401,21 @@ class BaseScraper(object):
                 self.browser_visit_page(
                     url, goto_url_after_login, do_login=False
                 )
-
+        else:
+            self.log.debug("Login not required")
     def browser_login(self, expected_url):
-        raise NotImplementedError("Child does not implement browser_login()")
+        if True:
+            raise NotImplementedError("Child does not implement browser_login()")
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
-        pass
+        if True:
+            raise NotImplementedError(
+                "Child does not implement browser_detect_handle_interrupt(self, expected_url)..."
+            )
 
     def part_to_filename(self, part: PagePart, **kwargs):
-        raise NotImplementedError(
+        if True:
+            raise NotImplementedError(
             "Child does not implement _part_to_filename(...)"
         )
 
