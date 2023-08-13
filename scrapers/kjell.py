@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Final, List
+from urllib.parse import urlparse
 
 from lxml.etree import tostring
 from lxml.html import HtmlElement
@@ -36,7 +37,6 @@ class KjellScraper(BaseScraper):
     COUNTRY: Final[str] = "test"
     simple_name: Final[str] = "kjell.com-test"
 
-
     # Methods that use Selenium to scrape webpages in a browser
 
     def browser_save_item_thumbnail(self):
@@ -55,12 +55,28 @@ class KjellScraper(BaseScraper):
             # Some not interresting fold-outs
             '//span[contains(text(),"Kundeanmeldelser")]/ancestor::button/parent::div',
             '//span[contains(text(),"Sendinger")]/ancestor::button/parent::div',
-            '//span[contains(text(),"Passer bl.a. til")]/ancestor::button/parent::div',
+            (
+                '//span[contains(text(),"Passer bl.a.'
+                ' til")]/ancestor::button/parent::div'
+            ),
             '//span[contains(text(),"360")]/ancestor::button/parent::div',
-            '//span[contains(text(),"Kompletter kjøpet ditt")]/ancestor::button/parent::div',
-            '//span[contains(text(),"Alltid trygt å handle hos Kjell")]/parent::div/parent::div/parent::div/parent::div',
+            (
+                '//span[contains(text(),"Kompletter kjøpet'
+                ' ditt")]/ancestor::button/parent::div'
+            ),
+            (
+                '//span[contains(text(),"Alltid trygt å handle hos'
+                ' Kjell")]/parent::div/parent::div/parent::div/parent::div'
+            ),
+            (
+                '//span[contains(text(),"Spør Kjell")]/ancestor::button/parent::div/parent::div'
+            ),
             # Warehouse stock info
-            '//h4[contains(text(),"Lagerstatus nett og i butikk")]/parent::div/parent::div/parent::div/parent::div',
+            (
+                '//h4[contains(text(),"Lagerstatus nett og i'
+                ' butikk")]/parent::div/parent::div/parent::div/parent::div'
+            ),
+
             # Live-stream video
             '//img[contains(@src,"liveshopping.bambuser.com")]/parent::div/parent::div',
             # 360 images
@@ -68,9 +84,27 @@ class KjellScraper(BaseScraper):
             # Add to cart and likes
             '//button[@data-test-id="add-to-shopping-list-button"]/parent::div',
             # Simmilar products
-            '//h4[contains(text(),"Lignende produkter")]/parent::div/parent::div',
-            '//h3[contains(text(),"Fri standardfrakt")]/parent::div/parent::div/parent::div/parent::div',
-            '//h3[contains(text(),"Går bra med")]/parent::div/parent::div/parent::div/parent::div/parent::div'
+            (
+                '//h4[contains(text(),"Lignende'
+                ' produkter")]/parent::div/parent::div'
+            ),
+            (
+                '//h3[contains(text(),"Fri'
+                ' standardfrakt")]/parent::div/parent::div/parent::div/parent::div'
+            ),
+            (
+                '//h3[contains(text(),"Går bra'
+                ' med")]/parent::div/parent::div/parent::div/parent::div/parent::div'
+            ),
+            '//h4[contains(text(),"Kombiner med")]/parent::div',
+            (
+                '//button[contains(text(),"Gå til'
+                ' kundeanmeldelsen")]/parent::div/parent::div'
+            ),
+            (
+                '//button[contains(text(),"'
+                ' kundeanmeldelse")]/parent::span/parent::div'
+            ),
         ]:
             elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
 
@@ -81,19 +115,30 @@ class KjellScraper(BaseScraper):
             elemets_to_hide += brws.find_elements(By.ID, element_id)
 
         for css_selector in [
-            #"div.a-carousel-container",
+            # "div.a-carousel-container",
         ]:
             elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
 
         for element in [
-            #(By.TAG_NAME, "hr"),
+            # (By.TAG_NAME, "hr"),
             (By.TAG_NAME, "iframe"),
         ]:
             elemets_to_hide += brws.find_elements(element[0], element[1])
 
-        large_images = brws.find_elements(By.XPATH, '//img[contains(@intrinsicsize,"960")]')
-        thumbs_div = brws.find_element(By.XPATH, '(//img[contains(@intrinsicsize,"320")])[1]/parent::span/parent::div/parent::div')
-        content_container = brws.find_element(By.CSS_SELECTOR, 'div#content-container')
+        large_images = brws.find_elements(
+            By.XPATH, '//img[contains(@intrinsicsize,"960")]'
+        )
+        try:
+            thumbs_div = brws.find_element(
+                By.XPATH,
+                '(//img[contains(@intrinsicsize,"320")])[1]/parent::span/parent::div/parent::div',
+            )
+        except NoSuchElementException:
+            self.log.debug("No thumbnail list")
+            thumbs_div = None
+        content_container = brws.find_element(
+            By.CSS_SELECTOR, "div#content-container"
+        )
 
         brws.execute_script(
             """
@@ -141,23 +186,98 @@ class KjellScraper(BaseScraper):
                     div.appendChild(div2);
                 }
                 document.body.appendChild(div);
-                arguments[3].style.display="none";
+                // thumbs_div
+                if (arguments[3]) {
+                    arguments[3].style.display="none";
+                }
                 """,
             elemets_to_hide,
             large_images,
             content_container,
             thumbs_div,
         )
-        
+
+        for text_expand in ["Teknisk informasjon", "Support"]:
+            try:
+                btn = brws.find_element(
+                    By.XPATH,
+                    f'//span[contains(text(),"{text_expand}")]/ancestor::button',
+                )
+                btn.click()
+            except NoSuchElementException:
+                pass
+
         figures = brws.find_elements(By.TAG_NAME, "figure")
         for figure in figures:
             time.sleep(0.5)
             brws.execute_script(
-            """
+                """
                 arguments[0].scrollIntoView();
-            """
-               , figure)
+            """,
+                figure,
+            )
         time.sleep(2)
+
+    def save_support_documents(self, order_id, item_id, order_cache_dir):
+        brws = self.browser_get_instance()
+        attachements = []
+        try:
+            support_a = brws.find_elements(
+                By.XPATH,
+                '//span[contains(text(),"Support")]/ancestor::button/parent::div//a',
+            )
+            for a in support_a:
+                self.log.debug("HREF: %s", a.get_attribute("href"))
+                self.log.debug("TEXT: %s", a.text)
+                url_parts = urlparse(a.get_attribute("href"))
+                if url_parts.path.endswith(".pdf"):
+                    filename = Path(url_parts.path).name
+                    for pdf in self.cache["TEMP"].glob("*.pdf"):
+                        # Remove old/random PDFs
+                        os.remove(pdf)
+                    a.click()
+                    self.log.debug(
+                        "Opening PDF, waiting for it to download in background"
+                    )
+                    pdf = list(self.cache["TEMP"].glob("*.pdf"))
+                    while not pdf:
+                        pdf = list(self.cache["TEMP"].glob("*.pdf"))
+                        self.log.debug("No pdf, waiting 3 sec")
+                        time.sleep(3)
+                    if len(pdf) > 1:
+                        raise NotImplementedError(
+                            "Found multiple PDFs after download, unknown"
+                            " condition."
+                        )
+
+                    self.wait_for_stable_file(pdf[0])
+
+                    filename = (
+                        f"{item_id}--{filename}--{a.text}"
+                    )
+                    filename_safe = base64.urlsafe_b64encode(
+                        filename.encode("utf-8")
+                    ).decode("utf-8")
+
+                    attachement_file = (
+                        order_cache_dir
+                        / Path(f"attachement-{filename_safe}.pdf")
+                    ).resolve()
+
+                    self.log.debug(
+                        "Found %s, saving as %s.pdf (%s.pdf)",
+                        pdf[0].name,
+                        filename_safe,
+                        filename,
+                    )
+
+                    attachements.append(str(attachement_file))
+                    self.move_file(pdf[0], attachement_file)
+                else:
+                    raise NotImplementedError("Non-PDF support document.")
+        except NoSuchElementException:
+            pass
+        return attachements
 
     def browser_load_order_list(self):
         if self.options.use_cached_orderlist:
@@ -231,7 +351,6 @@ class KjellScraper(BaseScraper):
             self.cache["ORDER_LISTS"] / f"kjell-{self.COUNTRY}-orders.json"
         )
 
-
     def browser_detect_handle_interrupt(self, expected_url) -> None:
         pass
 
@@ -251,35 +370,61 @@ class KjellScraper(BaseScraper):
                     code_len_min = min(code_len_min, len(pli["code"]))
                     products[pli["code"]] = pli
                 else:
-                    raise NotImplementedError("Not implemented: Product code appeared twice")
-            self.log.debug("Item code was from %s to %s chars", code_len_min, code_len_max)
+                    raise NotImplementedError(
+                        "Not implemented: Product code appeared twice"
+                    )
+            self.log.debug(
+                "Item code was from %s to %s chars", code_len_min, code_len_max
+            )
             order_dict = {}
             for order in orders["items"]:
-                #self.pprint(order)
-                order_dict[order['transactionNumber']] = order
+                # self.pprint(order)
+                order_dict[order["transactionNumber"]] = order
                 continue
-                for line_item in order['lineItems']:
+                for line_item in order["lineItems"]:
                     # Item codes are in general 5 numders. Below that is bags etc.
                     if line_item["code"] not in products:
                         if len(line_item["code"]) > 4:
-                            self.log.debug(f"Product code {line_item['code']} missing")
-                        #else:
+                            self.log.debug(
+                                f"Product code {line_item['code']} missing"
+                            )
+                        # else:
                         #    self.log.debug(f"Product code {line_item['code']} missing, but probably bag, etc")
-            order = order_dict["7707669"]
-            #self.pprint(order)
-            for line_item in order['lineItems']:
-                    # Item codes are in general 5 numders. Below that is bags etc.
-                    if line_item["code"] == "90285":
-                        self.pprint(line_item)
-                        brws = self.browser_visit_page_v2("https://kjell.com" + line_item["url"])
-                        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-                        time.sleep(2)
-                        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-                        self.browser_cleanup_item_page()
-                        input()
+            order_id = "5585936"
+            order = order_dict[order_id]
+            # self.pprint(order)
+            order_cache_dir = self.cache["ORDERS"] / Path(order_id)
+            self.makedir(order_cache_dir)
+
+            for line_item in order["lineItems"]:
+                # Item codes are in general 5 numders. Below that is bags etc.
+                item_id = line_item["code"]
+                if len(item_id) > 4:
+                    self.pprint(line_item)
+                    if line_item["url"] != "":
+                        if item_id == "40541":
+                        #if item_id not in ["47140", "32313", "32314", "90285"]:
+                            # self.pprint(line_item)
+                            brws = self.browser_visit_page_v2(
+                                "https://kjell.com" + line_item["url"]
+                            )
+                            brws.execute_script(
+                                "window.scrollTo(0,document.body.scrollHeight)"
+                            )
+                            time.sleep(2)
+                            brws.execute_script(
+                                "window.scrollTo(0,document.body.scrollHeight)"
+                            )
+                            self.browser_cleanup_item_page()
+                            attachements = self.save_support_documents(order_id, item_id, order_cache_dir)
+                            self.log.debug("Attachements: %s", attachements)
+                            self.log.debug("Press enter to continue")
+                            input()
+                        else:
+                            self.pprint(line_item["code"])
                     else:
-                        self.pprint(line_item["code"] )
-            
+                        self.log.info("Item %s, %s has no url", item_id, line_item["displayName"])
+
             # https://archive.org/wayback/available?url=https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027
             # {"url": "https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "archived_snapshots": {"closest": {"status": "200", "available": true, "url": "http://web.archive.org/web/20211202101519/https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "timestamp": "20211202101519"}}}
             # orders = self.lxml_parse_orderlist_html(order_list_html)
