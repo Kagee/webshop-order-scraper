@@ -63,6 +63,8 @@ class KjellScraper(BaseScraper):
             '//h4[contains(text(),"Lagerstatus nett og i butikk")]/parent::div/parent::div/parent::div/parent::div',
             # Live-stream video
             '//img[contains(@src,"liveshopping.bambuser.com")]/parent::div/parent::div',
+            # 360 images
+            '//img[contains(@src,"360images")]/parent::div/parent::div',
             # Add to cart and likes
             '//button[@data-test-id="add-to-shopping-list-button"]/parent::div',
             # Simmilar products
@@ -88,52 +90,73 @@ class KjellScraper(BaseScraper):
             (By.TAG_NAME, "iframe"),
         ]:
             elemets_to_hide += brws.find_elements(element[0], element[1])
-        #try:
-        #    center_col = brws.find_element(
-        #        By.CSS_SELECTOR, "div.centerColAlign"
-        #    )
-        #except NoSuchElementException:
-        #    # co.jp?
-        #    try:
-        #        center_col = brws.find_element(By.CSS_SELECTOR, "div.centerColumn")
-        #    except NoSuchElementException:
-        #        # amazon fasion / apparel ?
-        #        center_col = brws.find_element(By.CSS_SELECTOR, "div#centerCol")
 
+        large_images = brws.find_elements(By.XPATH, '//img[contains(@intrinsicsize,"960")]')
+        thumbs_div = brws.find_element(By.XPATH, '(//img[contains(@intrinsicsize,"320")])[1]/parent::span/parent::div/parent::div')
+        content_container = brws.find_element(By.CSS_SELECTOR, 'div#content-container')
 
-        # section -> grid-template-columns: none, width: none
         brws.execute_script(
             """
                 // remove spam/ad elements
                 for (let i = 0; i < arguments[0].length; i++) {
                     arguments[0][i].remove()
                 }
-                for (let i = 0; i < arguments[1].length; i++) {
-                    arguments[1][i].style.width = "100%"
-                    arguments[1][i].style.gridTemplateColumns = "none"
+
+                sections = document.getElementsByTagName("section")
+                for (let i = 0; i < sections.length; i++) {
+                    sections[i].style.width = "100%"
+                    sections[i].style.gridTemplateColumns = "none"
+                    sections[i].style.display="block";
+                }
+
+                imgs = document.getElementsByTagName("img")
+                for (let i = 0; i < imgs.length; i++) {
+                    imgs[i].style.transitionTimingFunction = null;
+                    imgs[i].style.transitionDuration = null;
+                    imgs[i].style.transitionProperty= null;
                 }
 
                 element = document.getElementsByTagName("body")[0]
                 element.style.fontFamily="none";
 
-                # break-inside: avoid-page;
-
-                //for(var i=0; i < element.children.length; i++){
-                //    changeFont(element.children[i]);
-                //}
-
-                // Give product text more room
-                //arguments[1].style.marginRight=0
-                // Turn om Amazon's special font
-                //arguments[2].classList.remove("a-ember");
-                //arguments[3].scrollIntoView()
+                arguments[2].style.display="block";
+                var div = document.createElement('div');
+                // large_images
+                for (let i = 0; i < arguments[1].length; i++) {
+                    var div2 = document.createElement('p');
+                    div2.style.breakInside="avoid";
+                    var img = document.createElement('img');
+                    img.style.display="block";
+                    img.style.breakInside="avoid";
+                    img.style.width="960px";
+                    new_url = new URL(arguments[1][i].src);
+                    // some images become TIFF if we delete w/h ...
+                    //new_url.searchParams.delete("w");
+                    //new_url.searchParams.delete("h");
+                    //new_url.searchParams.delete("pad");
+                   //new_url.searchParams.delete("ref");
+                    img.src = new_url.toString();
+                    console.log(img.src)
+                    div2.appendChild(img);
+                    div.appendChild(div2);
+                }
+                document.body.appendChild(div);
+                arguments[3].style.display="none";
                 """,
             elemets_to_hide,
-            brws.find_elements(By.TAG_NAME, "section"),
-            #center_col,
-            #
-            #brws.find_element(By.ID, "leftCol"),
+            large_images,
+            content_container,
+            thumbs_div,
         )
+        
+        figures = brws.find_elements(By.TAG_NAME, "figure")
+        for figure in figures:
+            time.sleep(0.5)
+            brws.execute_script(
+            """
+                arguments[0].scrollIntoView();
+            """
+               , figure)
         time.sleep(2)
 
     def browser_load_order_list(self):
@@ -169,7 +192,7 @@ class KjellScraper(BaseScraper):
         except NoSuchElementException:
             pass
         transactions = self.browser.execute_script("""
-            return window.CURRENT_PAGE.transactions.items;
+            return window.CURRENT_PAGE.transactions;
             """)
         self.write(self.ORDER_LIST_JSON_FILENAME, transactions, to_json=True)
         return transactions
