@@ -226,16 +226,16 @@ class KjellScraper(BaseScraper):
                 By.XPATH,
                 '//span[contains(text(),"Support")]/ancestor::button/parent::div//a',
             )
-            for a in support_a:
-                self.log.debug("HREF: %s", a.get_attribute("href"))
-                self.log.debug("TEXT: %s", a.text)
-                url_parts = urlparse(a.get_attribute("href"))
+            for a_element in support_a:
+                self.log.debug("HREF: %s", a_element.get_attribute("href"))
+                self.log.debug("TEXT: %s", a_element.text)
+                url_parts = urlparse(a_element.get_attribute("href"))
                 if url_parts.path.endswith(".pdf"):
                     filename = Path(url_parts.path).name
                     for pdf in self.cache["TEMP"].glob("*.pdf"):
                         # Remove old/random PDFs
                         os.remove(pdf)
-                    a.click()
+                    a_element.click()
                     self.log.debug(
                         "Opening PDF, waiting for it to download in background"
                     )
@@ -253,7 +253,7 @@ class KjellScraper(BaseScraper):
                     self.wait_for_stable_file(pdf[0])
 
                     filename = (
-                        f"{item_id}--{filename}--{a.text}"
+                        f"{item_id}--{filename}--{a_element.text}"
                     )
                     filename_safe = base64.urlsafe_b64encode(
                         filename.encode("utf-8")
@@ -271,7 +271,7 @@ class KjellScraper(BaseScraper):
                         filename,
                     )
 
-                    attachements.append(str(attachement_file))
+                    attachements.append((a_element.text, str(attachement_file)))
                     self.move_file(pdf[0], attachement_file)
                 else:
                     raise NotImplementedError("Non-PDF support document.")
@@ -380,50 +380,52 @@ class KjellScraper(BaseScraper):
             for order in orders["items"]:
                 # self.pprint(order)
                 order_dict[order["transactionNumber"]] = order
-                continue
-                for line_item in order["lineItems"]:
-                    # Item codes are in general 5 numders. Below that is bags etc.
-                    if line_item["code"] not in products:
-                        if len(line_item["code"]) > 4:
-                            self.log.debug(
-                                f"Product code {line_item['code']} missing"
-                            )
-                        # else:
-                        #    self.log.debug(f"Product code {line_item['code']} missing, but probably bag, etc")
-            order_id = "5585936"
-            order = order_dict[order_id]
-            # self.pprint(order)
-            order_cache_dir = self.cache["ORDERS"] / Path(order_id)
-            self.makedir(order_cache_dir)
 
-            for line_item in order["lineItems"]:
-                # Item codes are in general 5 numders. Below that is bags etc.
-                item_id = line_item["code"]
-                if len(item_id) > 4:
-                    self.pprint(line_item)
-                    if line_item["url"] != "":
-                        if item_id == "40541":
-                        #if item_id not in ["47140", "32313", "32314", "90285"]:
-                            # self.pprint(line_item)
-                            brws = self.browser_visit_page_v2(
-                                "https://kjell.com" + line_item["url"]
-                            )
-                            brws.execute_script(
-                                "window.scrollTo(0,document.body.scrollHeight)"
-                            )
-                            time.sleep(2)
-                            brws.execute_script(
-                                "window.scrollTo(0,document.body.scrollHeight)"
-                            )
-                            self.browser_cleanup_item_page()
-                            attachements = self.save_support_documents(order_id, item_id, order_cache_dir)
-                            self.log.debug("Attachements: %s", attachements)
-                            self.log.debug("Press enter to continue")
-                            input()
+            # /item-24175.pdf item-40570.pdf /item-61620.pdf /item-32313.pdf
+            # 404 /item-65027.pdf item-88253.pdf tem-90035.pdf /item-97408.pdf
+
+            for order_id in order_dict.keys():
+                order: Dict = order_dict[order_id]
+                order_cache_dir = self.cache["ORDERS"] / Path(order_id)
+                self.makedir(order_cache_dir)
+                for i, line_item in enumerate(order["lineItems"].copy()):
+                    # Item codes are in general 5 numders. Below that is bags etc.
+                    item_id = line_item["code"]
+                    if len(item_id) > 4:
+                        self.pprint(line_item)
+                        if line_item["url"] != "":
+                                item_pdf_file = (
+                                        order_cache_dir / Path(f"item-{item_id}.pdf")
+                                    ).resolve()
+                                item_pdf_path = str(
+                                        Path(item_pdf_file).relative_to(self.cache["BASE"])
+                                    )
+                                if self.can_read(item_pdf_file):
+                                    self.log.debug("Skipping item %s, found %s", item_id, item_pdf_file)
+                                else:
+                                    brws = self.browser_visit_page_v2(
+                                        "https://kjell.com" + line_item["url"]
+                                    )
+                                    brws.execute_script(
+                                        "window.scrollTo(0,document.body.scrollHeight)"
+                                    )
+                                    time.sleep(2)
+                                    brws.execute_script(
+                                        "window.scrollTo(0,document.body.scrollHeight)"
+                                    )
+                                    self.browser_cleanup_item_page()
+                                    attachements = self.save_support_documents(order_id, item_id, order_cache_dir)
+                                    order["lineItems"][i]["attachements"] = attachements
+                                    #self.log.debug("Attachements: %s", attachements)
+                                    self.log.debug("Printing page to PDF")
+                                    self.remove(self.cache["PDF_TEMP_FILENAME"])
+                                    brws.execute_script("window.print();")
+                                    self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+                                    
+                                    self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
+                                    order["lineItems"][i]["pdf"] = item_pdf_path
                         else:
-                            self.pprint(line_item["code"])
-                    else:
-                        self.log.info("Item %s, %s has no url", item_id, line_item["displayName"])
+                            self.log.info("Item %s, %s has no url", item_id, line_item["displayName"])
 
             # https://archive.org/wayback/available?url=https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027
             # {"url": "https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "archived_snapshots": {"closest": {"status": "200", "available": true, "url": "http://web.archive.org/web/20211202101519/https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "timestamp": "20211202101519"}}}
