@@ -109,13 +109,13 @@ class AdafruitScraper(BaseScraper):
                         .isoformat()
                     ),
                     "items": [],
-                    "total": {"value": order_obj["total"], "currency": "USD"},
+                    "total": {"value": f'{order_obj["total"]}', "currency": "USD"},
                     "subtotal": {
-                        "value": order_obj["subtotal"],
+                        "value": f'{order_obj["subtotal"]}',
                         "currency": "USD",
                     },
-                    "shipping": {"value": order_obj["tax"], "currency": "USD"},
-                    "tax": {"value": order_obj["shipping"], "currency": "USD"},
+                    "shipping": {"value": f'{order_obj["shipping"]}', "currency": "USD"},
+                    "tax": {"value": f'{order_obj["tax"]}', "currency": "USD"},
                 }
                 for item_id, item_data in order_obj["items"].items():
                     assert self.can_read(filename_base / item_data["png"])

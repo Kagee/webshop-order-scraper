@@ -5,8 +5,11 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Final, List
-from urllib.parse import urlparse
+from typing import Any, Dict, Final, List, Union
+from urllib.parse import urlparse, urlencode, parse_qs
+import requests
+import filetype
+import json
 
 from lxml.etree import tostring
 from lxml.html import HtmlElement
@@ -39,12 +42,186 @@ class KjellScraper(BaseScraper):
 
     # Methods that use Selenium to scrape webpages in a browser
 
-    def browser_save_item_thumbnail(self):
-        pass
+    def browser_save_item_and_attachments(
+        self, order_id, order_cache_dir, item_id, line_item
+    ):
+        item_pdf_file = (
+            order_cache_dir / Path(f"item-{item_id}.pdf")
+        ).resolve()
+        item_pdf_missing = f"{item_pdf_file}.missing"
+        item_pdf_path = str(Path(item_pdf_file).relative_to(self.cache["BASE"]))
+
+        if self.can_read(item_pdf_file):
+            self.log.debug(
+                "Skipping item %s, found %s",
+                item_id,
+                item_pdf_file,
+            )
+            return None
+        if self.can_read(item_pdf_missing):
+            self.log.error(
+                AMBER("Skipping item %s, found %s"),
+                item_id,
+                item_pdf_missing,
+            )
+            return None
+
+        if line_item["url"] != "":
+            url = "https://kjell.com" + line_item["url"]
+            brws = self.browser_visit_page_v2(url)
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+            time.sleep(2)
+            brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+
+            try:
+                brws.find_element(
+                    By.XPATH,
+                    "//h1[contains(text(),'Finner ikke siden')]",
+                )
+            except NoSuchElementException:
+                pass
+            else:
+                self.log.error(
+                    RED("Item id %s in order %s, %s, returned 404: %s"),
+                    item_id,
+                    order_id,
+                    line_item["displayName"],
+                    url,
+                )
+                self.write(item_pdf_missing, "1")
+                return None
+            self.browser_cleanup_item_page()
+            self.browser_expand_item_page()
+
+            attachements = self.save_support_documents(item_id, order_cache_dir)
+
+            self.log.debug("Printing page to PDF")
+            self.remove(self.cache["PDF_TEMP_FILENAME"])
+
+            brws.execute_script("window.print();")
+            self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+
+            self.move_file(
+                self.cache["PDF_TEMP_FILENAME"],
+                item_pdf_file,
+            )
+        else:
+            self.log.error(
+                RED("Item id %s in order %s, %s has no url"),
+                item_id,
+                order_id,
+                line_item["displayName"],
+            )
+            self.write(item_pdf_missing, "1")
+
+    def browser_save_item_thumbnail(
+        self, order_id, order_cache_dir, item_id, line_item
+    ):
+        item_thumb_file = (
+            order_cache_dir / Path(f"item-thumb-{item_id}.jpg")
+        ).resolve()
+        item_thumb_missing = f"{item_thumb_file}.missing"
+        item_thumb_path = str(
+            Path(item_thumb_file).relative_to(self.cache["BASE"])
+        )
+        if self.can_read(item_thumb_file):
+            self.log.debug(
+                "Skipping thumb for item %s, found %s",
+                item_id,
+                item_thumb_file,
+            )
+            return
+        if self.can_read(item_thumb_missing):
+            self.log.error(
+                AMBER("Skipping thumb for item %s, found %s"),
+                item_id,
+                item_thumb_missing,
+            )
+            return
+
+        if line_item["imageUrl"]["url"] and line_item["imageUrl"]["url"] != "":
+            image_url = "https://kjell.com" + line_item["imageUrl"]["url"]
+            url_parsed = urlparse(image_url)
+            # image_name = Path(url_parsed.path).name
+            query_parsed = parse_qs(url_parsed.query, keep_blank_values=True)
+            query_parsed.pop("w", None)
+            query_parsed.pop("h", None)
+            query_parsed["w"] = "900"
+            image_url = url_parsed._replace(
+                query=urlencode(query_parsed, True)
+            ).geturl()
+            # self.log.debug("Trying to download thumbnail: %s", image_url)
+            headers = {
+                "User-Agent": (
+                    "python/webshop-order-scraper (hildenae@gmail.com)"
+                ),
+            }
+            response = requests.get(url=image_url, headers=headers, timeout=10)
+            self.remove(self.cache["IMG_TEMP_FILENAME"])
+            self.write(
+                self.cache["IMG_TEMP_FILENAME"],
+                response.content,
+                binary=True,
+            )
+            kind = filetype.guess(self.cache["IMG_TEMP_FILENAME"])
+            if kind:
+                if kind.mime.startswith("image/") and kind.extension == "jpg":
+                    self.log.debug(
+                        "Downloaded thumbnail %s was: %s",
+                        self.cache["IMG_TEMP_FILENAME"],
+                        kind.extension,
+                    )
+                    self.move_file(
+                        self.cache["IMG_TEMP_FILENAME"],
+                        item_thumb_file,
+                    )
+                    return item_thumb_path
+                else:
+                    self.log.error(
+                        "Thumbnail was not image or JPEG: %s, %s",
+                        kind.mime,
+                        kind.extension,
+                    )
+                    self.write(item_thumb_missing, "1")
+                    return None
+            else:
+                self.log.error(
+                    RED("Failed to identify filetype: %s"),
+                    image_url,
+                )
+                self.write(item_thumb_missing, "1")
+                return None
+        else:
+            self.log.error(
+                RED("Item id %s in order %s, has no thumbnail"),
+                item_id,
+                order_id,
+            )
+            self.write(item_thumb_missing, "1")
+            return None
 
     def browser_cleanup_item_page(self) -> None:
         brws = self.browser_get_instance()
         self.log.debug("Hide fluff, ads, etc")
+        cookie_accept = None
+        try:
+            cookie_accept = brws.find_element(
+                By.XPATH,
+                "//h4[contains(text(),'"
+                " cookies')]/parent::div/div/button/span[contains(text(),"
+                " 'Godta')]",
+            )
+        except NoSuchElementException:
+            pass
+        try:
+            cookie_accept = brws.find_element(
+                By.XPATH,
+                '//span[contains(text(),"Aksepterer")]/parent::button',
+            )
+        except NoSuchElementException:
+            pass
+        if cookie_accept:
+            cookie_accept.click()
         elemets_to_hide: List[WebElement] = []
 
         for element_xpath in [
@@ -69,14 +246,14 @@ class KjellScraper(BaseScraper):
                 ' Kjell")]/parent::div/parent::div/parent::div/parent::div'
             ),
             (
-                '//span[contains(text(),"Spør Kjell")]/ancestor::button/parent::div/parent::div'
+                '//span[contains(text(),"Spør'
+                ' Kjell")]/ancestor::button/parent::div/parent::div'
             ),
             # Warehouse stock info
             (
                 '//h4[contains(text(),"Lagerstatus nett og i'
                 ' butikk")]/parent::div/parent::div/parent::div/parent::div'
             ),
-
             # Live-stream video
             '//img[contains(@src,"liveshopping.bambuser.com")]/parent::div/parent::div',
             # 360 images
@@ -125,6 +302,39 @@ class KjellScraper(BaseScraper):
         ]:
             elemets_to_hide += brws.find_elements(element[0], element[1])
 
+        brws.execute_script(
+            """
+                // remove spam/ad elements
+                for (let i = 0; i < arguments[0].length; i++) {
+                    arguments[0][i].remove()
+                }
+                """,
+            elemets_to_hide,
+        )
+
+        time.sleep(2)
+
+    def browser_expand_item_page(self):
+        brws = self.browser_get_instance()
+        brws.execute_script("""
+                sections = document.getElementsByTagName("section")
+                for (let i = 0; i < sections.length; i++) {
+                    sections[i].style.width = "100%"
+                    sections[i].style.gridTemplateColumns = "none"
+                    sections[i].style.display="block";
+                }
+                            
+                imgs = document.getElementsByTagName("img")
+                for (let i = 0; i < imgs.length; i++) {
+                    imgs[i].style.transitionTimingFunction = null;
+                    imgs[i].style.transitionDuration = null;
+                    imgs[i].style.transitionProperty= null;
+                }
+
+                element = document.getElementsByTagName("body")[0]
+                element.style.fontFamily="none";
+
+            """)
         large_images = brws.find_elements(
             By.XPATH, '//img[contains(@intrinsicsize,"960")]'
         )
@@ -136,50 +346,23 @@ class KjellScraper(BaseScraper):
         except NoSuchElementException:
             self.log.debug("No thumbnail list")
             thumbs_div = None
+
         content_container = brws.find_element(
             By.CSS_SELECTOR, "div#content-container"
         )
-
         brws.execute_script(
             """
-                // remove spam/ad elements
-                for (let i = 0; i < arguments[0].length; i++) {
-                    arguments[0][i].remove()
-                }
-
-                sections = document.getElementsByTagName("section")
-                for (let i = 0; i < sections.length; i++) {
-                    sections[i].style.width = "100%"
-                    sections[i].style.gridTemplateColumns = "none"
-                    sections[i].style.display="block";
-                }
-
-                imgs = document.getElementsByTagName("img")
-                for (let i = 0; i < imgs.length; i++) {
-                    imgs[i].style.transitionTimingFunction = null;
-                    imgs[i].style.transitionDuration = null;
-                    imgs[i].style.transitionProperty= null;
-                }
-
-                element = document.getElementsByTagName("body")[0]
-                element.style.fontFamily="none";
-
-                arguments[2].style.display="block";
+                arguments[1].style.display="block";
                 var div = document.createElement('div');
                 // large_images
-                for (let i = 0; i < arguments[1].length; i++) {
+                for (let i = 0; i < arguments[0].length; i++) {
                     var div2 = document.createElement('p');
                     div2.style.breakInside="avoid";
                     var img = document.createElement('img');
                     img.style.display="block";
                     img.style.breakInside="avoid";
                     img.style.width="960px";
-                    new_url = new URL(arguments[1][i].src);
-                    // some images become TIFF if we delete w/h ...
-                    //new_url.searchParams.delete("w");
-                    //new_url.searchParams.delete("h");
-                    //new_url.searchParams.delete("pad");
-                   //new_url.searchParams.delete("ref");
+                    new_url = new URL(arguments[0][i].src);
                     img.src = new_url.toString();
                     console.log(img.src)
                     div2.appendChild(img);
@@ -187,16 +370,15 @@ class KjellScraper(BaseScraper):
                 }
                 document.body.appendChild(div);
                 // thumbs_div
-                if (arguments[3]) {
-                    arguments[3].style.display="none";
+                if (arguments[2]) {
+                    arguments[2].style.display="none";
                 }
-                """,
-            elemets_to_hide,
+
+            """,
             large_images,
             content_container,
             thumbs_div,
         )
-
         for text_expand in ["Teknisk informasjon", "Support"]:
             try:
                 btn = brws.find_element(
@@ -218,7 +400,7 @@ class KjellScraper(BaseScraper):
             )
         time.sleep(2)
 
-    def save_support_documents(self, order_id, item_id, order_cache_dir):
+    def save_support_documents(self, item_id, order_cache_dir):
         brws = self.browser_get_instance()
         attachements = []
         try:
@@ -252,9 +434,7 @@ class KjellScraper(BaseScraper):
 
                     self.wait_for_stable_file(pdf[0])
 
-                    filename = (
-                        f"{item_id}--{filename}--{a_element.text}"
-                    )
+                    filename = f"{item_id}--{filename}--{a_element.text}"
                     filename_safe = base64.urlsafe_b64encode(
                         filename.encode("utf-8")
                     ).decode("utf-8")
@@ -300,6 +480,7 @@ class KjellScraper(BaseScraper):
             input()
         self.browser_visit_page(self.ORDER_LIST_URL)
 
+        cookie_accept = None
         try:
             cookie_accept = brws.find_element(
                 By.XPATH,
@@ -307,10 +488,18 @@ class KjellScraper(BaseScraper):
                 " cookies')]/parent::div/div/button/span[contains(text(),"
                 " 'Godta')]",
             )
-            if cookie_accept:
-                cookie_accept.click()
         except NoSuchElementException:
             pass
+        try:
+            cookie_accept = brws.find_element(
+                By.XPATH,
+                '//span[contains(text(),"Aksepterer")]/parent::button',
+            )
+        except NoSuchElementException:
+            pass
+        if cookie_accept:
+            cookie_accept.click()
+
         transactions = self.browser.execute_script("""
             return window.CURRENT_PAGE.transactions;
             """)
@@ -335,17 +524,8 @@ class KjellScraper(BaseScraper):
         self.LOGIN_PAGE_RE: str = r"https://www.kjell.com.*login=required.*"
 
         # pylint: disable=invalid-name
-        # self.SNAPSHOT_FILENAME_TEMPLATE = str(
-        #    self.cache["ORDERS"] / "{order_id}/item-snapshot-{item_id}.{ext}"
-        # )
         # self.THUMB_FILENAME_TEMPLATE = str(
         #    self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
-        # )
-        # self.ORDER_FILENAME_TEMPLATE = str(
-        #    self.cache["ORDERS"] / "{order_id}/order.{ext}"
-        # )
-        # self.TRACKING_HTML_FILENAME_TEMPLATE = str(
-        #    self.cache["ORDERS"] / "{order_id}/tracking.html"
         # )
         self.ORDER_LIST_JSON_FILENAME = (
             self.cache["ORDER_LISTS"] / f"kjell-{self.COUNTRY}-orders.json"
@@ -378,63 +558,84 @@ class KjellScraper(BaseScraper):
             )
             order_dict = {}
             for order in orders["items"]:
-                # self.pprint(order)
                 order_dict[order["transactionNumber"]] = order
 
-            # /item-24175.pdf item-40570.pdf /item-61620.pdf /item-32313.pdf
-            # 404 /item-65027.pdf item-88253.pdf tem-90035.pdf /item-97408.pdf
-
-            for order_id in order_dict.keys():
-                order: Dict = order_dict[order_id]
+            for order_id, order in order_dict.items():
+                # if order_id != "1320153652":
+                #   continue
                 order_cache_dir = self.cache["ORDERS"] / Path(order_id)
                 self.makedir(order_cache_dir)
-                for i, line_item in enumerate(order["lineItems"].copy()):
-                    # Item codes are in general 5 numders. Below that is bags etc.
+                for line_item in order["lineItems"]:
+                    # Item codes are in general 5 numbers. Below that is bags etc.
                     item_id = line_item["code"]
+                    # if item_id != "36159":
+                    #   continue
                     if len(item_id) > 4:
-                        self.pprint(line_item)
-                        if line_item["url"] != "":
-                                item_pdf_file = (
-                                        order_cache_dir / Path(f"item-{item_id}.pdf")
-                                    ).resolve()
-                                item_pdf_path = str(
-                                        Path(item_pdf_file).relative_to(self.cache["BASE"])
-                                    )
-                                if self.can_read(item_pdf_file):
-                                    self.log.debug("Skipping item %s, found %s", item_id, item_pdf_file)
-                                else:
-                                    brws = self.browser_visit_page_v2(
-                                        "https://kjell.com" + line_item["url"]
-                                    )
-                                    brws.execute_script(
-                                        "window.scrollTo(0,document.body.scrollHeight)"
-                                    )
-                                    time.sleep(2)
-                                    brws.execute_script(
-                                        "window.scrollTo(0,document.body.scrollHeight)"
-                                    )
-                                    self.browser_cleanup_item_page()
-                                    attachements = self.save_support_documents(order_id, item_id, order_cache_dir)
-                                    order["lineItems"][i]["attachements"] = attachements
-                                    #self.log.debug("Attachements: %s", attachements)
-                                    self.log.debug("Printing page to PDF")
-                                    self.remove(self.cache["PDF_TEMP_FILENAME"])
-                                    brws.execute_script("window.print();")
-                                    self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-                                    
-                                    self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
-                                    order["lineItems"][i]["pdf"] = item_pdf_path
-                        else:
-                            self.log.info("Item %s, %s has no url", item_id, line_item["displayName"])
-
-            # https://archive.org/wayback/available?url=https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027
-            # {"url": "https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "archived_snapshots": {"closest": {"status": "200", "available": true, "url": "http://web.archive.org/web/20211202101519/https://www.kjell.com/no/produkter/data/mac-tilbehor/satechi-usb-c-hub-og-minnekortleser-solv-p65027", "timestamp": "20211202101519"}}}
-            # orders = self.lxml_parse_orderlist_html(order_list_html)
-            # self.get_individual_order_details(orders)
+                        self.log.debug("Order: %s, item: %s", order_id, item_id)
+                        self.browser_save_item_thumbnail(
+                            order_id, order_cache_dir, item_id, line_item
+                        )
+                        self.browser_save_item_and_attachments(
+                            order_id, order_cache_dir, item_id, line_item
+                        )
         except NoSuchWindowException:
             pass
         self.browser_safe_quit()
 
+    def command_to_std_json(self):
+        """
+        Convert all data we have to a JSON that validates with schema,
+         and a .zip with all attachements
+        """
+
+        structure = self.get_structure(
+            self.name,
+            None,
+            "https://www.kjell.com/no/mine-sider/mine-kjop#{order_id}",
+            "https://www.kjell.com/-p{item_id}",
+        )
+
+        with open(self.ORDER_LIST_JSON_FILENAME, encoding="utf-8") as input_file:
+            kjell_json = json.load(input_file)
+
+        orders = []
+
+        for orig_order in kjell_json["items"]:
+            order_id = orig_order["transactionNumber"]
+            order_object = {
+                    "id": order_id,
+                    "date": (
+                        datetime.strptime(orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z")
+                        .date()
+                        .isoformat()
+                    ),
+                    "items": [],
+                    "total": {"value": f'{orig_order["total"]}', "currency": "NOK"},
+                    #"shipping": {"value": order_obj["tax"], "currency": "NOK"},
+                    #"tax": {"value": order_obj["shipping"], "currency": "NOK"},
+                }
+
+
+            orders.append(order_object)
+            # date*
+            # "purchaseDate": "2023-08-10T16:10:42Z", => "date": "2017-04-26",
+            # items* [] "lineItems": [
+            # subtotal
+            # shipping
+            #    "shippingFee": {
+            #      "exclVat": 0,
+            #      "inclVat": 0,
+            #      "vatPercent": 0
+            #  },
+            # tax "vatAmount": 150.94
+            # total "total": 754.7,
+            # attachements[]
+            # <rest of elements>
+            break
+        structure["orders"] = orders
+        self.pprint(orders)
+        self.output_schema_json(structure)
+        
     # Class init
     def __init__(self, options: Dict):
         super().__init__(options, __name__)

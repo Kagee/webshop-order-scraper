@@ -212,7 +212,10 @@ class BaseScraper(object):
             self.makedir(path)
 
         self.cache.update(
-            {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary-pdf.pdf"}
+            {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary.pdf"}
+        )
+        self.cache.update(
+            {"IMG_TEMP_FILENAME": self.cache["TEMP"] / "temporary.jpg"}
         )
 
     def find_element(

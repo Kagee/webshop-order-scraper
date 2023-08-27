@@ -105,7 +105,8 @@ def parse_args():
     parser_kjell = subparsers.add_parser("kjell")
 
     use_cached_orderlist(parser_kjell)
-
+    to_std_json(parser_kjell)
+    
     parser_kjell.add_argument(
         "--country",
         type=str.lower,
