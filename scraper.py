@@ -133,6 +133,10 @@ def parse_args():
     parser_ebay = subparsers.add_parser("pimoroni")
     use_cached_orderlist(parser_ebay)
 
+    parser_polyalkemi = subparsers.add_parser("polyalkemi")
+    use_cached_orderlist(parser_polyalkemi)
+    to_std_json(parser_polyalkemi)
+
     args = parser.parse_args()
 
     log.debug("Command line arguments: %s", args)
@@ -150,7 +154,7 @@ def main():
 
     if hasattr(args, "to_std_json") and args.to_std_json:
             scraper_class(args).command_to_std_json()
-    elif hasattr(args, "to_std_json"):
+    elif args.to_std_json:
             log.error("%s does not support to_std_json", args.source)
     else:
         scraper_class(args).command_scrape()

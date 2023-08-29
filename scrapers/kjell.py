@@ -644,4 +644,3 @@ class KjellScraper(BaseScraper):
         self.simple_name = "kjell.com-" + self.COUNTRY
         super().setup_cache(Path("kjell-" + self.COUNTRY))
         self.setup_templates()
-        self.log.debug(self.ORDER_LIST_URL)
