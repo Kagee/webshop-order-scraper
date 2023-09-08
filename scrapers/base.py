@@ -182,8 +182,14 @@ class BaseScraper(object):
             with zipfile.ZipFile(zip_file_path, "a") as zip_file:
                 for count, data in enumerate(files_from_to):
                     if count % per_count == 0:
-                        self.log.info("File %s of %s", count, count_files)
+                        self.log.info("Added %s of %s files to %s", count, count_files, zip_file_path.name)
                     zip_file.write(data[0], data[1])
+                logo = Path(f"logos/{self.simple_name}.png")
+                if self.can_read(logo):
+                    zip_file.write(logo, "logo.png")
+                    self.log.debug("Added %s as logo.png", logo.name)
+                else:
+                    self.log.warning(AMBER("Found no %s.png in logos/"), logo.name)
 
             self.log.debug("Writing JSON to %s", json_file_path)
             with open(json_file_path, "w", encoding="utf-8") as json_file:
