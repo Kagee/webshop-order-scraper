@@ -19,7 +19,7 @@ output/*.zip
 # folders
 scraper-cache/
 .vscode/
-
+logos/
 # symlinks
 .vscode
 scraper-cache

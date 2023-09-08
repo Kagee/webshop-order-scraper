@@ -38,12 +38,6 @@
                     "type": "string",
                     "format": "uri-reference",
                     "pattern": "^https?://.*\\..*.*{item_id}.*$"
-                },
-                "logo_url": {
-                    "description": "Url to a image of the Shop or branch logo",
-                    "type": "string",
-                    "format": "uri-reference",
-                    "pattern": "^https?://.*$"
                 }
             }
         },
