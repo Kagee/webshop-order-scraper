@@ -60,6 +60,23 @@ def parse_args():
             ),
         )
 
+    def skip_order_pdf(parser):
+        parser.add_argument(
+            "--skip-order-pdf",
+            action="store_true",
+            help="Do not create or save order-related PDFs like invoices.",
+        )
+
+    def skip_item_pdf(parser):
+        parser.add_argument(
+            "--skip-item-pdf",
+            action="store_true",
+            help=(
+                "Do not create or save item-related PDFs like item listing"
+                " PDFs."
+            ),
+        )
+
     parser_adafruit = subparsers.add_parser("adafruit")
 
     to_std_json(parser_adafruit)
@@ -136,6 +153,8 @@ def parse_args():
     parser_polyalkemi = subparsers.add_parser("polyalkemi")
     use_cached_orderlist(parser_polyalkemi)
     to_std_json(parser_polyalkemi)
+    skip_order_pdf(parser_polyalkemi)
+    skip_item_pdf(parser_polyalkemi)
 
     args = parser.parse_args()
 
