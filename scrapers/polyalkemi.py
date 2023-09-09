@@ -4,13 +4,15 @@ import os
 import re
 import time
 import decimal
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Final, List, Union
 from urllib.parse import urlparse, urlencode, parse_qs
+
 import requests
 import filetype
-import json
+
 
 from lxml.etree import tostring
 from lxml.html import HtmlElement
@@ -86,8 +88,7 @@ class PolyalkemiScraper(BaseScraper):
             orders = self.browser_get_order_list_and_faktura()
             self.pprint(orders)
             for order in orders:
-                self.browser_get_order_details()
-                pass
+                self.browser_get_order_details(order)
 
             # cleanup:
             # cssselect:
@@ -108,11 +109,11 @@ class PolyalkemiScraper(BaseScraper):
         if self.can_read(order_json):
             return self.read(order_json,from_json=True)
         order_details = {}
-        brws = self.browser_visit(self.ORDER_URL.format(order_id = order_id))
+        self.browser_visit(self.ORDER_URL.format(order_id = order_id))
+        order_details["foo"] = 1
         input()
-        
         #self.write(order_details, to_json=True)
-    
+
     def browser_visit(self, url):
         brws = self.browser_visit_page(
             url, default_login_detect=False
@@ -136,8 +137,8 @@ class PolyalkemiScraper(BaseScraper):
             if self.can_read(self.ORDER_LIST_JSON_FILENAME):
                 return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
         self.log.info("Could not find cached orderlist.")
-        brws = self.browser_visit(self.ORDER_LIST_URL)
-      
+        self.browser_visit(self.ORDER_LIST_URL)
+        brws = self.browser_get_instance()
         orders_table = brws.find_element(
             By.CSS_SELECTOR, "table.woocommerce-orders-table"
         )
@@ -151,7 +152,6 @@ class PolyalkemiScraper(BaseScraper):
             self.makedir(order_dir)
             order_pdf_path = order_dir / "faktura.pdf"
             if not self.can_read(order_pdf_path):
-                # TODO: Download PDF
                 order_faktura = order_cols[4].find_element(
                     By.XPATH, "//a[contains(text(),'Faktura')]"
                 )
@@ -175,9 +175,9 @@ class PolyalkemiScraper(BaseScraper):
             order_status = order_cols[2].text
 
             total_re = r"(-?)kr (\d*.*\.\d*) for (-?)(\d*) produkt(?:er|)"
-            m = re.match(total_re, order_cols[3].text)
-            order_total = decimal.Decimal(f"{m[1]}{m[2]}")
-            item_count = int(f"{m[3]}{m[4]}")
+            total_parts = re.match(total_re, order_cols[3].text)
+            order_total = decimal.Decimal(f"{total_parts[1]}{total_parts[2]}")
+            item_count = int(f"{total_parts[3]}{total_parts[4]}")
             self.log.debug(
                 "ordre/dato/status/total/items: %s/%s/%s/%s/%s",
                 order_id,
