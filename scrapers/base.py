@@ -381,6 +381,12 @@ class BaseScraper(object):
         except WebDriverException:
             pass
 
+    def browser_visit(self, url: str):
+        brws = self.browser_get_instance()
+        brws.get(url)
+        self.browser_detect_handle_interrupt(url)
+        return brws
+
     def browser_visit_page(
         self,
         url: str,
