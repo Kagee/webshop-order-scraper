@@ -350,7 +350,7 @@ class AmazonScraper(BaseScraper):
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
             if order_summary:
                 self.remove(self.cache["PDF_TEMP_FILENAME"])
-                brws.switch_to.new_window()
+                brws.switch_to.new_window("tab")
                 brws.get(href)
                 self.log.debug("Found order summary.")
                 self.browser.execute_script("window.print();")

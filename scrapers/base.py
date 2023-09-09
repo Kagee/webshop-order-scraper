@@ -34,6 +34,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
 from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
+from webdriver_manager.core.driver_cache import DriverCacheManager
 
 from . import settings
 
@@ -297,8 +298,11 @@ class BaseScraper(object):
             self.log.debug(
                 "Using Selenium webdriver_manager to download webdriver binary"
             )
+            os.environ["WDM_LOG"] = str(logging.NOTSET)
             service = FirefoxService(
-                executable_path=FirefoxDriverManager().install()
+                executable_path=FirefoxDriverManager(
+                    cache_manager=DriverCacheManager()
+                ).install()
             )
             self.log.debug("Initializing browser")
             options = Options()
