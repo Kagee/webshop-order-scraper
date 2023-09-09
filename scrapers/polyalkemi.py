@@ -107,17 +107,15 @@ class PolyalkemiScraper(BaseScraper):
         order_dir = Path(self.cache["ORDERS"] / order_id)
         order_json = order_dir / "order.json"
         if self.can_read(order_json):
-            return self.read(order_json,from_json=True)
+            return self.read(order_json, from_json=True)
         order_details = {}
-        self.browser_visit(self.ORDER_URL.format(order_id = order_id))
+        self.browser_visit(self.ORDER_URL.format(order_id=order_id))
         order_details["foo"] = 1
         input()
-        #self.write(order_details, to_json=True)
+        # self.write(order_details, to_json=True)
 
     def browser_visit(self, url):
-        brws = self.browser_visit_page(
-            url, default_login_detect=False
-        )
+        brws = self.browser_visit_page(url, default_login_detect=False)
         try:
             brws.find_element(
                 By.CSS_SELECTOR, "form.login"
@@ -126,9 +124,7 @@ class PolyalkemiScraper(BaseScraper):
                 RED("You need to login manually. Press enter when completed.")
             )
             input()
-            brws = self.browser_visit_page(
-                url, default_login_detect=False
-            )
+            brws = self.browser_visit_page(url, default_login_detect=False)
         except NoSuchElementException:
             pass
 

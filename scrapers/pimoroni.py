@@ -152,21 +152,17 @@ class PimoroniScraper(BaseScraper):
 
             except TimeoutException as toe:
                 self.log.error(
-                    (
-                        "Login to %s was not successful "
-                        "because we could not find a expected element.."
-                    ),
+                    "Login to %s was not successful "
+                    "because we could not find a expected element..",
                     self.name,
                 )
                 raise toe
         time.sleep(2)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(
-                (
-                    "Login to %s was not successful. If you want continue,"
-                    " complete login, and then press enter. Press Ctrl-Z to"
-                    " cancel."
-                ),
+                "Login to %s was not successful. If you want continue,"
+                " complete login, and then press enter. Press Ctrl-Z to"
+                " cancel.",
                 self.name,
             )
             input()

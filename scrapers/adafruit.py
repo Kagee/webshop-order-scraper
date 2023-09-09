@@ -86,10 +86,8 @@ class AdafruitScraper(BaseScraper):
         structure = self.get_structure(
             self.name,
             None,
-            (
-                "https://www.adafruit.com/index.php"
-                "?main_page=account_history_info&order_id={order_id}"
-            ),
+            "https://www.adafruit.com/index.php"
+            "?main_page=account_history_info&order_id={order_id}",
             "https://www.adafruit.com/product/{item_id}",
         )
 
@@ -109,12 +107,18 @@ class AdafruitScraper(BaseScraper):
                         .isoformat()
                     ),
                     "items": [],
-                    "total": {"value": f'{order_obj["total"]}', "currency": "USD"},
+                    "total": {
+                        "value": f'{order_obj["total"]}',
+                        "currency": "USD",
+                    },
                     "subtotal": {
                         "value": f'{order_obj["subtotal"]}',
                         "currency": "USD",
                     },
-                    "shipping": {"value": f'{order_obj["shipping"]}', "currency": "USD"},
+                    "shipping": {
+                        "value": f'{order_obj["shipping"]}',
+                        "currency": "USD",
+                    },
                     "tax": {"value": f'{order_obj["tax"]}', "currency": "USD"},
                 }
                 for item_id, item_data in order_obj["items"].items():
@@ -262,7 +266,7 @@ class AdafruitScraper(BaseScraper):
                             "div#prod-stock",
                             "div#prod-stock-mobile",
                             "div.gallery-arrow",
-                            "div.messages-container" # UPS warning
+                            "div.messages-container",  # UPS warning
                         ],
                         # element_tuples=[(By.TAG_NAME, "iframe")],
                     )

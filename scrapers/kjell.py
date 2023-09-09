@@ -595,7 +595,9 @@ class KjellScraper(BaseScraper):
             "https://www.kjell.com/-p{item_id}",
         )
 
-        with open(self.ORDER_LIST_JSON_FILENAME, encoding="utf-8") as input_file:
+        with open(
+            self.ORDER_LIST_JSON_FILENAME, encoding="utf-8"
+        ) as input_file:
             kjell_json = json.load(input_file)
 
         orders = []
@@ -603,18 +605,19 @@ class KjellScraper(BaseScraper):
         for orig_order in kjell_json["items"]:
             order_id = orig_order["transactionNumber"]
             order_object = {
-                    "id": order_id,
-                    "date": (
-                        datetime.strptime(orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z")
-                        .date()
-                        .isoformat()
-                    ),
-                    "items": [],
-                    "total": {"value": f'{orig_order["total"]}', "currency": "NOK"},
-                    #"shipping": {"value": order_obj["tax"], "currency": "NOK"},
-                    #"tax": {"value": order_obj["shipping"], "currency": "NOK"},
-                }
-
+                "id": order_id,
+                "date": (
+                    datetime.strptime(
+                        orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z"
+                    )
+                    .date()
+                    .isoformat()
+                ),
+                "items": [],
+                "total": {"value": f'{orig_order["total"]}', "currency": "NOK"},
+                # "shipping": {"value": order_obj["tax"], "currency": "NOK"},
+                # "tax": {"value": order_obj["shipping"], "currency": "NOK"},
+            }
 
             orders.append(order_object)
             # date*
@@ -635,7 +638,7 @@ class KjellScraper(BaseScraper):
         structure["orders"] = orders
         self.pprint(orders)
         self.output_schema_json(structure)
-        
+
     # Class init
     def __init__(self, options: Dict):
         super().__init__(options, __name__)

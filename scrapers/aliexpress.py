@@ -47,7 +47,7 @@ class AliExpressScraper(BaseScraper):
         )
         filename_base = self.cache["BASE"]
         for json_order_file in self.cache["ORDERS"].glob("**/*.json"):
-            #if json_order_file.parent.name != "8134930031914043":
+            # if json_order_file.parent.name != "8134930031914043":
             #    continue
 
             oob = self.read(json_order_file, from_json=True)
@@ -108,7 +108,8 @@ class AliExpressScraper(BaseScraper):
                 assert self.can_read(filename_base / item_obj["thumbnail"]), (
                     f"Could not find thumbnail for order {order_obj['id']},"
                     " item"
-                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']}), {item_obj['thumbnail']}"
+                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']}),"
+                    f" {item_obj['thumbnail']}"
                 )
                 assert self.can_read(
                     filename_base / item_obj["snapshot"]["html"]
@@ -252,7 +253,7 @@ class AliExpressScraper(BaseScraper):
                 sku = (
                     "".join(sku_list[0].itertext()).strip().replace("\xa0", " ")
                 )
-                sku_hash =  self.make_make_sku_hash(sku)
+                sku_hash = self.make_make_sku_hash(sku)
 
             price_count = (
                 "".join(
@@ -308,9 +309,11 @@ class AliExpressScraper(BaseScraper):
 
     @classmethod
     def make_make_sku_hash(cls, sku_text):
-        sku = re.sub(' {2,}', ' ', "".join(sku_text).strip().replace("\xa0", " "))
+        sku = re.sub(
+            " {2,}", " ", "".join(sku_text).strip().replace("\xa0", " ")
+        )
         return base64.urlsafe_b64encode(sku.encode("utf-8")).decode("utf-8")
-             
+
     def get_individual_order_details(self, orders):
         """
         Will loop though orders (possibly limited by ALI_ORDERS),
@@ -422,8 +425,8 @@ class AliExpressScraper(BaseScraper):
             return self.read(self.ORDER_LIST_FILENAME)
         else:
             self.log.info(
-                "Tried to use order list cache (%s), but found none"
-                ,self.ORDER_LIST_FILENAME
+                "Tried to use order list cache (%s), but found none",
+                self.ORDER_LIST_FILENAME,
             )
         return self.browser_scrape_order_list_html()
 
@@ -687,7 +690,9 @@ class AliExpressScraper(BaseScraper):
                 sku_hash = self.make_make_sku_hash("no-sku")
                 sku_element = ""
             else:
-                sku_element_text = sku_element[0].text.strip().replace("\xa0", " ")
+                sku_element_text = (
+                    sku_element[0].text.strip().replace("\xa0", " ")
+                )
                 sku_hash = self.make_make_sku_hash(sku_element_text)
 
                 self.log.debug("Sku hash: %s", sku_hash)
@@ -750,8 +755,11 @@ class AliExpressScraper(BaseScraper):
                 order_id=order["id"], item_id=item_sku_id
             )
         )
-        self.log.debug("Writing thumbnail to %s for item_sku_id %s",
-                       order["items"][item_sku_id]["thumbnail"],item_sku_id)
+        self.log.debug(
+            "Writing thumbnail to %s for item_sku_id %s",
+            order["items"][item_sku_id]["thumbnail"],
+            item_sku_id,
+        )
         self.write(
             order["items"][item_sku_id]["thumbnail"],
             base64.b64decode(thumb_data),
@@ -1080,7 +1088,9 @@ class AliExpressScraper(BaseScraper):
         self.log.info(AMBER("We need to log in to Aliexpress"))
         self.log.error(RED("Manual profile update required, terminating."))
         self.browser_safe_quit()
-        raise NotImplementedError("Automatic loging for newer Aliexpress not implemented.")
+        raise NotImplementedError(
+            "Automatic loging for newer Aliexpress not implemented."
+        )
 
     # Command functions, used in scrape.py
 

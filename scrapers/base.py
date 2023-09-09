@@ -25,16 +25,18 @@ from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
 from price_parser import Price
 from selenium import webdriver
-from selenium.common.exceptions import (NoSuchElementException,
-                                        WebDriverException)
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    WebDriverException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
-from webdriver_manager.firefox import \
-    GeckoDriverManager as FirefoxDriverManager
+from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 
 from . import settings
+
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
 
@@ -102,11 +104,7 @@ class BaseScraper(object):
         """Will assume $ is USD and € is EUR, we can do better"""
         guess_price = Price.fromstring(value)
         amount = guess_price.amount + Decimal("0.00")
-        value_curr_dict = {
-            "value": (
-                str(amount)
-            )
-        }
+        value_curr_dict = {"value": str(amount)}
 
         if force_currency:
             curr_dict = {"currency": force_currency}
@@ -126,12 +124,12 @@ class BaseScraper(object):
                     "Unexpected value/currency:"
                     f" {name}/{value}/{guess_price.currency}"
                 )
-        
+
         value_curr_dict.update(curr_dict)
         return value_curr_dict
 
-    #@classmethod
-    #def get_iso_code(cls, currency, name, value):
+    # @classmethod
+    # def get_iso_code(cls, currency, name, value):
     #    return curr_dict
 
     def output_schema_json(self, structure):
@@ -153,7 +151,6 @@ class BaseScraper(object):
             self.remove(json_file_path)
             self.remove(zip_file_path)
 
-
             self.log.debug("Generating zip file list... ")
             files_from_to = []
             for order in structure["orders"]:
@@ -162,12 +159,16 @@ class BaseScraper(object):
                         orig_file = self.cache["BASE"] / attach["path"]
                         path = Path(attach["path"])
                         safe_order_id = base64.urlsafe_b64encode(
-                            order['id'].encode("utf-8")
-                            ).decode("utf-8")
+                            order["id"].encode("utf-8")
+                        ).decode("utf-8")
                         if path.name == "order.html":
-                            attach["path"] = str(path.with_name(f"order-{safe_order_id}.html"))
+                            attach["path"] = str(
+                                path.with_name(f"order-{safe_order_id}.html")
+                            )
                         elif path.name == "tracking.html":
-                            attach["path"] = str(path.with_name(f"tracking-{safe_order_id}.html"))
+                            attach["path"] = str(
+                                path.with_name(f"tracking-{safe_order_id}.html")
+                            )
                         files_from_to.append((orig_file, attach["path"]))
                 for item in order["items"]:
                     orig_file = self.cache["BASE"] / item["thumbnail"]
@@ -182,14 +183,21 @@ class BaseScraper(object):
             with zipfile.ZipFile(zip_file_path, "a") as zip_file:
                 for count, data in enumerate(files_from_to):
                     if count % per_count == 0:
-                        self.log.info("Added %s of %s files to %s", count, count_files, zip_file_path.name)
+                        self.log.info(
+                            "Added %s of %s files to %s",
+                            count,
+                            count_files,
+                            zip_file_path.name,
+                        )
                     zip_file.write(data[0], data[1])
                 logo = Path(f"logos/{self.simple_name}.png")
                 if self.can_read(logo):
                     zip_file.write(logo, "logo.png")
                     self.log.debug("Added %s as logo.png", logo.name)
                 else:
-                    self.log.warning(AMBER("Found no %s.png in logos/"), logo.name)
+                    self.log.warning(
+                        AMBER("Found no %s.png in logos/"), logo.name
+                    )
 
             self.log.debug("Writing JSON to %s", json_file_path)
             with open(json_file_path, "w", encoding="utf-8") as json_file:
@@ -269,7 +277,11 @@ class BaseScraper(object):
             )
 
             self.log.info(AMBER(f"Trying to log in to {self.name}"))
-            return self.browser_get_instance(change_ua), username_data, password_data
+            return (
+                self.browser_get_instance(change_ua),
+                username_data,
+                password_data,
+            )
 
     def browser_get_instance(self, change_ua=None):
         """
@@ -412,21 +424,25 @@ class BaseScraper(object):
                 )
         else:
             self.log.debug("Login not required")
+
     def browser_login(self, expected_url):
         if True:
-            raise NotImplementedError("Child does not implement browser_login()")
+            raise NotImplementedError(
+                "Child does not implement browser_login()"
+            )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
         if True:
             raise NotImplementedError(
-                "Child does not implement browser_detect_handle_interrupt(self, expected_url)..."
+                "Child does not implement browser_detect_handle_interrupt(self,"
+                " expected_url)..."
             )
 
     def part_to_filename(self, part: PagePart, **kwargs):
         if True:
             raise NotImplementedError(
-            "Child does not implement _part_to_filename(...)"
-        )
+                "Child does not implement _part_to_filename(...)"
+            )
 
     def has_json(self, part: PagePart, **kwargs) -> bool:
         return self.can_read(self.part_to_filename(part, **kwargs))
@@ -547,10 +563,8 @@ class BaseScraper(object):
             sz3 = os.stat(filename).st_size
             size_stable = (sz1 == sz2 == sz3) and sz1 + sz2 + sz3 > 0
             self.log.debug(
-                (
-                    "Watching for stable file size larger than 0 bytes: %s %s"
-                    " %s %s"
-                ),
+                "Watching for stable file size larger than 0 bytes: %s %s"
+                " %s %s",
                 sz1,
                 sz2,
                 sz3,

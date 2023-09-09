@@ -54,7 +54,7 @@ with env.prefixed("WS_"):
     OUTPUT_FOLDER: Path = Path(
         env("OUTPUT_FOLDER", default="./output")
     ).resolve()
-    
+
     JSON_SCHEMA: Path = Path(
         env("JSON_SCHEMA", default="./output/schema.json")
     ).resolve()
@@ -64,9 +64,7 @@ with env.prefixed("WS_"):
         default=False,
     )
 
-    FF_PROFILE_PATH: Path = Path(
-        env("FF_PROFILE_PATH")
-    ).resolve()
+    FF_PROFILE_PATH: Path = Path(env("FF_PROFILE_PATH")).resolve()
 
     # Config for scraper aliexpress command
     ALI_MANUAL_LOGIN = env.bool("ALI_MANUAL_LOGIN", default=False)
