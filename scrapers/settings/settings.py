@@ -1,5 +1,6 @@
 import os
 import os.path
+import platform
 from pathlib import Path
 
 from environs import Env
@@ -64,7 +65,9 @@ with env.prefixed("WS_"):
         default=False,
     )
 
-    FF_PROFILE_PATH: Path = Path(env("FF_PROFILE_PATH")).resolve()
+    FF_PROFILE_PATH: Path = Path(
+        env(f"FF_PROFILE_PATH_{platform.system().upper()}")
+    ).resolve()
 
     # Config for scraper aliexpress command
     ALI_MANUAL_LOGIN = env.bool("ALI_MANUAL_LOGIN", default=False)
