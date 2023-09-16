@@ -143,7 +143,7 @@ class BaseScraper(object):
             ).resolve()
             zip_file_path = json_file_path.with_suffix(".zip")
             self.log.debug(
-                "Removing old output filee %s and %s from %s",
+                "Removing old output file %s and %s from %s",
                 json_file_path.name,
                 zip_file_path.name,
                 json_file_path.parent,
@@ -172,44 +172,45 @@ class BaseScraper(object):
                             )
                         files_from_to.append((orig_file, attach["path"]))
                 for item in order["items"]:
-                    orig_file = self.cache["BASE"] / item["thumbnail"]
-                    files_from_to.append((orig_file, item["thumbnail"]))
-                    for attach in item["attachements"]:
-                        orig_file = self.cache["BASE"] / attach["path"]
-                        files_from_to.append((orig_file, attach["path"]))
+                    if "thumbnail" in item:
+                        orig_file = self.cache["BASE"] / item["thumbnail"]
+                        files_from_to.append((orig_file, item["thumbnail"]))
+                    if "attachements" in item:
+                        for attach in item["attachements"]:
+                            orig_file = self.cache["BASE"] / attach["path"]
+                            files_from_to.append((orig_file, attach["path"]))
 
-            self.log.debug("Copying files to %s", zip_file_path)
             count_files = len(files_from_to)
-            per_count = max(10, math.ceil(count_files / 20))
-            with zipfile.ZipFile(zip_file_path, "a") as zip_file:
-                for count, data in enumerate(files_from_to):
-                    if count % per_count == 0:
-                        self.log.info(
-                            "Added %s of %s files to %s",
-                            count,
-                            count_files,
-                            zip_file_path.name,
+            if count_files > 0:
+                self.log.debug(
+                    "Copying %s files to %s", count_files, zip_file_path
+                )
+                per_count = max(10, math.ceil(count_files / 20))
+                with zipfile.ZipFile(zip_file_path, "a") as zip_file:
+                    for count, data in enumerate(files_from_to):
+                        if count % per_count == 0:
+                            self.log.info(
+                                "Added %s of %s files to %s",
+                                count,
+                                count_files,
+                                zip_file_path.name,
+                            )
+                        zip_file.write(data[0], data[1])
+                    logo = Path(f"logos/{self.simple_name}.png")
+                    if self.can_read(logo):
+                        zip_file.write(logo, "logo.png")
+                        self.log.debug("Added %s as logo.png", logo.name)
+                    else:
+                        self.log.warning(
+                            AMBER("Found no %s in logos/"), logo.name
                         )
-                    zip_file.write(data[0], data[1])
-                logo = Path(f"logos/{self.simple_name}.png")
-                if self.can_read(logo):
-                    zip_file.write(logo, "logo.png")
-                    self.log.debug("Added %s as logo.png", logo.name)
-                else:
-                    self.log.warning(
-                        AMBER("Found no %s.png in logos/"), logo.name
-                    )
-
+            else:
+                self.log.warning(AMBER("No files to add to zip, not creating"))
             self.log.debug("Writing JSON to %s", json_file_path)
             with open(json_file_path, "w", encoding="utf-8") as json_file:
                 json_file.write(json.dumps(structure, indent=4))
 
-            self.log.info(
-                "Export successful to %s and %s in %s",
-                json_file_path.name,
-                zip_file_path.name,
-                json_file_path.parent,
-            )
+            self.log.info("Export successful")
 
     def setup_cache(self, base_folder: Path):
         self.cache: Dict[str, Path] = {
