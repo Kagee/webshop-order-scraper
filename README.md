@@ -160,8 +160,9 @@ Terminal:
 cd /some/folder
 git clone https://gitlab.com/Kagee/webshop-order-scraper.git
 cd webshop-order-scraper
-python ./update.py
+python3 -m venv ./venv
 source ./venv/bin/activate
+python ./update.py
 cp example.env .env
 nano .env # Edit .env to your liking
 ````
@@ -184,8 +185,9 @@ CMD:
 cd /some/folder
 git clone https://gitlab.com/Kagee/webshop-order-scraper.git # or Github Desktop/other
 cd webshop-order-scraper
-python ./update.py
+# Create a python virtual envirionment
 venv\Scripts\activate
+python ./update.py
 cp example.env .env
 notepad .env # Edit .env to your liking
 ````
