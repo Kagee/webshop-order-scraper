@@ -74,7 +74,10 @@ To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubun
 Run the command too see where you should put the files.
 
 ````python
-python scrape.py adafruit
+python scrape.py --loglevel DEBUG adafruit
+````
+````python
+python scrape.py --loglevel DEBUG adafruit --to-std-json
 ````
 
 ### Aliexpress
