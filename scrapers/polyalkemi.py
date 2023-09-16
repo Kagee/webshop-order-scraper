@@ -163,9 +163,9 @@ class PolyalkemiScraper(BaseScraper):
 
         self.log.debug("Checking files for order %s", order_id)
         if self.check_order_files(order_id):
-            self.log.debug("Order %s scrape is complete.", order_id)
+            self.log.debug("Order %s scrape is complete, skipping", order_id)
             return self.read(order_json, from_json=True)
-        self.log.debug("Missing files for order %s, re-running", order_id)
+        self.log.debug("Missing files for order %s, processing", order_id)
 
         order_details = {}
         order_url = self.ORDER_URL.format(order_id=order_id)
