@@ -53,12 +53,12 @@ class PolyalkemiScraper(BaseScraper):
             "https://polyalkemi.no/min-konto/view-order/{order_id}/"
         )
         # pylint: disable=invalid-name
-        # self.THUMB_FILENAME_TEMPLATE = str(
-        #    self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
-        # )
-        self.ORDER_LIST_JSON_FILENAME = (
-            self.cache["ORDER_LISTS"] / "orders.json"
-        )
+        self.ORDER_LIST_FN = str(self.cache["ORDER_LISTS"] / "orders.json")
+        self.ORDER_DIR_TP = str(Path(self.cache["ORDERS"] / "{order_id}/"))
+        self.ORDER_JSON_TP = str(Path(self.ORDER_DIR_TP) / "order.json")
+        self.ORDER_INVOICE_TP = str(Path(self.ORDER_DIR_TP) / "faktura.pdf")
+        self.ITEM_THUMB_TP = str(Path(self.ORDER_DIR_TP) / "item-{item_id}.png")
+        self.ITEM_PDF_TP = str(Path(self.ORDER_DIR_TP) / "item-{item_id}.pdf")
 
     # Methods that use Selenium to scrape webpages in a browser
     def browser_cleanup_item_page(self):
@@ -112,14 +112,60 @@ class PolyalkemiScraper(BaseScraper):
             );            
         """)
 
+    def check_order_files(self, order_id):
+        order_json = self.ORDER_JSON_TP.format(order_id=order_id)
+        if not self.can_read(order_json):
+            self.log.debug("Order JSON missing for order %s", order_id)
+            return False
+
+        order_dict = self.read(order_json, from_json=True)
+
+        for item in order_dict["items"]:
+            item_id = item["id"]
+            if not self.skip_order_pdf and not self.can_read(
+                self.ORDER_INVOICE_TP.format(order_id=order_id)
+            ):
+                self.log.debug(
+                    "Order Invoice PDF missing for order %s", order_id
+                )
+                if self.options.use_cached_orderlist:
+                    self.log.error(
+                        RED(
+                            "Can not download order invoice while using cached"
+                            " orderlist"
+                        )
+                    )
+                    raise NotImplementedError(
+                        "Can not download order invoice while using cached"
+                        " orderlist"
+                    )
+                return False
+
+            if not self.skip_order_pdf and not self.can_read(
+                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item_id)
+            ):
+                self.log.debug("PDF missing for item %s", item_id)
+                return False
+
+            if not self.skip_item_thumb and not self.can_read(
+                self.ITEM_THUMB_TP.format(order_id=order_id, item_id=item_id)
+            ):
+                self.log.debug("Thumb missing for item %s", item_id)
+                return False
+
+        return True
+
     def browser_get_order_details(self, order):
         order_id = order["id"]
-        order_dir = Path(self.cache["ORDERS"] / order_id)
+        order_dir = self.ORDER_DIR_TP.format(order_id=order_id)
         self.makedir(order_dir)
-        order_dir = Path(self.cache["ORDERS"] / order_id)
-        order_json = order_dir / "order.json"
-        if self.can_read(order_json):
+        order_json = self.ORDER_JSON_TP.format(order_id=order_id)
+
+        self.log.debug("Checking files for order %s", order_id)
+        if self.check_order_files(order_id):
+            self.log.debug("Order %s scrape is complete.", order_id)
             return self.read(order_json, from_json=True)
+        self.log.debug("Missing files for order %s, re-running", order_id)
 
         order_details = {}
         order_url = self.ORDER_URL.format(order_id=order_id)
@@ -199,21 +245,65 @@ class PolyalkemiScraper(BaseScraper):
             else:
                 self.log.error("Found unparsed row '%s'", what)
         for item in order_details["items"]:
-            self.browser_save_item_page_pdf(order_dir, item)
+            self.browser_save_item_page_pdf_and_thumb(order_id, item)
         self.write(order_json, order_details, to_json=True)
         self.log.debug("Saved order #%s to json", order_id)
         self.browser.switch_to.window(handle)
 
-    def browser_save_item_page_pdf(self, order_dir, item):
+    def browser_save_item_page_pdf_and_thumb(self, order_id, item):
         brws = self.browser_get_instance()
-        if not self.skip_order_pdf:
-            item_pdf_file = (
-                order_dir / Path(f"item-{ item['id'] }.pdf")
+        tab_open = False
+
+        if not self.skip_item_thumb:
+            item_thumb_file = Path(
+                self.ITEM_THUMB_TP.format(order_id=order_id, item_id=item["id"])
+            ).resolve()
+            if not self.can_read(item_thumb_file):
+                brws.switch_to.new_window("tab")
+                brws.get(item["url"])
+                tab_open = True
+                thumb_element = self.find_element(
+                    By.CSS_SELECTOR, "figure a img"
+                )
+                thumb_url = thumb_element.get_attribute("src")
+                large_thumb_url = re.sub("-\d*x\d*.png$", ".png", thumb_url)
+                headers = {
+                    "User-Agent": (
+                        "python/webshop-order-scraper (hildenae@gmail.com)"
+                    ),
+                }
+                self.log.debug("Downloading item thumb")
+                response = requests.get(
+                    url=large_thumb_url, headers=headers, timeout=10
+                )
+                self.remove(item_thumb_file)
+                self.write(
+                    self.cache["IMG_TEMP_FILENAME"],
+                    response.content,
+                    binary=True,
+                )
+                kind = filetype.guess(self.cache["IMG_TEMP_FILENAME"])
+
+                if not kind or not (
+                    kind.mime.startswith("image/") or kind.extension == "jpg"
+                ):
+                    self.log.error(
+                        "Thumbnail was not image or JPEG: %s, %s",
+                        kind.mime,
+                        kind.extension,
+                    )
+                    raise NotImplementedError()
+                self.move_file(self.cache["IMG_TEMP_FILENAME"], item_thumb_file)
+
+        if not self.skip_item_pdf:
+            item_pdf_file = Path(
+                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item["id"])
             ).resolve()
             if not self.can_read(item_pdf_file):
                 self.log.debug("Making PDF for item %s", item["id"])
-                brws.switch_to.new_window("tab")
-                brws.get(item["url"])
+                if not tab_open:
+                    brws.switch_to.new_window("tab")
+                    brws.get(item["url"])
                 self.browser_cleanup_item_page()
                 self.log.debug("Printing page to PDF")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
@@ -242,13 +332,15 @@ class PolyalkemiScraper(BaseScraper):
 
     def browser_get_order_list_and_faktura(self):
         if self.options.use_cached_orderlist:
-            if self.can_read(self.ORDER_LIST_JSON_FILENAME):
+            if self.can_read(self.ORDER_LIST_FN):
                 self.log.info("Using cached orderlist.")
-                return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
+                return self.read(self.ORDER_LIST_FN, from_json=True)
             else:
                 self.log.info("Could not find cached orderlist.")
+                self.options.use_cached_orderlist = False
         else:
-            self.log.info("Mot using cached orderlist.")
+            self.log.info("Not using cached orderlist.")
+            self.options.use_cached_orderlist = False
 
         self.browser_visit(self.ORDER_LIST_URL)
         brws = self.browser_get_instance()
@@ -263,9 +355,12 @@ class PolyalkemiScraper(BaseScraper):
 
             order_dir = Path(self.cache["ORDERS"] / order_id)
             self.makedir(order_dir)
-            if not self.skip_order_pdf:
-                order_pdf_path = order_dir / "faktura.pdf"
+            if self.skip_order_pdf:
+                self.log.debug("Skipping order invoice")
+            else:
+                order_pdf_path = self.ORDER_INVOICE_TP.format(order_id=order_id)
                 if not self.can_read(order_pdf_path):
+                    self.log.debug("Order invoice missing")
                     order_faktura = order_cols[4].find_element(
                         By.XPATH, "//a[contains(text(),'Faktura')]"
                     )
@@ -309,7 +404,7 @@ class PolyalkemiScraper(BaseScraper):
                     "item_count": item_count,
                 }
             )
-        self.write(self.ORDER_LIST_JSON_FILENAME, orders, to_json=True)
+        self.write(self.ORDER_LIST_FN, orders, to_json=True)
         self.browser_visit(self.ORDER_LIST_URL)
         return orders
 
@@ -320,13 +415,11 @@ class PolyalkemiScraper(BaseScraper):
         """
         try:
             orders = self.browser_get_order_list_and_faktura()
-            # self.browser = self.browser_get_instance()
-            # handle = self.browser.current_window_handle
             for order in orders:
                 self.browser_get_order_details(order)
-                # self.browser.switch_to.window(handle)
         except NoSuchWindowException as nswe:
             self.log.error("Closed browser because of %s", nswe)
+        self.log.info("Scrape complete")
         self.browser_safe_quit()
 
     def command_to_std_json(self):
@@ -342,8 +435,106 @@ class PolyalkemiScraper(BaseScraper):
             "https://polyalkemi.no/produkt/{item_id}/",
         )
 
-        # structure["orders"] = orders
-        # self.pprint(orders)
+        order_list = self.read(self.ORDER_LIST_FN, from_json=True)
+        structure["orders"] = []
+        for order_orig in order_list:
+            if order_orig["item_count"] < 0:
+                self.log.warning(
+                    AMBER("Skipping order %s since it has negative item count"),
+                    order_orig["id"],
+                )
+                continue
+            order_details_dict = self.read(
+                self.ORDER_JSON_TP.format(order_id=order_orig["id"]),
+                from_json=True,
+            )
+
+            order = {
+                "id": order_orig["id"],
+                "date": (
+                    datetime.strptime(order_orig["date"], "%Y-%m-%d %H:%M:%S")
+                    .date()
+                    .isoformat()
+                ),
+                "total": self.get_value_currency(
+                    "total", order_details_dict["total"], "NOK"
+                ),
+                "subtotal": self.get_value_currency(
+                    "subtotal", order_details_dict["subtotal"], "NOK"
+                ),
+                "tax": self.get_value_currency(
+                    "tax", order_details_dict["tax"], "NOK"
+                ),
+                "shipping": self.get_value_currency(
+                    "shipping", order_details_dict["shipping"], "NOK"
+                ),
+            }
+
+            order["items"] = []
+
+            for item in order_details_dict["items"]:
+                item_dict = {
+                    "name": item["name"],
+                    "id": item["id"],
+                    "quantity": item["count"],
+                }
+                if not self.skip_item_pdf:
+                    self.log.debug("Setting item PDF")
+                    item_dict["attachements"] = [
+                        {
+                            "name": "Item PDF",
+                            "path": str(
+                                Path(
+                                    self.ITEM_PDF_TP.format(
+                                        order_id=order["id"], item_id=item["id"]
+                                    )
+                                ).relative_to(self.cache["BASE"])
+                            ),
+                            "comment": "PDF print of item page",
+                        },
+                    ]
+                if not self.skip_item_thumb:
+                    self.log.debug("Setting item thumbnail")
+                    item_dict["thumbnail"] = str(
+                        Path(
+                            self.ITEM_THUMB_TP.format(
+                                order_id=order["id"], item_id=item["id"]
+                            )
+                        ).relative_to(self.cache["BASE"])
+                    )
+
+                order["items"].append(item_dict)
+
+            if not self.skip_order_pdf:
+                order["attachements"] = [
+                    {
+                        "name": "Order Invoice PDF",
+                        "path": str(
+                            Path(
+                                self.ORDER_INVOICE_TP.format(
+                                    order_id=order["id"]
+                                )
+                            ).relative_to(self.cache["BASE"])
+                        ),
+                        "comment": "PDF print of item page",
+                    },
+                ]
+
+            del order_orig["id"]
+            del order_orig["date"]
+            del order_orig["total"]
+
+            del order_details_dict["subtotal"]
+            del order_details_dict["tax"]
+            del order_details_dict["total"]
+            del order_details_dict["shipping"]
+
+            del order_details_dict["items"]
+
+            # Add extra dict items to output
+            order.update(order_orig)
+            order.update(order_details_dict)
+            structure["orders"].append(order)
         self.output_schema_json(structure)
 
     # Class init
@@ -353,5 +544,6 @@ class PolyalkemiScraper(BaseScraper):
         self.simple_name = "polyalkemi.no"
         self.skip_order_pdf = options.skip_order_pdf
         self.skip_item_pdf = options.skip_item_pdf
+        self.skip_item_thumb = options.skip_item_thumb
         super().setup_cache(Path("polyalkemi-no"))
         self.setup_templates()

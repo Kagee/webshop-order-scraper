@@ -77,6 +77,13 @@ def parse_args():
             ),
         )
 
+    def skip_item_thumb(parser):
+        parser.add_argument(
+            "--skip-item-thumb",
+            action="store_true",
+            help="Do not save item thumbnail",
+        )
+
     parser_adafruit = subparsers.add_parser("adafruit")
 
     to_std_json(parser_adafruit)
@@ -153,8 +160,10 @@ def parse_args():
     parser_polyalkemi = subparsers.add_parser("polyalkemi")
     use_cached_orderlist(parser_polyalkemi)
     to_std_json(parser_polyalkemi)
+
     skip_order_pdf(parser_polyalkemi)
     skip_item_pdf(parser_polyalkemi)
+    skip_item_thumb(parser_polyalkemi)
 
     args = parser.parse_args()
 
