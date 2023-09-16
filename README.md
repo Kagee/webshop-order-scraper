@@ -15,13 +15,13 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
   * Complete. Requires creating a separate Firefox profile, configuring it, and logging in to Aliexpress in said profile.
-* [Polyalkemi.no](#polyalkemi.no)
+* [Polyalkemi.no](#polyalkemino)
   * Complete.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
 
 ## Missing export
-* [Kjell.com](#kjell.com)
+* [Kjell.com](#kjellcom)
   * Scraping complete. Missing export
 
 ## Scraping not complete
