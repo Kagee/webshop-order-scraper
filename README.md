@@ -158,8 +158,8 @@ Terminal:
 
 ````python
 cd /some/folder
-git clone https://gitlab.com/Kagee/webshop-scraper.git
-cd webshop-scraper
+git clone https://gitlab.com/Kagee/webshop-order-scraper.git
+cd webshop-order-scraper
 python ./update.py
 source ./venv/bin/activate
 cp example.env .env
@@ -182,8 +182,8 @@ CMD:
 
 ````bash
 cd /some/folder
-git clone https://gitlab.com/Kagee/webshop-scraper.git # or Github Desktop/other
-cd webshop-scraper
+git clone https://gitlab.com/Kagee/webshop-order-scraper.git # or Github Desktop/other
+cd webshop-order-scraper
 python ./update.py
 venv\Scripts\activate
 cp example.env .env
