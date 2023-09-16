@@ -4,33 +4,64 @@ Command line scraper for orders and item info from webshop(s)
 
 This project was separated from it's parent project [Homelab Organizer](https://gitlab.com/Kagee/homelab-organizer) (having outgrown it), a web-based tool (Django) for keeping control of items and tools in your homelab.
 
-## Status
+## Output
+Output from finished scrapers consists of one JSON and a ZIP in a subfolder of the `output/` folder.
+
+The JSON file will follow the JSON schema defined in [output/schema.json](output/schema.json). Any extra data avaliable for the order or items will be added as keys to this file. All paths are relative to the root of the accompanying ZIP file. 
+
+
+## Completed
 * [Adafruit](#adafruit)
   * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
-  * Almost complete. Missing standarised JSON+zip output. Login, parse order lists, save cache item info finished.
+  * Complete. Requires creating a separate Firefox profile, configuring it, and logging in to Aliexpress in said profile.
+* [Polyalkemi.no](#polyalkemi.no)
+  * Complete.
+* [IMAP](#imap)
+  * Complete. Currently only used to extract old eBay order numbers from email.
+
+## Missing export
+* [Kjell.com](#kjell.com)
+  * Scraping complete. Missing export
+
+## Scraping not complete
 * [Amazon](#amazon)
   * Mostly complete. Login, parse order lists, cache item info.
 * [Distrelec](#distrelec)
   * Initial. Login.
 * [eBay](#ebay)
   * Started. Login, get all order numbers, get base info for orders. 
-* [IMAP](#imap)
-  * Complete. Currently only used to extract old eBay order numbers from email.
+
 * [Pimoroni](#pimoroni)
   * Initial. Loging, list and cache order lists.
 
 ## Requirements
 
-Python 3.9 or later. Should support both Linux and Windows.  
-Requires Firefox installed, not from snap (see instructions).
+Python 3.10 or later. Should support both Linux and Windows.  
 
+Requires Firefox installed (not from snap, see instructions), and a profile setup for the scraping.
 
-## Scraping of webshops
+## Creating and configuring a separate Firefox profile
 
-Requires Firfox. Chrome is to difficult to print to PDF from.  
+Run 
+````bash
+firefox -p
+````
+
+Create a new profile, named i.e. `selenum`. In the examples below you named the profile `selenium`, and your username is `awesomeuser``.
+
+Find the path to the profile, you can start looking in these paths:
+* Windows: `C:\Users\awesomeuser\AppData\Roaming\Mozilla\Firefox\Profiles\SOMETHINGRANDOM.selenium1`
+* Linux / Mac: `/home/awesomeuser/.mozilla/firefox/SOMETHINGRANDOM.selenium1`
+
+Add this path to the `WS_FF_PROFILE_PATH_WINDOWS/LINUX/DARWIN` config variable in .env.
+
+## Installing Firefox outside of Snap on Ubuntu
+
 Firefox installed as a snap on Ubuntu is not supported.  
 To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubuntu.co.uk/2022/04/how-to-install-firefox-deb-apt-ubuntu-22-04) article for omg!ubuntu.
+
+## Scrapers
 
 ### Adafruit
 
@@ -52,11 +83,7 @@ Scrapes order list, item info and details to JSON, and saves a PDF copy of the A
 
 Aliexpress has a really annoying CAPTCHA that failes even if you do it manually, as long as the browser is automated.
 
-Because of this you either have to use your normal Firefox profile (and not be able to use Firefox while scraping Aliexpress), or creating a new profile.
-
-Set `WS_FF_PROFILE_PATH` to the filesystem path of the Firefox profile you want to use.
-
-Whatever profile you choose, you must log in to Aliexpress manually using the profile before each scrape.
+To bypass this, open your `selenium` firefox profile, and log in to Aliexpress manually before each scraping session.
 
 Try not to resize or move the autmomated browser window while scraping. You will be
 prompted if you need to interract, i.e. accept a CAPTCHA. If you happen to watch and see that
@@ -67,8 +94,34 @@ and then increment with 10 for each run. Remember to use `--use-cached-orderlist
 to scrape the order list every time.
 
 ````python
-python scrape.py aliexpress --use-cached-orderlist
+python scrape.py --loglevel DEBUG aliexpress --use-cached-orderlist
 ````
+
+````python
+python scrape.py --loglevel DEBUG aliexpress --to-std-json
+````
+
+### Polyalkemi.no
+This scraper supports the arguments 
+* `--skip-item-thumb`
+* `--skip-item-pdf`
+* `--skip-order-pdf`
+
+They will skip storing the item thumbnail, item PDF print, and order invoice for this scraper.
+
+````python
+python scraper.py --loglevel DEBUG polyalkemi 
+````
+
+````python
+python scraper.py --loglevel DEBUG polyalkemi --to-std-json 
+````
+
+### Kjell.com
+````python
+python scraper.py --loglevel DEBUG kjell
+````
+Export not yet supported.
 
 ### Amazon
 Currently can save order lists to HTML cache and convert to
@@ -133,11 +186,6 @@ venv\Scripts\activate
 cp example.env .env
 notepad .env # Edit .env to your liking
 ````
-
-## JSON Schema
-{"format": "file-path"}
-https://docs.pydantic.dev/usage/schema/#json-schema-types
-https://gitlab.com/Kagee/webshop-scraper/-/raw/main/schema.json?inline=false
 
 ## Acknowledgements
 
