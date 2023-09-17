@@ -56,6 +56,7 @@ class AliExpressScraper(BaseScraper):
                 json_order_file.parent.name,
                 json_order_file.name,
             )
+            self.log.debug(filename_base / oob["tracking_cache_file"])
             assert self.can_read(filename_base / oob["tracking_cache_file"])
             assert self.can_read(filename_base / oob["cache_file"])
             order_obj = {
@@ -280,21 +281,33 @@ class AliExpressScraper(BaseScraper):
                 )
             if "snapshot" not in order["items"][item_sku_id]:
                 order["items"][item_sku_id]["snapshot"] = {
-                    "pdf": Path(
-                        self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                            order_id=order_id, item_id=item_sku_id, ext="pdf"
+                    "pdf": (
+                        Path(
+                            self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                                order_id=order_id,
+                                item_id=item_sku_id,
+                                ext="pdf",
+                            )
                         )
-                    ).relative_to(self.cache["BASE"]),
-                    "html": Path(
-                        self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                            order_id=order_id, item_id=item_sku_id, ext="html"
+                        .relative_to(self.cache["BASE"])
+                        .as_posix()
+                    ),
+                    "html": (
+                        Path(
+                            self.SNAPSHOT_FILENAME_TEMPLATE.format(
+                                order_id=order_id,
+                                item_id=item_sku_id,
+                                ext="html",
+                            )
                         )
-                    ).relative_to(self.cache["BASE"]),
+                        .relative_to(self.cache["BASE"])
+                        .as_posix()
+                    ),
                 }
             order["items"][item_sku_id]["thumbnail"] = str(
-                Path(order["items"][item_sku_id]["thumbnail"]).relative_to(
-                    self.cache["BASE"]
-                )
+                Path(order["items"][item_sku_id]["thumbnail"])
+                .relative_to(self.cache["BASE"])
+                .as_posix()
             )
 
             order["items"][item_sku_id].update(
@@ -396,13 +409,15 @@ class AliExpressScraper(BaseScraper):
 
             # Make Paths relative before json
             order["cache_file"] = str(
-                Path(order["cache_file"]).relative_to(self.cache["BASE"])
+                Path(order["cache_file"])
+                .relative_to(self.cache["BASE"])
+                .as_posix()
             )
 
             order["tracking_cache_file"] = str(
-                Path(order["tracking_cache_file"]).relative_to(
-                    self.cache["BASE"]
-                )
+                Path(order["tracking_cache_file"])
+                .relative_to(self.cache["BASE"])
+                .as_posix()
             )
             self.write(json_filename, order, to_json=True)
         self.browser_safe_quit()
