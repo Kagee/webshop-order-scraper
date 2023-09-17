@@ -90,8 +90,7 @@
                                 },
                                 "quantity": {
                                     "description": "Quantity of this item/variation",
-                                    "type": "number",
-                                    "minimum": 0
+                                    "type": "number"
                                 },
                                 "thumbnail": {
                                     "$ref": "#/$defs/file-path"
