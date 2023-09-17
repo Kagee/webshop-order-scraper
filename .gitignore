@@ -23,5 +23,6 @@ logos/
 # symlinks
 .vscode
 scraper-cache
+logos
 # Do not ignore
 !output/schema.json
