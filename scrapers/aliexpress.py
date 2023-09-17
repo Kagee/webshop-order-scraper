@@ -991,7 +991,7 @@ class AliExpressScraper(BaseScraper):
         brws = self.browser_visit_page(self.ORDER_LIST_URL, False)
         wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
-        self.log.debug("Waiting for 'Completed' link")
+        self.log.debug("Waiting for 'Processed' link")
         try:
             wait10.until(
                 EC.element_to_be_clickable(
@@ -999,7 +999,7 @@ class AliExpressScraper(BaseScraper):
                         By.XPATH,
                         (
                             "//div[@class='comet-tabs-nav-item']"
-                            "[contains(text(), 'Completed')]"
+                            "[contains(text(), 'Processed')]"
                         ),
                     )
                 )
@@ -1014,7 +1014,7 @@ class AliExpressScraper(BaseScraper):
                         By.XPATH,
                         (
                             "//div[@class='comet-tabs-nav-item']"
-                            "[contains(text(), 'Completed')]"
+                            "[contains(text(), 'Processed')]"
                         ),
                     )
                 )
@@ -1028,7 +1028,7 @@ class AliExpressScraper(BaseScraper):
                     (
                         "//div[contains(@class, 'comet-tabs-nav-item') and "
                         "contains(@class, 'comet-tabs-nav-item-active')]"
-                        "[contains(text(), 'Completed')]"
+                        "[contains(text(), 'Processed')]"
                     ),
                 )
             )
