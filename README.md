@@ -22,7 +22,7 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
 
 ## Missing export
 * [Kjell.com](#kjellcom)
-  * Scraping complete. Missing export
+  * Scraping complete. Missing export. Has only been tested with norwegian shop front, needs some patches to work with swedish shop front.
 
 ## Scraping not complete
 * [Amazon](#amazon)
@@ -128,10 +128,12 @@ python scraper.py polyalkemi --to-std-json
 ````
 
 ### Kjell.com
+Currently only supports the norwegian shop front.
+
 ````python
 python scraper.py kjell
 ````
-Export not yet supported.
+Export in progress.
 
 ### Amazon
 Currently can save order lists to HTML cache and convert to

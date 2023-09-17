@@ -75,12 +75,14 @@ class KjellScraper(BaseScraper):
                 )
                 self.write(item_pdf_missing, "1")
                 return None
-            
+
             self.browser_expand_item_page()
 
             self.save_support_documents(item_id, order_cache_dir)
 
-            if not self.can_read(item_pdf_file) and not self.can_read(item_pdf_missing):
+            if not self.can_read(item_pdf_file) and not self.can_read(
+                item_pdf_missing
+            ):
                 self.browser_cleanup_item_page()
                 self.log.debug("Printing page to PDF")
                 self.remove(self.cache["PDF_TEMP_FILENAME"])
@@ -402,7 +404,6 @@ class KjellScraper(BaseScraper):
                 self.log.debug("TEXT: %s", a_element.text)
                 url_parts = urlparse(a_element.get_attribute("href"))
                 if url_parts.path.endswith(".pdf"):
-
                     orig_filename = Path(url_parts.path).name
 
                     filename = f"{orig_filename}--{a_element.text}"
@@ -412,10 +413,14 @@ class KjellScraper(BaseScraper):
 
                     attachement_file = (
                         order_cache_dir
-                        / Path(f"item-attachement-{item_id}-{filename_safe}.pdf")
+                        / Path(
+                            f"item-attachement-{item_id}-{filename_safe}.pdf"
+                        )
                     ).resolve()
                     if self.can_read(attachement_file):
-                        self.log.debug("Skipping %s, already downloaded", orig_filename)
+                        self.log.debug(
+                            "Skipping %s, already downloaded", orig_filename
+                        )
                         continue
                     for pdf in self.cache["TEMP"].glob("*.pdf"):
                         # Remove old/random PDFs
@@ -446,8 +451,6 @@ class KjellScraper(BaseScraper):
 
                     attachements.append((a_element.text, str(attachement_file)))
                     self.move_file(pdf[0], attachement_file)
-                else:
-                    raise NotImplementedError("Non-PDF support document.")
         except NoSuchElementException:
             pass
         return attachements
@@ -608,32 +611,33 @@ class KjellScraper(BaseScraper):
                 "date": purchase_datetime.date().isoformat(),
                 "items": [],
                 "total": self.get_value_currency(
-                    "price", str(orig_order["total"]), "NOK"
+                    "total", str(orig_order["total"]), "NOK"
                 ),
                 "tax": self.get_value_currency(
-                    "price", str(orig_order["vatAmount"]), "NOK"
+                    "tax", str(orig_order["vatAmount"]), "NOK"
                 ),
                 "shipping": self.get_value_currency(
-                    "price", str(orig_order["shippingFee"]["exclVat"]), "NOK"
+                    "shipping", str(orig_order["shippingFee"]["exclVat"]), "NOK"
                 ),
             }
             order_cache_dir = self.cache["ORDERS"] / Path(order_id)
             files = {}
 
-            for file in order_cache_dir.glob('*'):
+            for file in order_cache_dir.glob("*"):
                 self.log.debug(file.name)
-                item_id = re.match(r'^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)', file.name).group(1)
-                
+                item_id = re.match(
+                    r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)", file.name
+                ).group(1)
+
                 item_file_type = "pdf"
-                if file.name.startswith('item-thumb-'):
+                if file.name.startswith("item-thumb-"):
                     item_file_type = "thumb"
                 else:
-                    item_file_type = "attachement"
-                if item_file_type not in files['item_id']:
+                    item_file_type = "attachements"
+                if item_file_type not in files["item_id"]:
                     files[item_id][item_file_type] = []
                 files[item_id][item_file_type].append(file)
 
-            # f"{item_id}--{filename}--{a_element.text}"
             for item in orig_order["lineItems"]:
                 if not item["displayName"]:
                     prodname = re.match(
@@ -657,6 +661,45 @@ class KjellScraper(BaseScraper):
                     ),
                 }
                 if item_id in files:
+                    if "thumb" in files[item_id]:
+                        item_dict["thumbnail"] = (
+                            Path(files[item_id]["thumb"])
+                            .relative_to(self.cache["BASE"])
+                            .as_posix()
+                        )
+                    if "pdf" in files[item_id]:
+                        if "attachements" not in item_dict:
+                            item_dict["attachements"] = []
+                        item_dict["attachements"].append(
+                            {
+                                "name": "Item PDF",
+                                "path": (
+                                    Path(files[item_id]["pdf"])
+                                    .relative_to(self.cache["BASE"])
+                                    .as_posix()
+                                ),
+                            }
+                        )
+                    if "attachements" in files[item_id]:
+                        if "attachements" not in item_dict:
+                            item_dict["attachements"] = []
+                        attachement: str
+                        for attachement in files[item_id]["attachement"]:
+                            item_dict["attachements"].append(
+                                {
+                                    "name": base64.urlsafe_b64decode(
+                                        attachement.split("-")[3]
+                                        .split(".")[0]
+                                        .encode("utf-8")
+                                    ).decode("utf-8"),
+                                    "path": (
+                                        Path(attachement)
+                                        .relative_to(self.cache["BASE"])
+                                        .as_posix()
+                                    ),
+                                }
+                            )
+                    # attachements name path comment Item PDF
                     pass
                 del item["code"]
                 del item["displayName"]
@@ -664,8 +707,8 @@ class KjellScraper(BaseScraper):
                 del item["price"]["currentInclVat"]
                 del item["price"]["vatAmount"]
                 del item["price"]["currentExclVat"]
-                #attachements
-                #thumbs
+                # attachements
+                # thumbs
                 item_dict.update(item)
                 order_object["items"].append(item_dict)
 
