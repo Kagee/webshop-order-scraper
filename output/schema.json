@@ -182,7 +182,7 @@
     },
     "$defs": {
         "file-path": {
-            "description": "Relative path to file. Relative to file inside ZIP file with sname stem as JSON document filename",
+            "description": "Relative path to file. Relative to file inside ZIP file with same stem as JSON document filename. Posix slashes.",
             "type": "string"
         },
         "currency": {
