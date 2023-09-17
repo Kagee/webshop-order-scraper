@@ -1,5 +1,6 @@
 # pylint: disable=unused-import
 import base64
+from decimal import Decimal
 import os
 import re
 import time
@@ -50,21 +51,6 @@ class KjellScraper(BaseScraper):
         ).resolve()
         item_pdf_missing = f"{item_pdf_file}.missing"
 
-        if self.can_read(item_pdf_file):
-            self.log.debug(
-                "Skipping item %s, found %s",
-                item_id,
-                item_pdf_file,
-            )
-            return
-        if self.can_read(item_pdf_missing):
-            self.log.error(
-                AMBER("Skipping item %s, found %s"),
-                item_id,
-                item_pdf_missing,
-            )
-            return
-
         if line_item["url"] != "":
             url = "https://kjell.com" + line_item["url"]
             brws = self.browser_visit_page_v2(url)
@@ -89,21 +75,23 @@ class KjellScraper(BaseScraper):
                 )
                 self.write(item_pdf_missing, "1")
                 return None
-            self.browser_cleanup_item_page()
+            
             self.browser_expand_item_page()
 
-            attachements = self.save_support_documents(item_id, order_cache_dir)
+            self.save_support_documents(item_id, order_cache_dir)
 
-            self.log.debug("Printing page to PDF")
-            self.remove(self.cache["PDF_TEMP_FILENAME"])
+            if not self.can_read(item_pdf_file) and not self.can_read(item_pdf_missing):
+                self.browser_cleanup_item_page()
+                self.log.debug("Printing page to PDF")
+                self.remove(self.cache["PDF_TEMP_FILENAME"])
 
-            brws.execute_script("window.print();")
-            self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+                brws.execute_script("window.print();")
+                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
 
-            self.move_file(
-                self.cache["PDF_TEMP_FILENAME"],
-                item_pdf_file,
-            )
+                self.move_file(
+                    self.cache["PDF_TEMP_FILENAME"],
+                    item_pdf_file,
+                )
         else:
             self.log.error(
                 RED("Item id %s in order %s, %s has no url"),
@@ -408,11 +396,27 @@ class KjellScraper(BaseScraper):
                 '//span[contains(text(),"Support")]/ancestor::button/parent::div//a',
             )
             for a_element in support_a:
+                if not a_element.get_attribute("href"):
+                    continue
                 self.log.debug("HREF: %s", a_element.get_attribute("href"))
                 self.log.debug("TEXT: %s", a_element.text)
                 url_parts = urlparse(a_element.get_attribute("href"))
                 if url_parts.path.endswith(".pdf"):
-                    filename = Path(url_parts.path).name
+
+                    orig_filename = Path(url_parts.path).name
+
+                    filename = f"{orig_filename}--{a_element.text}"
+                    filename_safe = base64.urlsafe_b64encode(
+                        filename.encode("utf-8")
+                    ).decode("utf-8")
+
+                    attachement_file = (
+                        order_cache_dir
+                        / Path(f"item-attachement-{item_id}-{filename_safe}.pdf")
+                    ).resolve()
+                    if self.can_read(attachement_file):
+                        self.log.debug("Skipping %s, already downloaded", orig_filename)
+                        continue
                     for pdf in self.cache["TEMP"].glob("*.pdf"):
                         # Remove old/random PDFs
                         os.remove(pdf)
@@ -432,16 +436,6 @@ class KjellScraper(BaseScraper):
                         )
 
                     self.wait_for_stable_file(pdf[0])
-
-                    filename = f"{item_id}--{filename}--{a_element.text}"
-                    filename_safe = base64.urlsafe_b64encode(
-                        filename.encode("utf-8")
-                    ).decode("utf-8")
-
-                    attachement_file = (
-                        order_cache_dir
-                        / Path(f"attachement-{filename_safe}.pdf")
-                    ).resolve()
 
                     self.log.debug(
                         "Found %s, saving as %s.pdf (%s.pdf)",
@@ -594,48 +588,99 @@ class KjellScraper(BaseScraper):
             "https://www.kjell.com/-p{item_id}",
         )
 
-        with open(
-            self.ORDER_LIST_JSON_FILENAME, encoding="utf-8"
-        ) as input_file:
-            kjell_json = json.load(input_file)
+        kjell_json = self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
 
         orders = []
 
         for orig_order in kjell_json["items"]:
             order_id = orig_order["transactionNumber"]
+            try:
+                purchase_datetime = datetime.strptime(
+                    orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z"
+                )
+            except ValueError:
+                purchase_datetime = datetime.strptime(
+                    orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S.%f%z"
+                )
+
             order_object = {
                 "id": order_id,
-                "date": (
-                    datetime.strptime(
-                        orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z"
-                    )
-                    .date()
-                    .isoformat()
-                ),
+                "date": purchase_datetime.date().isoformat(),
                 "items": [],
-                "total": {"value": f'{orig_order["total"]}', "currency": "NOK"},
-                # "shipping": {"value": order_obj["tax"], "currency": "NOK"},
-                # "tax": {"value": order_obj["shipping"], "currency": "NOK"},
+                "total": self.get_value_currency(
+                    "price", str(orig_order["total"]), "NOK"
+                ),
+                "tax": self.get_value_currency(
+                    "price", str(orig_order["vatAmount"]), "NOK"
+                ),
+                "shipping": self.get_value_currency(
+                    "price", str(orig_order["shippingFee"]["exclVat"]), "NOK"
+                ),
             }
+            order_cache_dir = self.cache["ORDERS"] / Path(order_id)
+            files = {}
+
+            for file in order_cache_dir.glob('*'):
+                self.log.debug(file.name)
+                item_id = re.match(r'^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)', file.name).group(1)
+                
+                item_file_type = "pdf"
+                if file.name.startswith('item-thumb-'):
+                    item_file_type = "thumb"
+                else:
+                    item_file_type = "attachement"
+                if item_file_type not in files['item_id']:
+                    files[item_id][item_file_type] = []
+                files[item_id][item_file_type].append(file)
+
+            # f"{item_id}--{filename}--{a_element.text}"
+            for item in orig_order["lineItems"]:
+                if not item["displayName"]:
+                    prodname = re.match(
+                        rf".*/([^/]*)-p{item['code']}.*", item["url"]
+                    ).group(1)
+                    item["displayName"] = prodname.replace(
+                        "-", " "
+                    ).capitalize()
+                item_dict = {
+                    "id": item["code"],
+                    "name": item["displayName"],
+                    "quantity": item["quantity"],
+                    "subtotal": self.get_value_currency(
+                        "subtotal", str(item["price"]["currentExclVat"]), "NOK"
+                    ),
+                    "vat": self.get_value_currency(
+                        "vat", str(item["price"]["vatAmount"]), "NOK"
+                    ),
+                    "total": self.get_value_currency(
+                        "total", str(item["price"]["currentInclVat"]), "NOK"
+                    ),
+                }
+                if item_id in files:
+                    pass
+                del item["code"]
+                del item["displayName"]
+                del item["quantity"]
+                del item["price"]["currentInclVat"]
+                del item["price"]["vatAmount"]
+                del item["price"]["currentExclVat"]
+                #attachements
+                #thumbs
+                item_dict.update(item)
+                order_object["items"].append(item_dict)
 
             orders.append(order_object)
-            # date*
-            # "purchaseDate": "2023-08-10T16:10:42Z", => "date": "2017-04-26",
-            # items* [] "lineItems": [
-            # subtotal
-            # shipping
-            #    "shippingFee": {
-            #      "exclVat": 0,
-            #      "inclVat": 0,
-            #      "vatPercent": 0
-            #  },
-            # tax "vatAmount": 150.94
-            # total "total": 754.7,
+            del orig_order["transactionNumber"]
+            del orig_order["purchaseDate"]
+            del orig_order["total"]
+            del orig_order["vatAmount"]
+            del orig_order["shippingFee"]["exclVat"]
+            del orig_order["lineItems"]
+
             # attachements[]
             # <rest of elements>
-            break
+            # break
         structure["orders"] = orders
-        self.pprint(orders)
         self.output_schema_json(structure)
 
     # Class init
