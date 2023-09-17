@@ -31,7 +31,6 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Initial. Login.
 * [eBay](#ebay)
   * Started. Login, get all order numbers, get base info for orders. 
-
 * [Pimoroni](#pimoroni)
   * Initial. Loging, list and cache order lists.
 
