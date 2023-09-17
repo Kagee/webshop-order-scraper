@@ -94,6 +94,8 @@ class KjellScraper(BaseScraper):
                     self.cache["PDF_TEMP_FILENAME"],
                     item_pdf_file,
                 )
+            else:
+                self.log.debug("Skipping item PDF for %s", item_id)
         else:
             self.log.error(
                 RED("Item id %s in order %s, %s has no url"),
@@ -624,7 +626,8 @@ class KjellScraper(BaseScraper):
             files = {}
 
             for file in order_cache_dir.glob("*"):
-                self.log.debug(file.name)
+                if file.name.endswith('.missing'):
+                    continue
                 item_id = re.match(
                     r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)", file.name
                 ).group(1)
