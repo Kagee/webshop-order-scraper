@@ -14,15 +14,16 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
 * [Adafruit](#adafruit)
   * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
-  * Complete. Requires creating a separate Firefox profile, configuring it, and logging in to Aliexpress in said profile.
+  * Complete.
 * [Polyalkemi.no](#polyalkemino)
+  * Complete.
+* [Kjell.com](#kjellcom)
   * Complete.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
 
 ## Missing export
-* [Kjell.com](#kjellcom)
-  * Scraping complete. Missing export. Has only been tested with norwegian shop front, needs some patches to work with swedish shop front.
+* NTR
 
 ## Scraping not complete
 * [Amazon](#amazon)
@@ -128,12 +129,15 @@ python scraper.py polyalkemi --to-std-json
 ````
 
 ### Kjell.com
-Currently only supports the norwegian shop front.
+Currently only supports the norwegian shop front. (Swedish testers welcome!)
 
 ````python
 python scraper.py kjell
 ````
-Export in progress.
+
+````python
+python scraper.py kjell --to-std-json 
+````
 
 ### Amazon
 Currently can save order lists to HTML cache and convert to

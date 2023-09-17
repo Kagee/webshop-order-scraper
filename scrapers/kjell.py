@@ -628,20 +628,22 @@ class KjellScraper(BaseScraper):
             for file in order_cache_dir.glob("*"):
                 if file.name.endswith('.missing'):
                     continue
-                item_id = re.match(
+                file_item_id = re.match(
                     r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)", file.name
                 ).group(1)
-
+                files[file_item_id] = {}
                 item_file_type = "pdf"
                 if file.name.startswith("item-thumb-"):
                     item_file_type = "thumb"
-                else:
+                elif file.name.startswith("item-attachement-"):
                     item_file_type = "attachements"
-                if item_file_type not in files["item_id"]:
-                    files[item_id][item_file_type] = []
-                files[item_id][item_file_type].append(file)
+
+                if item_file_type not in files[file_item_id]:
+                    files[file_item_id][item_file_type] = []
+                files[file_item_id][item_file_type].append(file)
 
             for item in orig_order["lineItems"]:
+                item_id = item["code"]
                 if not item["displayName"]:
                     prodname = re.match(
                         rf".*/([^/]*)-p{item['code']}.*", item["url"]
@@ -650,7 +652,7 @@ class KjellScraper(BaseScraper):
                         "-", " "
                     ).capitalize()
                 item_dict = {
-                    "id": item["code"],
+                    "id": item_id,
                     "name": item["displayName"],
                     "quantity": item["quantity"],
                     "subtotal": self.get_value_currency(
@@ -666,7 +668,7 @@ class KjellScraper(BaseScraper):
                 if item_id in files:
                     if "thumb" in files[item_id]:
                         item_dict["thumbnail"] = (
-                            Path(files[item_id]["thumb"])
+                            Path(files[item_id]["thumb"][0])
                             .relative_to(self.cache["BASE"])
                             .as_posix()
                         )
@@ -677,7 +679,7 @@ class KjellScraper(BaseScraper):
                             {
                                 "name": "Item PDF",
                                 "path": (
-                                    Path(files[item_id]["pdf"])
+                                    Path(files[item_id]["pdf"][0])
                                     .relative_to(self.cache["BASE"])
                                     .as_posix()
                                 ),
@@ -687,14 +689,14 @@ class KjellScraper(BaseScraper):
                         if "attachements" not in item_dict:
                             item_dict["attachements"] = []
                         attachement: str
-                        for attachement in files[item_id]["attachement"]:
+                        for attachement in files[item_id]["attachements"]:
                             item_dict["attachements"].append(
                                 {
                                     "name": base64.urlsafe_b64decode(
-                                        attachement.split("-")[3]
+                                        attachement.name.split("-")[3]
                                         .split(".")[0]
                                         .encode("utf-8")
-                                    ).decode("utf-8"),
+                                    ).decode("utf-8").split('--')[0],
                                     "path": (
                                         Path(attachement)
                                         .relative_to(self.cache["BASE"])
@@ -702,30 +704,27 @@ class KjellScraper(BaseScraper):
                                     ),
                                 }
                             )
-                    # attachements name path comment Item PDF
-                    pass
+
                 del item["code"]
                 del item["displayName"]
                 del item["quantity"]
                 del item["price"]["currentInclVat"]
                 del item["price"]["vatAmount"]
                 del item["price"]["currentExclVat"]
-                # attachements
-                # thumbs
+
                 item_dict.update(item)
                 order_object["items"].append(item_dict)
 
-            orders.append(order_object)
+            
             del orig_order["transactionNumber"]
             del orig_order["purchaseDate"]
             del orig_order["total"]
             del orig_order["vatAmount"]
             del orig_order["shippingFee"]["exclVat"]
             del orig_order["lineItems"]
+            order_object.update(orig_order)
+            orders.append(order_object)
 
-            # attachements[]
-            # <rest of elements>
-            # break
         structure["orders"] = orders
         self.output_schema_json(structure)
 
