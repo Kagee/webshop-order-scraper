@@ -74,10 +74,10 @@ To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubun
 Run the command too see where you should put the files.
 
 ````python
-python scrape.py --loglevel DEBUG adafruit
+python scrape.py adafruit
 ````
 ````python
-python scrape.py --loglevel DEBUG adafruit --to-std-json
+python scrape.py adafruit --to-std-json
 ````
 
 ### Aliexpress
@@ -97,11 +97,11 @@ and then increment with 10 for each run. Remember to use `--use-cached-orderlist
 to scrape the order list every time.
 
 ````python
-python scrape.py --loglevel DEBUG aliexpress --use-cached-orderlist
+python scrape.py aliexpress --use-cached-orderlist
 ````
 
 ````python
-python scrape.py --loglevel DEBUG aliexpress --to-std-json
+python scrape.py aliexpress --to-std-json
 ````
 
 ### Polyalkemi.no
@@ -110,19 +110,27 @@ This scraper supports the arguments
 * `--skip-item-pdf`
 * `--skip-order-pdf`
 
-They will skip storing the item thumbnail, item PDF print, and order invoice for this scraper.
+for scraping and export.
+
+They will skip storing the item thumbnail, item PDF print, and order invoice while scraping and exporting.
+
+It also supports the and the option
+* `--include-negative-orders`
+
+for export. It will include negative orders (returns) in the export.
+
 
 ````python
-python scraper.py --loglevel DEBUG polyalkemi 
+python scraper.py polyalkemi 
 ````
 
 ````python
-python scraper.py --loglevel DEBUG polyalkemi --to-std-json 
+python scraper.py polyalkemi --to-std-json 
 ````
 
 ### Kjell.com
 ````python
-python scraper.py --loglevel DEBUG kjell
+python scraper.py kjell
 ````
 Export not yet supported.
 

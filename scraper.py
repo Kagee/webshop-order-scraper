@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--loglevel",
         type=str.upper,
-        default="ERROR",
+        default="DEBUG",
         choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
     )
 
