@@ -38,7 +38,7 @@ class KjellScraper(BaseScraper):
     tla: Final[str] = "KJL"
     name: Final[str] = "Kjell.com"
     COUNTRY: Final[str] = "test"
-    simple_name: Final[str] = "kjell.com-test"
+    simple_name: Final[str] = "kjell.com"
 
     # Methods that use Selenium to scrape webpages in a browser
 
@@ -49,7 +49,6 @@ class KjellScraper(BaseScraper):
             order_cache_dir / Path(f"item-{item_id}.pdf")
         ).resolve()
         item_pdf_missing = f"{item_pdf_file}.missing"
-        item_pdf_path = str(Path(item_pdf_file).relative_to(self.cache["BASE"]))
 
         if self.can_read(item_pdf_file):
             self.log.debug(
@@ -57,14 +56,14 @@ class KjellScraper(BaseScraper):
                 item_id,
                 item_pdf_file,
             )
-            return None
+            return
         if self.can_read(item_pdf_missing):
             self.log.error(
                 AMBER("Skipping item %s, found %s"),
                 item_id,
                 item_pdf_missing,
             )
-            return None
+            return
 
         if line_item["url"] != "":
             url = "https://kjell.com" + line_item["url"]

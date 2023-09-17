@@ -38,6 +38,10 @@ with env.prefixed("WS_"):
                 "handlers": ["console"],
                 "level": "INFO",
             },
+            "shopstats": {
+                "handlers": ["console"],
+                "level": "DEBUG",
+            },
         },
     }
 
