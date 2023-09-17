@@ -438,7 +438,10 @@ class PolyalkemiScraper(BaseScraper):
         order_list = self.read(self.ORDER_LIST_FN, from_json=True)
         structure["orders"] = []
         for order_orig in order_list:
-            if not self.options.include_negative_orders and order_orig["item_count"] < 0:
+            if (
+                not self.options.include_negative_orders
+                and order_orig["item_count"] < 0
+            ):
                 self.log.warning(
                     AMBER("Skipping order %s since it has negative item count"),
                     order_orig["id"],
@@ -470,9 +473,16 @@ class PolyalkemiScraper(BaseScraper):
                 # The price parser does not currently support negative values.
                 # We force the values to negative anywhere the item count is negative.
                 for value_name in ["total", "subtotal", "tax"]:
-                    if order[value_name]['value'][0] != '-':
-                        order[value_name]['value'] = '-' + order[value_name]['value']
-                        self.log.debug("Item count for order %s is negative, forcing %s negative.", order['id'], value_name)
+                    if order[value_name]["value"][0] != "-":
+                        order[value_name]["value"] = (
+                            "-" + order[value_name]["value"]
+                        )
+                        self.log.debug(
+                            "Item count for order %s is negative, forcing %s"
+                            " negative.",
+                            order["id"],
+                            value_name,
+                        )
 
             # Not part of negative orders
             if "shipping" in order_details_dict:
@@ -538,7 +548,7 @@ class PolyalkemiScraper(BaseScraper):
             del order_details_dict["tax"]
             del order_details_dict["total"]
             if "shipping" in order_details_dict:
-                del order_details_dict["shipping"] 
+                del order_details_dict["shipping"]
 
             del order_details_dict["items"]
 

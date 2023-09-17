@@ -210,7 +210,9 @@ class AdafruitScraper(BaseScraper):
                     ext="pdf",
                 )
                 item["pdf"] = str(
-                    Path(pdf_filename).relative_to(self.cache["BASE"]).as_posix()
+                    Path(pdf_filename)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
                 )
                 html_filename = self.part_to_filename(
                     PagePart.ORDER_ITEM,
@@ -219,7 +221,9 @@ class AdafruitScraper(BaseScraper):
                     ext="html",
                 )
                 item["html"] = str(
-                    Path(html_filename).relative_to(self.cache["BASE"]).as_posix()
+                    Path(html_filename)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
                 )
                 png_filename = self.part_to_filename(
                     PagePart.ORDER_ITEM,
@@ -228,7 +232,9 @@ class AdafruitScraper(BaseScraper):
                     ext="png",
                 )
                 item["png"] = str(
-                    Path(png_filename).relative_to(self.cache["BASE"]).as_posix()
+                    Path(png_filename)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
                 )
                 if (
                     self.can_read(pdf_filename)
