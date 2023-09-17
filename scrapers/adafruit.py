@@ -130,7 +130,7 @@ class AdafruitScraper(BaseScraper):
                         "name": item_data["product name"],
                         "quantity": int(item_data["quantity"]),
                         "thumbnail": item_data["png"],
-                        "price": self.get_value_currency(
+                        "total": self.get_value_currency(
                             "price", item_data["price"], "USD"
                         ),
                         "subtotal": self.get_value_currency(

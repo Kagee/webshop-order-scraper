@@ -132,7 +132,7 @@ class AliExpressScraper(BaseScraper):
                     "variation": item_obj["sku"],
                     "quantity": item_obj["count"],
                     "thumbnail": item_obj["thumbnail"],
-                    "price": self.get_value_currency(
+                    "total": self.get_value_currency(
                         "price", item_obj["price"]
                     ),
                     "attachements": [
@@ -314,7 +314,7 @@ class AliExpressScraper(BaseScraper):
                 {
                     "title": title.strip().replace("\xa0", " "),
                     "sku": sku,
-                    "price": price.strip().replace("\xa0", " "),
+                    "total": price.strip().replace("\xa0", " "),
                     "count": int(count),
                 }
             )

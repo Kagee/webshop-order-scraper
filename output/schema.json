@@ -98,7 +98,10 @@
                                 "subtotal": {
                                     "$ref": "#/$defs/currency"
                                 },
-                                "price": {
+                                "tax": {
+                                    "$ref": "#/$defs/currency"
+                                },
+                                "total": {
                                     "$ref": "#/$defs/currency"
                                 },
                                 "attachements": {
