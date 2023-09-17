@@ -61,11 +61,11 @@ def main():
     num_order = len(shop_json["orders"])
     num_items = 0
     max_num_items = 0
-    earliest_date = datetime.now().strftime('%Y-%m-%d')
+    earliest_date = datetime.now().strftime("%Y-%m-%d")
     total_total = {}
     for order in shop_json["orders"]:
-        if order['date'] < earliest_date:
-            earliest_date = order['date']
+        if order["date"] < earliest_date:
+            earliest_date = order["date"]
         max_num_items = max(max_num_items, len(order["items"]))
         num_items = num_items + len(order["items"])
         if order["total"]["currency"] not in total_total:
@@ -82,17 +82,11 @@ def main():
     if len(total_total) > 1:
         total_string = []
         for currency in total_total:
-            total_string.append("%.2f %s" %(total_total[currency], currency))
-        print(
-                "Total total: "
-                , " + ".join(total_string)
-            )
+            total_string.append("%.2f %s" % (total_total[currency], currency))
+        print("Total total: ", " + ".join(total_string))
     else:
         for currency in total_total:
-            print(
-                "Total total: %.2f %s"
-                % (total_total[currency], currency)
-            )
+            print("Total total: %.2f %s" % (total_total[currency], currency))
 
 
 if __name__ == "__main__":
