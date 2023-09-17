@@ -192,7 +192,7 @@ def main():
     if (
         hasattr(args, "to_std_json")
         and args.to_std_json
-        and hasattr(scraper_class, "to_std_json")
+        and hasattr(scraper_class, "command_to_std_json")
     ):
         scraper_class(args).command_to_std_json()
     elif hasattr(args, "to_std_json") and args.to_std_json:
