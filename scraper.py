@@ -189,7 +189,11 @@ def main():
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
     # TODO: Move this check to individual class inits
-    if hasattr(args, "to_std_json") and args.to_std_json and hasattr(scraper_class, "to_std_json") :
+    if (
+        hasattr(args, "to_std_json")
+        and args.to_std_json
+        and hasattr(scraper_class, "to_std_json")
+    ):
         scraper_class(args).command_to_std_json()
     elif hasattr(args, "to_std_json") and args.to_std_json:
         log.error("%s does not support to_std_json", args.source)
