@@ -74,11 +74,11 @@ def main():
             order["total"]["currency"]
         ] + Decimal(order["total"]["value"])
 
-    print("Shop: %s" % shop_json["metadata"]["name"])
-    print("Number of orders: %s" % num_order)
-    print("Number of items (possible duplicates): %s" % num_items)
-    print("Largest order (# items): %s" % max_num_items)
-    print("First order: %s" % earliest_date)
+    print(f"Shop: {shop_json['metadata']['name']}")
+    print(f"Number of orders: {num_order}")
+    print(f"Number of items (possible duplicates): {num_items}")
+    print(f"Largest order (# items): {max_num_items}")
+    print(f"First order: {earliest_date}")
     if len(total_total) > 1:
         total_string = []
         for currency in total_total:

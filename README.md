@@ -199,6 +199,10 @@ cp example.env .env
 notepad .env # Edit .env to your liking
 ````
 
+## shopstats.py
+
+This simple script will output stats per shop based on output files.
+
 ## Acknowledgements
 
 For steadfast bug fixing, having orders that totally scramble my scraping, and coming up with those excellent ideas when I have been struggling with a bug for an hour.
