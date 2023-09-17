@@ -536,8 +536,9 @@ class BaseScraper(object):
             return html_element
         return content
 
+    @classmethod
     def read(
-        self,
+        cls,
         path: Union[Path, str],
         from_json=False,
         from_html=False,
