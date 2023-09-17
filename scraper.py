@@ -84,6 +84,13 @@ def parse_args():
             help="Do not save item thumbnail",
         )
 
+    def include_negative_orders(parser):
+        parser.add_argument(
+            "--include-negative-orders",
+            action="store_true",
+            help="Include orders with negative item count in export.",
+        )
+
     parser_adafruit = subparsers.add_parser("adafruit")
 
     to_std_json(parser_adafruit)
@@ -164,6 +171,7 @@ def parse_args():
     skip_order_pdf(parser_polyalkemi)
     skip_item_pdf(parser_polyalkemi)
     skip_item_thumb(parser_polyalkemi)
+    include_negative_orders(parser_polyalkemi)
 
     args = parser.parse_args()
 
@@ -180,6 +188,7 @@ def main():
     ][0]
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
+    # TODO: Move this check to individual class inits
     if hasattr(args, "to_std_json") and args.to_std_json:
         scraper_class(args).command_to_std_json()
     elif args.to_std_json:
