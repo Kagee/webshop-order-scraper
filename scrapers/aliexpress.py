@@ -56,7 +56,7 @@ class AliExpressScraper(BaseScraper):
                 json_order_file.parent.name,
                 json_order_file.name,
             )
-            self.log.debug(filename_base / oob["tracking_cache_file"])
+
             assert self.can_read(filename_base / oob["tracking_cache_file"])
             assert self.can_read(filename_base / oob["cache_file"])
             order_obj = {
