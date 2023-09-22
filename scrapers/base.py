@@ -116,6 +116,8 @@ class BaseScraper(object):
                 curr_dict = {"currency": "EUR"}
             elif guess_price.currency in ["￥", "JPY"]:
                 curr_dict = {"currency": "JPY"}
+            elif guess_price.currency in ["£", "GBP"]:
+                curr_dict = {"currency": "GBP"}
             elif guess_price.currency in ["NOK"]:
                 curr_dict = {"currency": "NOK"}
             elif value == "Free shipping":
