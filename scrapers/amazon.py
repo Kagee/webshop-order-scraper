@@ -162,8 +162,43 @@ class AmazonScraper(BaseScraper):
         # .a-fixed-right-grid
         #    .od-shipping-address-container
         #    #od-subtotals
+        items_xpath = "//div[contains(@class, 'yohtmlc-item')]/parent::div"
+        item_elements: HtmlElement = order_html.xpath(items_xpath)
+        self.log.debug("LXML found %s items", len(item_elements))
+        order_id_dict["items"] = {}
+        for item_element in item_elements:
+            item_id = None
+            anchors: HtmlElement = item_element.cssselect("a")
+            anchor: HtmlElement
+            for anchor in anchors:
+                product_link = re.match(
+                    # item id or "gc" => gift card
+                    r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
+                    anchor.get("href"),
+                )
+                if product_link and anchor.text_content().strip() != "":
+                    item_id = product_link.group("id")
+                    break
+            
+            if item_id == "gc":
+                continue
+            
+            price_element: HtmlElement = item_element.cssselect("span.a-color-price")[0] #xpath("/span[contains(@class, 'price')]")
 
-        # item_files = order_cache_dir.glob("item-*")
+            order_id_dict["items"][item_id] = {
+                "name": anchor.text_content().strip(),
+                "total": self.get_value_currency("total", price_element.text_content().strip()),
+            } 
+            self.log.debug("LXML found item %s", item_id)
+
+        item_file_paths = order_cache_dir.glob("item-*")
+        item_path_names = [x.name for x in item_file_paths]
+
+        for item_id in order_id_dict["items"].keys():
+            if f"item-{item_id}-thumb.jpg" not in item_path_names \
+                or f"item-{item_id}.html" not in item_path_names \
+                or f"item-{item_id}.pdf" not in item_path_names:
+                self.log.error(RED("Missing thumbnail, HTML cache or PDF for item %s. You should delete %s and rescrape."), item_id, order_cache_dir)
 
         if "total" in order_id_dict and not isinstance(
             order_id_dict["total"], dict
@@ -738,6 +773,7 @@ class AmazonScraper(BaseScraper):
                 # 1. Autocrop
                 # 2. Resize Y to 300px
                 # 3. Scale X so no larger than 300px
+                
                 large_image_src = re.sub(
                     r"(.+\._)[^\.]*(_\.+)",
                     r"\1AC_UY300_SX300\2",
