@@ -555,7 +555,7 @@ class BaseScraper(object):
                 try:
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
-                    self.log.error("Encountered error when reading %s", path)
+                    cls.log.error("Encountered error when reading %s", path)
                     raise IOError(
                         f"Encountered error when reading {path}", jde
                     ) from jde
