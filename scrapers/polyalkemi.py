@@ -1,6 +1,5 @@
 # pylint: disable=unused-import
 import base64
-from curses import is_term_resized
 import os
 import re
 import time
