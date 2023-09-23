@@ -157,7 +157,7 @@ class AdafruitScraper(BaseScraper):
                     del item_data["subtotal"]
                     del item_data["price"]
 
-                    item_obj.update(item_data)
+                    item_obj['extra_data'] = item_data
                     order_object["items"].append(item_obj)
 
                 # Not deleting order_obj['date_purchased'] because it
@@ -169,7 +169,7 @@ class AdafruitScraper(BaseScraper):
 
                 del order_obj["items"]
                 # Add all remaning keys to the new object
-                order_object.update(order_obj)
+                order_object['extra_data'] = order_obj
 
                 structure["orders"].append(order_object)
 

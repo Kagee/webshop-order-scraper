@@ -712,7 +712,7 @@ class KjellScraper(BaseScraper):
                 del item["price"]["vatAmount"]
                 del item["price"]["currentExclVat"]
 
-                item_dict.update(item)
+                item_dict['extra_data'] = item
                 order_object["items"].append(item_dict)
 
             
@@ -722,7 +722,7 @@ class KjellScraper(BaseScraper):
             del orig_order["vatAmount"]
             del orig_order["shippingFee"]["exclVat"]
             del orig_order["lineItems"]
-            order_object.update(orig_order)
+            order_object['extra_data'] = orig_order
             orders.append(order_object)
 
         structure["orders"] = orders

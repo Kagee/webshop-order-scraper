@@ -552,8 +552,8 @@ class PolyalkemiScraper(BaseScraper):
             del order_details_dict["items"]
 
             # Add extra dict items to output
-            order.update(order_orig)
-            order.update(order_details_dict)
+            order['extra_data'] = order_orig
+            order['extra_data'].update(order_details_dict)
             structure["orders"].append(order)
         self.output_schema_json(structure)
 
