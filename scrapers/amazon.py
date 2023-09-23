@@ -112,56 +112,6 @@ class AmazonScraper(BaseScraper):
         # self.pprint(order_id_dict)
         self.pprint({order_id: order_id_dict})
 
-        return """
-           
-            # .a-fixed-right-grid
-            #    .od-shipping-address-container
-            #    #od-subtotals
-         
-
-                price_element: HtmlElement = item_element.cssselect(
-                    "span.a-color-price"
-                )[
-                    0
-                ]  # xpath("/span[contains(@class, 'price')]")
-
-                order_id_dict["items"][item_id][
-                    "name_from_order"
-                ] = anchor.text_content().strip()
-                order_id_dict["items"][item_id]["total_from_order"] = (
-                    self.get_value_currency(
-                        "total", price_element.text_content().strip()
-                    )
-                )
-
-                self.log.debug("LXML found item %s", item_id)
-
-            item_file_paths = order_cache_dir.glob("item-*")
-            item_path_names = [x.name for x in item_file_paths]
-
-            for item_id in order_id_dict["items"].keys():
-                if (
-                    f"item-{item_id}-thumb.jpg" not in item_path_names
-                    or f"item-{item_id}.html" not in item_path_names
-                    or f"item-{item_id}.pdf" not in item_path_names
-                ):
-                    self.log.error(
-                        RED(
-                            "Missing thumbnail, HTML cache or PDF for item %s. You"
-                            " should delete %s and rescrape."
-                        ),
-                        item_id,
-                        order_cache_dir,
-                    )
-
-            if "total" in order_id_dict and not isinstance(
-                order_id_dict["total"], dict
-            ):
-                order_id_dict["total"] = self.get_value_currency(
-                    "total", order_id_dict["total"]
-                )
-            return order_id_dict
-        """
 
     def __append_thumnails_to_item_html(self):
         brws = self.browser
@@ -454,14 +404,14 @@ class AmazonScraper(BaseScraper):
 
                             matches_dict = matches.groupdict().copy()
                             if matches.group("date1"):
-                                matches_dict["date_from_order_list"] = (
+                                matches_dict["date"] = (
                                     datetime.datetime.strptime(
                                         matches.group("date1"), "%d %B %Y"
                                     )
                                 )
 
                             elif matches.group("date2"):
-                                matches_dict["date_from_order_list"] = (
+                                matches_dict["date"] = (
                                     datetime.datetime.strptime(
                                         matches.group("date2"), "%B %d, %Y"
                                     )
@@ -479,7 +429,7 @@ class AmazonScraper(BaseScraper):
                                 "items": {}
                             }
 
-                        order_lists[year][value_matches["id"]]["total"] = (
+                        order_lists[year][value_matches["id"]]["total_from_order_list"] = (
                             self.get_value_currency(
                                 "total", value_matches["total"]
                             )
@@ -491,8 +441,8 @@ class AmazonScraper(BaseScraper):
                         self.log.info(
                             "Order ID %s, %s, %s",
                             value_matches["id"],
-                            value_matches["total_from_order_list"],
-                            value_matches["date_from_order_list"].strftime(
+                            value_matches["total"],
+                            value_matches["date"].strftime(
                                 "%Y-%m-%d"
                             ),
                         )
@@ -713,6 +663,11 @@ class AmazonScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(2)
 
+           
+        # TODO: shipping
+        # .a-fixed-right-grid
+        #    .od-shipping-address-container        
+
         subtotals = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
         order["pricing"] = {}
         for subtotal in subtotals:
@@ -869,6 +824,9 @@ class AmazonScraper(BaseScraper):
                 # find the correct iamge first
                 if high_res_thumb_url != "":
                     break
+            if high_res_thumb_url == "":
+                # Fallback to src if we have no data-old-hires
+                high_res_thumb_url = thumb.get_attribute("src")
             # _AC_UY300_SX300_
             # 1. Autocrop
             # 2. Resize Y to 300px
