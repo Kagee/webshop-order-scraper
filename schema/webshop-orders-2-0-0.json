@@ -10,7 +10,7 @@
     ],
     "self": {
         "vendor": "no.hild1",
-        "name": "webshop-order-export",
+        "name": "webshop-orders",
         "format": "jsonschema",
         "version": "2-0-0"
       },

@@ -61,7 +61,7 @@ with env.prefixed("WS_"):
     ).resolve()
 
     JSON_SCHEMA: Path = Path(
-        env("JSON_SCHEMA", default="./output/schema.json")
+        env("JSON_SCHEMA", default="./schema/webshop-orders.json")
     ).resolve()
 
     NO_COLOR: str = env.bool(

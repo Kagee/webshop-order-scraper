@@ -1,0 +1,230 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://gitlab.com/Kagee/webshop-scraper/-/raw/main/schema.json?inline=false",
+    "title": "Orders,",
+    "description": "Metadata about a shop and a list of orders with optional items details, from a webshop. Extra properties are encouraged.",
+    "type": "object",
+    "required": [
+        "metadata",
+        "orders"
+    ],
+    "self": {
+        "vendor": "no.hild1",
+        "name": "webshop-orders",
+        "format": "jsonschema",
+        "version": "2-0-0"
+      },
+    "additionalProperties": false,
+    "properties": {
+        "metadata": {
+            "description": "Web shop metadata",
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "description": "The name of the shop, i.e. 'Amazon'",
+                    "type": "string"
+                },
+                "branch_name": {
+                    "description": "The branch name of the shop, i.e. 'Amazon.de'",
+                    "type": "string"
+                },
+                "order_url": {
+                    "description": "A url for viewing orders, with the placeholder {order_id}",
+                    "type": "string",
+                    "format": "uri-reference",
+                    "pattern": "^https?://.*\\..*.*{order_id}.*$"
+                },
+                "item_url": {
+                    "description": "A url for viewing items, with the placeholder {item_id} and optional {item_variation}",
+                    "type": "string",
+                    "format": "uri-reference",
+                    "pattern": "^https?://.*\\..*.*{item_id}.*$"
+                }
+            }
+        },
+        "orders": {
+            "title": "Orders,",
+            "description": "A list of orders, possibly with items details, from a webshop",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+                "title": "Order",
+                "description": "A single order, possibly with items details",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "description": "The unique identifier for a order",
+                        "type": "string"
+                    },
+                    "date": {
+                        "description": "The 'Order date', as defined by the shop",
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "items": {
+                        "description": "A list of items in this order",
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "items": {
+                            "title": "Item",
+                            "description": "A single item",
+                            "type": "object",
+                            "required": [
+                                "id",
+                                "name",
+                                "quantity"
+                            ],
+                            "properties": {
+                                "name": {
+                                    "description": "Item name",
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "description": "Item id",
+                                    "type": "string"
+                                },
+                                "variation": {
+                                    "description": "Item sku/variation",
+                                    "type": "string"
+                                },
+                                "quantity": {
+                                    "description": "Quantity of this item/variation",
+                                    "type": "number"
+                                },
+                                "thumbnail": {
+                                    "$ref": "#/$defs/file-path"
+                                },
+                                "subtotal": {
+                                    "$ref": "#/$defs/currency"
+                                },
+                                "tax": {
+                                    "$ref": "#/$defs/currency"
+                                },
+                                "total": {
+                                    "$ref": "#/$defs/currency"
+                                },
+                                "extra_data": {
+                                    "title": "Extra data",
+                                    "description": "Sub-object for extra (non-schema) data for this item.",
+                                    "type": "object",
+                                    "additionalProperties": true
+                                },
+                                "attachements": {
+                                    "type": "array",
+                                    "required": [
+                                        "name",
+                                        "path"
+                                    ],
+                                    "items": {
+                                        "title": "Attachement",
+                                        "description": "A single attachement",
+                                        "type": "object",
+                                        "required": [
+                                            "name",
+                                            "path"
+                                        ],
+                                        "items": {
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "path": {
+                                                "$ref": "#/$defs/file-path"
+                                            },
+                                            "comment": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "subtotal": {
+                        "$ref": "#/$defs/currency"
+                    },
+                    "shipping": {
+                        "$ref": "#/$defs/currency"
+                    },
+                    "tax": {
+                        "$ref": "#/$defs/currency"
+                    },
+                    "total": {
+                        "$ref": "#/$defs/currency"
+                    },
+                    "extra_data": {
+                        "title": "Extra data",
+                        "description": "Sub-object for extra (non-schema) data for this order.",
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "attachements": {
+                        "type": "array",
+                        "required": [
+                            "name",
+                            "path"
+                        ],
+                        "items": {
+                            "title": "Attachement",
+                            "description": "A single attachement",
+                            "type": "object",
+                            "required": [
+                                "name",
+                                "path"
+                            ],
+                            "items": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "path": {
+                                    "$ref": "#/$defs/file-path"
+                                },
+                                "comment": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "date",
+                    "items"
+                ]
+            }
+        }
+    },
+    "$defs": {
+        "file-path": {
+            "description": "Relative path to file. Relative to file inside ZIP file with same stem as JSON document filename. Posix slashes.",
+            "type": "string"
+        },
+        "currency": {
+            "description": "An amount of money in a specific currency.",
+            "type": "object",
+            "properties": {
+                "value": {
+                    "description": "The net monetary value. A negative amount denotes a debit; a positive amount a credit. The numeric value is represented as a string so that it can be exact with no loss of precision.",
+                    "example": "3456.78",
+                    "type": "string",
+                    "pattern": "^-?[0-9]*[,\\.][0-9]*$"
+                },
+                "currency": {
+                    "description": "The [ISO 4217 currency code](https://en.wikipedia.org/wiki/ISO_4217) for this monetary value. This is always upper case ASCII. TODO: ISO 4217 defines three-character codes. However, ISO 4217 does not account for cryptocurrencies. Of note, DASH uses 4 characters.",
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3,
+                    "pattern": "^[A-Z][A-Z][A-Z]$"
+                }
+            },
+            "required": [
+                "value"
+            ]
+        }
+    }
+}
