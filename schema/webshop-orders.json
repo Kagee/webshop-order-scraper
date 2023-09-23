@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://gitlab.com/Kagee/webshop-scraper/-/raw/main/schema.json?inline=false",
+    "$id": "https://gitlab.com/Kagee/webshop-order-scraper/-/raw/main/schema/webshop-order.json?inline=false",
     "title": "Orders,",
     "description": "Metadata about a shop and a list of orders with optional items details, from a webshop. Extra properties are encouraged.",
     "type": "object",
