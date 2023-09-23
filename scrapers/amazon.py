@@ -93,11 +93,9 @@ class AmazonScraper(BaseScraper):
             PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
         if self.can_read(order_json_filename):
-            # TODO: Enable order loading from json when ready
-            if False is True:
-                order_id_dict.update(
-                    self.read(order_json_filename, from_json=True)
-                )
+            order_id_dict.update(
+                self.read(order_json_filename, from_json=True)
+            )
 
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
         html_cache = Path(
@@ -118,7 +116,8 @@ class AmazonScraper(BaseScraper):
         order_id_dict = self.lxml_scrape_order(
             order_id, html_cache, order_cache_dir, order_id_dict
         )
-
+        self.log.debug("Writing order JSON")
+        self.write(order_json_filename, order_id_dict, to_json=True)
         # self.pprint(order_id_dict)
         self.pprint({order_id: order_id_dict})
 
@@ -179,26 +178,41 @@ class AmazonScraper(BaseScraper):
                 if product_link and anchor.text_content().strip() != "":
                     item_id = product_link.group("id")
                     break
-            
+
             if item_id == "gc":
                 continue
-            
-            price_element: HtmlElement = item_element.cssselect("span.a-color-price")[0] #xpath("/span[contains(@class, 'price')]")
+
+            price_element: HtmlElement = item_element.cssselect(
+                "span.a-color-price"
+            )[
+                0
+            ]  # xpath("/span[contains(@class, 'price')]")
 
             order_id_dict["items"][item_id] = {
                 "name": anchor.text_content().strip(),
-                "total": self.get_value_currency("total", price_element.text_content().strip()),
-            } 
+                "total": self.get_value_currency(
+                    "total", price_element.text_content().strip()
+                ),
+            }
             self.log.debug("LXML found item %s", item_id)
 
         item_file_paths = order_cache_dir.glob("item-*")
         item_path_names = [x.name for x in item_file_paths]
 
         for item_id in order_id_dict["items"].keys():
-            if f"item-{item_id}-thumb.jpg" not in item_path_names \
-                or f"item-{item_id}.html" not in item_path_names \
-                or f"item-{item_id}.pdf" not in item_path_names:
-                self.log.error(RED("Missing thumbnail, HTML cache or PDF for item %s. You should delete %s and rescrape."), item_id, order_cache_dir)
+            if (
+                f"item-{item_id}-thumb.jpg" not in item_path_names
+                or f"item-{item_id}.html" not in item_path_names
+                or f"item-{item_id}.pdf" not in item_path_names
+            ):
+                self.log.error(
+                    RED(
+                        "Missing thumbnail, HTML cache or PDF for item %s. You"
+                        " should delete %s and rescrape."
+                    ),
+                    item_id,
+                    order_cache_dir,
+                )
 
         if "total" in order_id_dict and not isinstance(
             order_id_dict["total"], dict
@@ -248,7 +262,14 @@ class AmazonScraper(BaseScraper):
         try:
             image_main = brws.find_element(By.ID, "imgBlkFront")
         except NoSuchElementException:
-            image_main = brws.find_element(By.ID, "landingImage")
+            try:
+                image_main = brws.find_element(By.ID, "landingImage")
+            except NoSuchElementException:
+                # page_source = self.browser.page_source
+                # {"landingImageUrl":"https://m.media-amazon.com/images/I/71XXvotsjOL.__AC_SX300_SY300_QL70_ML2_.jpg"}
+                # re.match(r"", page_source)
+                image_main = None
+
         expanded_content = []
         try:
             expanded_content += brws.find_elements(
@@ -275,9 +296,10 @@ class AmazonScraper(BaseScraper):
                 }
                 // Removeing these somehow stops main image
                 // from overflowing the text in PDF
-                arguments[2].style.removeProperty("max-height") 
-                arguments[2].style.removeProperty("max-width")
-
+                if (arguments[2]) {
+                    arguments[2].style.removeProperty("max-height") 
+                    arguments[2].style.removeProperty("max-width")
+                }
                 console.log("expanded_content")
                 console.log(arguments[3])
                 for (let i = 0; i < arguments[3].length; i++) {
@@ -354,7 +376,9 @@ class AmazonScraper(BaseScraper):
                 invoice_item.text.replace("\r\n", " ")
                 .replace("\r", "")
                 .replace("\n", " ")
+                .strip()
             )
+
             self.log.debug("Found attachement with name '%s'", text)
             href = invoice_item.get_attribute("href")
             attachement = {"text": text, "href": href}
@@ -384,6 +408,7 @@ class AmazonScraper(BaseScraper):
             contact_link = re.match(r".+contact/contact.+", href)
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
             if order_summary:
+                assert text != ""
                 self.remove(self.cache["PDF_TEMP_FILENAME"])
                 brws.switch_to.new_window("tab")
                 brws.get(href)
@@ -398,6 +423,7 @@ class AmazonScraper(BaseScraper):
                 )
                 brws.close()
             elif download_pdf:
+                assert text != ""
                 self.log.debug("This is a invoice/warranty/p-slip PDF.")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
                     # Remove old/random PDFs
@@ -765,29 +791,34 @@ class AmazonScraper(BaseScraper):
 
             # Don't save anything for gift cards
             if item_id != "gc":
-                thumb = item.find_element(
-                    By.XPATH, ".//img[contains(@class, 'yo-critical-feature')]"
-                )
-                high_res_thumb_url = thumb.get_attribute("data-a-hires")
-                # _AC_UY300_SX300_
-                # 1. Autocrop
-                # 2. Resize Y to 300px
-                # 3. Scale X so no larger than 300px
-                
-                large_image_src = re.sub(
-                    r"(.+\._)[^\.]*(_\.+)",
-                    r"\1AC_UY300_SX300\2",
-                    high_res_thumb_url,
-                )
-                ext = os.path.splitext(urlparse(large_image_src).path)[1]
-                item_thumb_file = (
-                    order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
-                ).resolve()
+                num_thumbs = sum(1 for _ in order_cache_dir.glob(f"item-{item_id}-thumb"))
+                if num_thumbs >= 1:
+                    # We save a thumb here in case the item bpage has been removed
+                    thumb = item.find_element(
+                        By.XPATH,
+                        ".//img[contains(@class, 'yo-critical-feature')]",
+                    )
+                    high_res_thumb_url = thumb.get_attribute("data-a-hires")
+                    # _AC_UY300_SX300_
+                    # 1. Autocrop
+                    # 2. Resize Y to 300px
+                    # 3. Scale X so no larger than 300px
 
-                urllib.request.urlretrieve(large_image_src, item_thumb_file)
-                order["items"][item_id]["thumbnail"] = str(
-                    Path(item_thumb_file).relative_to(self.cache["BASE"])
-                )  # keep this
+                    large_image_src = re.sub(
+                        r"(.+\._)[^\.]*(_\.+)",
+                        r"\1_AC_\2",
+                        high_res_thumb_url,
+                    )
+                    ext = os.path.splitext(urlparse(large_image_src).path)[1]
+                    item_thumb_file = (
+                        order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
+                    ).resolve()
+                    urllib.request.urlretrieve(large_image_src, item_thumb_file)
+                    order["items"][item_id]["thumbnail"] = str(
+                        Path(item_thumb_file).relative_to(self.cache["BASE"])
+                    )  # keep this
+                else:
+                    self.log.debug("Found thumb for item %s, not scraping from order page.", item_id)
 
         self.log.debug("Saving item pages to PDF and HTML")
         for item_id in order["items"]:
@@ -872,7 +903,41 @@ class AmazonScraper(BaseScraper):
                 """,
             )
 
-            # Javascript above happens async
+            thumbs = brws.find_elements(
+                By.CSS_SELECTOR, "#main-image-container .imgTagWrapper img"
+            )
+            for thumb in thumbs:
+                high_res_thumb_url = thumb.get_attribute("data-old-hires")
+                # Some lazy-loading shennanigans means we may not
+                # find the correct iamge first
+                if high_res_thumb_url != "":
+                    break
+            # _AC_UY300_SX300_
+            # 1. Autocrop
+            # 2. Resize Y to 300px
+            # 3. Scale X so no larger than 300px
+
+            large_image_src = re.sub(
+                r"(.+\._)[^\.]*(_\.+)",
+                r"\1AC\2",
+                high_res_thumb_url,
+            )
+
+            ext = os.path.splitext(urlparse(large_image_src).path)[1]
+            item_thumb_file = (
+                order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
+            ).resolve()
+            self.log.debug(
+                "Downloading thumb for item %s from %s",
+                item_id,
+                large_image_src,
+            )
+            urllib.request.urlretrieve(large_image_src, item_thumb_file)
+            item_dict["thumbnail"] = str(
+                Path(item_thumb_file).relative_to(self.cache["BASE"])
+            )  # keep this
+
+            # Javascript scroll above happens async
             time.sleep(11)
             see_more: WebElement = self.find_element(
                 By.XPATH,
@@ -911,6 +976,9 @@ class AmazonScraper(BaseScraper):
             item_dict["removed"] = True
 
         self.log.debug("Printing page to PDF")
+        for pdf in self.cache["TEMP"].glob("*.pdf"):
+            # Remove old/random PDFs
+            os.remove(pdf)
         brws.execute_script("window.print();")
 
         self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
