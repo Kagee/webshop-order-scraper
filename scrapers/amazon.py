@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Dict, Final, List
 from urllib.parse import urlparse
 
-from lxml.html import HtmlElement
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -113,68 +112,12 @@ class AmazonScraper(BaseScraper):
         # self.pprint(order_id_dict)
         self.pprint({order_id: order_id_dict})
 
-        return """     def lxml_scrape_order(
-            self,
-            order_id,
-            html_cache_filename: Path,
-            order_cache_dir: Path,
-            order_id_dict: Dict,
-        ):
-            # TODO: Scrape order with LXML
-
-            attachements = order_cache_dir.glob("attachement-*.pdf")
-            for attachement in attachements:
-                if "attachements" not in order_id_dict:
-                    order_id_dict["attachements"] = []
-
-                m = re.match(r"attachement-(.*)\.pdf", attachement.name)
-
-                order_id_dict["attachements"].append(
-                    {
-                        "name": base64.urlsafe_b64decode(m[1]).decode("utf-8"),
-                        "path": str(
-                            attachement.relative_to(self.cache["BASE"]).as_posix()
-                        ),
-                    }
-                )
-
-            order_html = self.read(html_cache_filename, from_html=True)
-            a: HtmlElement = order_html.cssselect(".a-fixed-right-grid")[0]
-            b: HtmlElement = a.cssselect("#od-subtotals")[0]
-            price_rows: HtmlElement = b.cssselect(".a-row")
-            order_id_dict["pricing"] = {}
-            # del order_id_dict["total"]
-            for price_row in price_rows:
-                price_columns: List[HtmlElement] = price_row.xpath(".//div")
-                if len(price_columns) == 2:
-                    price_name = price_columns[0].text_content().strip()
-                    order_id_dict["pricing"][price_name] = self.get_value_currency(
-                        price_name, price_columns[1].text_content().strip()
-                    )
-                # self.log.debug("".join(price_row.itertext()))
+        return """
+           
             # .a-fixed-right-grid
             #    .od-shipping-address-container
             #    #od-subtotals
-            items_xpath = "//div[contains(@class, 'yohtmlc-item')]/parent::div"
-            item_elements: HtmlElement = order_html.xpath(items_xpath)
-            self.log.debug("LXML found %s items", len(item_elements))
-            order_id_dict["items"] = {}
-            for item_element in item_elements:
-                item_id = None
-                anchors: HtmlElement = item_element.cssselect("a")
-                anchor: HtmlElement
-                for anchor in anchors:
-                    product_link = re.match(
-                        # item id or "gc" => gift card
-                        r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
-                        anchor.get("href"),
-                    )
-                    if product_link and anchor.text_content().strip() != "":
-                        item_id = product_link.group("id")
-                        break
-
-                if item_id == "gc":
-                    continue
+         
 
                 price_element: HtmlElement = item_element.cssselect(
                     "span.a-color-price"
@@ -542,14 +485,16 @@ class AmazonScraper(BaseScraper):
                             )
                         )
 
-                        order_lists[year][value_matches["id"]]["date_from_order_list"] = (
-                            value_matches["date"]
-                        )
+                        order_lists[year][value_matches["id"]][
+                            "date_from_order_list"
+                        ] = value_matches["date"]
                         self.log.info(
                             "Order ID %s, %s, %s",
                             value_matches["id"],
                             value_matches["total_from_order_list"],
-                            value_matches["date_from_order_list"].strftime("%Y-%m-%d"),
+                            value_matches["date_from_order_list"].strftime(
+                                "%Y-%m-%d"
+                            ),
                         )
         else:
             self.log.debug("No order HTML to parse")
@@ -768,6 +713,18 @@ class AmazonScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(2)
 
+        subtotals = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
+        order["pricing"] = {}
+        for subtotal in subtotals:
+            price_columns: List[WebElement] = subtotal.find_elements(
+                By.CSS_SELECTOR, "div"
+            )
+            if len(price_columns) == 2:
+                price_name = price_columns[0].text.strip()
+                order["pricing"][price_name] = self.get_value_currency(
+                    price_name, price_columns[1].text.strip()
+                )
+
         if "items" not in order:
             order["items"] = {}
 
@@ -819,6 +776,19 @@ class AmazonScraper(BaseScraper):
                     .relative_to(self.cache["BASE"])
                     .as_posix()
                 )  # keep this
+
+                order["items"][item_id]["total"] = self.get_value_currency(
+                    "price",
+                    item.find_element(
+                        By.XPATH, ".//span[contains(@class, 'color-price')]"
+                    ).text.strip(),
+                )
+                try:
+                    order["items"][item_id]["quantity"] = int(item.find_element(
+                        By.XPATH, ".//span[contains(@class, 'item-view-qty')]"
+                    ).text.strip())
+                except NoSuchElementException:
+                    order["items"][item_id]["quantity"] = 1
 
         self.log.debug("Saving item pages to PDF and HTML")
         for item_id in order["items"]:
@@ -879,7 +849,6 @@ class AmazonScraper(BaseScraper):
         order_id: str,
         order_cache_dir: Path,
     ):
-        # TODO: Finish process_item_page
         brws = self.browser
         self.log.debug("New tab for item %s", item_id)
         brws.switch_to.new_window()
@@ -887,8 +856,6 @@ class AmazonScraper(BaseScraper):
         item_dict["removed"] = False
 
         if "Page Not Found" not in self.browser.title:
-
-
             product_title: WebElement = brws.find_element(
                 By.CSS_SELECTOR, "span#productTitle"
             )
@@ -927,7 +894,6 @@ class AmazonScraper(BaseScraper):
             item_dict["thumbnail_from_item"] = str(
                 Path(item_thumb_file).relative_to(self.cache["BASE"]).as_posix()
             )  # keep this
-
 
             item_html_filename = self.part_to_filename(
                 PagePart.ORDER_ITEM,
@@ -980,13 +946,13 @@ class AmazonScraper(BaseScraper):
 
                 self.browser_cleanup_item_page()
 
-
                 self.log.debug(
                     "Saving item %s HTML to %s", item_id, item_html_filename
                 )
 
-                self.write(item_html_filename, self.browser.page_source, html=True)
-
+                self.write(
+                    item_html_filename, self.browser.page_source, html=True
+                )
 
                 self.append_thumnails_to_item_html()
                 self.log.debug("Printing page to PDF")
@@ -997,16 +963,13 @@ class AmazonScraper(BaseScraper):
 
                 self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
 
-                
                 self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
                 self.log.debug("PDF moved to cache")
             else:
                 self.log.debug("Found item PDF for %s, not printing", item_id)
             item_dict["pdf"] = str(
-                    Path(item_pdf_file)
-                    .relative_to(self.cache["BASE"])
-                    .as_posix()
-                )
+                Path(item_pdf_file).relative_to(self.cache["BASE"]).as_posix()
+            )
         else:
             self.log.debug("Item page for %s has been removed", item_id)
             item_dict["removed"] = True
