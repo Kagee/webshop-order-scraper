@@ -93,134 +93,132 @@ class AmazonScraper(BaseScraper):
             PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
         if self.can_read(order_json_filename):
-            order_id_dict.update(
-                self.read(order_json_filename, from_json=True)
-            )
+            order_id_dict.update(self.read(order_json_filename, from_json=True))
 
         order_cache_dir = self.cache["ORDERS"] / Path(order_id)
-        html_cache = Path(
-            self.part_to_filename(
-                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
-            )
-        )
 
         self.makedir(order_cache_dir)
 
-        if not self.can_read(html_cache):
-            self.log.debug("Did not find HTML cache for order %s", order_id)
+        if (
+            not self.can_read(order_json_filename)
+            or self.options.force_scrape_order_json
+        ):
+            self.log.debug("Scraping order id %s", order_id)
             order_id_dict.update(
                 self.browser_scrape_order(order_id, order_cache_dir)
             )
 
-        self.log.debug("Found HTML cache for order %s", order_id)
-        order_id_dict = self.lxml_scrape_order(
-            order_id, html_cache, order_cache_dir, order_id_dict
-        )
         self.log.debug("Writing order JSON")
         self.write(order_json_filename, order_id_dict, to_json=True)
         # self.pprint(order_id_dict)
         self.pprint({order_id: order_id_dict})
 
-    def lxml_scrape_order(
-        self,
-        order_id,
-        html_cache_filename: Path,
-        order_cache_dir: Path,
-        order_id_dict: Dict,
-    ):
-        # TODO: Scrape order with LXML
-
-        attachements = order_cache_dir.glob("attachement-*.pdf")
-        for attachement in attachements:
-            if "attachements" not in order_id_dict:
-                order_id_dict["attachements"] = []
-
-            m = re.match(r"attachement-(.*)\.pdf", attachement.name)
-
-            order_id_dict["attachements"].append(
-                {
-                    "name": base64.urlsafe_b64decode(m[1]).decode("utf-8"),
-                    "path": str(attachement.relative_to(self.cache["BASE"])),
-                }
-            )
-
-        order_html = self.read(html_cache_filename, from_html=True)
-        a: HtmlElement = order_html.cssselect(".a-fixed-right-grid")[0]
-        b: HtmlElement = a.cssselect("#od-subtotals")[0]
-        price_rows: HtmlElement = b.cssselect(".a-row")
-        order_id_dict["pricing"] = {}
-        # del order_id_dict["total"]
-        for price_row in price_rows:
-            price_columns: List[HtmlElement] = price_row.xpath(".//div")
-            if len(price_columns) == 2:
-                price_name = price_columns[0].text_content().strip()
-                order_id_dict["pricing"][price_name] = self.get_value_currency(
-                    price_name, price_columns[1].text_content().strip()
-                )
-            # self.log.debug("".join(price_row.itertext()))
-        # .a-fixed-right-grid
-        #    .od-shipping-address-container
-        #    #od-subtotals
-        items_xpath = "//div[contains(@class, 'yohtmlc-item')]/parent::div"
-        item_elements: HtmlElement = order_html.xpath(items_xpath)
-        self.log.debug("LXML found %s items", len(item_elements))
-        order_id_dict["items"] = {}
-        for item_element in item_elements:
-            item_id = None
-            anchors: HtmlElement = item_element.cssselect("a")
-            anchor: HtmlElement
-            for anchor in anchors:
-                product_link = re.match(
-                    # item id or "gc" => gift card
-                    r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
-                    anchor.get("href"),
-                )
-                if product_link and anchor.text_content().strip() != "":
-                    item_id = product_link.group("id")
-                    break
-
-            if item_id == "gc":
-                continue
-
-            price_element: HtmlElement = item_element.cssselect(
-                "span.a-color-price"
-            )[
-                0
-            ]  # xpath("/span[contains(@class, 'price')]")
-
-            order_id_dict["items"][item_id] = {
-                "name": anchor.text_content().strip(),
-                "total": self.get_value_currency(
-                    "total", price_element.text_content().strip()
-                ),
-            }
-            self.log.debug("LXML found item %s", item_id)
-
-        item_file_paths = order_cache_dir.glob("item-*")
-        item_path_names = [x.name for x in item_file_paths]
-
-        for item_id in order_id_dict["items"].keys():
-            if (
-                f"item-{item_id}-thumb.jpg" not in item_path_names
-                or f"item-{item_id}.html" not in item_path_names
-                or f"item-{item_id}.pdf" not in item_path_names
-            ):
-                self.log.error(
-                    RED(
-                        "Missing thumbnail, HTML cache or PDF for item %s. You"
-                        " should delete %s and rescrape."
-                    ),
-                    item_id,
-                    order_cache_dir,
-                )
-
-        if "total" in order_id_dict and not isinstance(
-            order_id_dict["total"], dict
+        return """     def lxml_scrape_order(
+            self,
+            order_id,
+            html_cache_filename: Path,
+            order_cache_dir: Path,
+            order_id_dict: Dict,
         ):
-            order_id_dict["total"] = self.get_value_currency(
-                "total", order_id_dict["total"]
-            )
-        return order_id_dict
+            # TODO: Scrape order with LXML
+
+            attachements = order_cache_dir.glob("attachement-*.pdf")
+            for attachement in attachements:
+                if "attachements" not in order_id_dict:
+                    order_id_dict["attachements"] = []
+
+                m = re.match(r"attachement-(.*)\.pdf", attachement.name)
+
+                order_id_dict["attachements"].append(
+                    {
+                        "name": base64.urlsafe_b64decode(m[1]).decode("utf-8"),
+                        "path": str(
+                            attachement.relative_to(self.cache["BASE"]).as_posix()
+                        ),
+                    }
+                )
+
+            order_html = self.read(html_cache_filename, from_html=True)
+            a: HtmlElement = order_html.cssselect(".a-fixed-right-grid")[0]
+            b: HtmlElement = a.cssselect("#od-subtotals")[0]
+            price_rows: HtmlElement = b.cssselect(".a-row")
+            order_id_dict["pricing"] = {}
+            # del order_id_dict["total"]
+            for price_row in price_rows:
+                price_columns: List[HtmlElement] = price_row.xpath(".//div")
+                if len(price_columns) == 2:
+                    price_name = price_columns[0].text_content().strip()
+                    order_id_dict["pricing"][price_name] = self.get_value_currency(
+                        price_name, price_columns[1].text_content().strip()
+                    )
+                # self.log.debug("".join(price_row.itertext()))
+            # .a-fixed-right-grid
+            #    .od-shipping-address-container
+            #    #od-subtotals
+            items_xpath = "//div[contains(@class, 'yohtmlc-item')]/parent::div"
+            item_elements: HtmlElement = order_html.xpath(items_xpath)
+            self.log.debug("LXML found %s items", len(item_elements))
+            order_id_dict["items"] = {}
+            for item_element in item_elements:
+                item_id = None
+                anchors: HtmlElement = item_element.cssselect("a")
+                anchor: HtmlElement
+                for anchor in anchors:
+                    product_link = re.match(
+                        # item id or "gc" => gift card
+                        r".+/product/(?P<id>([A-Z0-9]*|gc)).+",
+                        anchor.get("href"),
+                    )
+                    if product_link and anchor.text_content().strip() != "":
+                        item_id = product_link.group("id")
+                        break
+
+                if item_id == "gc":
+                    continue
+
+                price_element: HtmlElement = item_element.cssselect(
+                    "span.a-color-price"
+                )[
+                    0
+                ]  # xpath("/span[contains(@class, 'price')]")
+
+                order_id_dict["items"][item_id][
+                    "name_from_order"
+                ] = anchor.text_content().strip()
+                order_id_dict["items"][item_id]["total_from_order"] = (
+                    self.get_value_currency(
+                        "total", price_element.text_content().strip()
+                    )
+                )
+
+                self.log.debug("LXML found item %s", item_id)
+
+            item_file_paths = order_cache_dir.glob("item-*")
+            item_path_names = [x.name for x in item_file_paths]
+
+            for item_id in order_id_dict["items"].keys():
+                if (
+                    f"item-{item_id}-thumb.jpg" not in item_path_names
+                    or f"item-{item_id}.html" not in item_path_names
+                    or f"item-{item_id}.pdf" not in item_path_names
+                ):
+                    self.log.error(
+                        RED(
+                            "Missing thumbnail, HTML cache or PDF for item %s. You"
+                            " should delete %s and rescrape."
+                        ),
+                        item_id,
+                        order_cache_dir,
+                    )
+
+            if "total" in order_id_dict and not isinstance(
+                order_id_dict["total"], dict
+            ):
+                order_id_dict["total"] = self.get_value_currency(
+                    "total", order_id_dict["total"]
+                )
+            return order_id_dict
+        """
 
     def append_thumnails_to_item_html(self):
         brws = self.browser
@@ -265,9 +263,6 @@ class AmazonScraper(BaseScraper):
             try:
                 image_main = brws.find_element(By.ID, "landingImage")
             except NoSuchElementException:
-                # page_source = self.browser.page_source
-                # {"landingImageUrl":"https://m.media-amazon.com/images/I/71XXvotsjOL.__AC_SX300_SY300_QL70_ML2_.jpg"}
-                # re.match(r"", page_source)
                 image_main = None
 
         expanded_content = []
@@ -387,13 +382,13 @@ class AmazonScraper(BaseScraper):
                 text.encode("utf-8")
             ).decode("utf-8")
 
-            attachement_file = (
+            attachement_file: Path = (
                 order_cache_dir / Path(f"attachement-{text_filename_safe}.pdf")
             ).resolve()
 
             if self.can_read(attachement_file):
                 attachement["file"] = str(
-                    attachement_file.relative_to(self.cache["BASE"])
+                    attachement_file.relative_to(self.cache["BASE"]).as_posix()
                 )
                 attachement_dict.append(attachement)
                 self.log.debug("We already have the file for '%s' saved", text)
@@ -416,7 +411,9 @@ class AmazonScraper(BaseScraper):
                 self.browser.execute_script("window.print();")
                 self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
                 attachement["file"] = str(
-                    Path(attachement_file).relative_to(self.cache["BASE"])
+                    Path(attachement_file)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
                 )  # keep this
                 self.move_file(
                     self.cache["PDF_TEMP_FILENAME"], attachement_file
@@ -450,12 +447,14 @@ class AmazonScraper(BaseScraper):
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
                 attachement["file"] = str(
-                    Path(attachement_file).relative_to(self.cache["BASE"])
+                    Path(attachement_file)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
                 )  # keep this
                 self.move_file(pdf[0], attachement_file)
                 brws.close()
             elif contact_link or invoice_unavailable:
-                self.log.warning(
+                self.log.debug(
                     "Contact or lnvoice unavailable link, nothing useful to"
                     " save"
                 )
@@ -512,14 +511,14 @@ class AmazonScraper(BaseScraper):
 
                             matches_dict = matches.groupdict().copy()
                             if matches.group("date1"):
-                                matches_dict["date"] = (
+                                matches_dict["date_from_order_list"] = (
                                     datetime.datetime.strptime(
                                         matches.group("date1"), "%d %B %Y"
                                     )
                                 )
 
                             elif matches.group("date2"):
-                                matches_dict["date"] = (
+                                matches_dict["date_from_order_list"] = (
                                     datetime.datetime.strptime(
                                         matches.group("date2"), "%B %d, %Y"
                                     )
@@ -538,17 +537,19 @@ class AmazonScraper(BaseScraper):
                             }
 
                         order_lists[year][value_matches["id"]]["total"] = (
-                            value_matches["total"]
+                            self.get_value_currency(
+                                "total", value_matches["total"]
+                            )
                         )
 
-                        order_lists[year][value_matches["id"]]["date"] = (
+                        order_lists[year][value_matches["id"]]["date_from_order_list"] = (
                             value_matches["date"]
                         )
                         self.log.info(
                             "Order ID %s, %s, %s",
                             value_matches["id"],
-                            value_matches["total"],
-                            value_matches["date"].strftime("%Y-%m-%d"),
+                            value_matches["total_from_order_list"],
+                            value_matches["date_from_order_list"].strftime("%Y-%m-%d"),
                         )
         else:
             self.log.debug("No order HTML to parse")
@@ -791,34 +792,33 @@ class AmazonScraper(BaseScraper):
 
             # Don't save anything for gift cards
             if item_id != "gc":
-                num_thumbs = sum(1 for _ in order_cache_dir.glob(f"item-{item_id}-thumb"))
-                if num_thumbs >= 1:
-                    # We save a thumb here in case the item bpage has been removed
-                    thumb = item.find_element(
-                        By.XPATH,
-                        ".//img[contains(@class, 'yo-critical-feature')]",
-                    )
-                    high_res_thumb_url = thumb.get_attribute("data-a-hires")
-                    # _AC_UY300_SX300_
-                    # 1. Autocrop
-                    # 2. Resize Y to 300px
-                    # 3. Scale X so no larger than 300px
+                # We save a thumb here in case the item bpage has been removed
+                thumb = item.find_element(
+                    By.XPATH,
+                    ".//img[contains(@class, 'yo-critical-feature')]",
+                )
+                high_res_thumb_url = thumb.get_attribute("data-a-hires")
+                # _AC_UY300_SX300_
+                # 1. Autocrop
+                # 2. Resize Y to 300px
+                # 3. Scale X so no larger than 300px
 
-                    large_image_src = re.sub(
-                        r"(.+\._)[^\.]*(_\.+)",
-                        r"\1_AC_\2",
-                        high_res_thumb_url,
-                    )
-                    ext = os.path.splitext(urlparse(large_image_src).path)[1]
-                    item_thumb_file = (
-                        order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
-                    ).resolve()
+                large_image_src = re.sub(
+                    r"(.+\._)[^\.]*(_\.+)",
+                    r"\1_AC_\2",
+                    high_res_thumb_url,
+                )
+                ext = os.path.splitext(urlparse(large_image_src).path)[1]
+                item_thumb_file = (
+                    order_cache_dir / Path(f"item-{item_id}-thumb-small{ext}")
+                ).resolve()
+                if not self.can_read(item_thumb_file):
                     urllib.request.urlretrieve(large_image_src, item_thumb_file)
-                    order["items"][item_id]["thumbnail"] = str(
-                        Path(item_thumb_file).relative_to(self.cache["BASE"])
-                    )  # keep this
-                else:
-                    self.log.debug("Found thumb for item %s, not scraping from order page.", item_id)
+                order["items"][item_id]["thumbnail_from_order"] = str(
+                    Path(item_thumb_file)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
+                )  # keep this
 
         self.log.debug("Saving item pages to PDF and HTML")
         for item_id in order["items"]:
@@ -887,22 +887,12 @@ class AmazonScraper(BaseScraper):
         item_dict["removed"] = False
 
         if "Page Not Found" not in self.browser.title:
-            self.log.debug("Slowly scrolling to bottom of item page")
-            brws.execute_script(
-                """
-                var hlo_wh = window.innerHeight/2;
-                var hlo_count = 0;
-                var intervalID = setInterval(function() {
-                    window.scrollTo(0,hlo_wh*hlo_count)
-                    hlo_count = hlo_count + 1;
-                    console.log(hlo_count)
-                    if (hlo_count > 40) {
-                        clearInterval(intervalID);
-                    }
-                }, 250);
-                """,
-            )
 
+
+            product_title: WebElement = brws.find_element(
+                By.CSS_SELECTOR, "span#productTitle"
+            )
+            item_dict["name_from_item"] = product_title.text.strip()
             thumbs = brws.find_elements(
                 By.CSS_SELECTOR, "#main-image-container .imgTagWrapper img"
             )
@@ -927,69 +917,99 @@ class AmazonScraper(BaseScraper):
             item_thumb_file = (
                 order_cache_dir / Path(f"item-{item_id}-thumb{ext}")
             ).resolve()
-            self.log.debug(
-                "Downloading thumb for item %s from %s",
-                item_id,
-                large_image_src,
-            )
-            urllib.request.urlretrieve(large_image_src, item_thumb_file)
-            item_dict["thumbnail"] = str(
-                Path(item_thumb_file).relative_to(self.cache["BASE"])
+            if not self.can_read(item_thumb_file):
+                self.log.debug(
+                    "Downloading thumb for item %s from %s",
+                    item_id,
+                    large_image_src,
+                )
+                urllib.request.urlretrieve(large_image_src, item_thumb_file)
+            item_dict["thumbnail_from_item"] = str(
+                Path(item_thumb_file).relative_to(self.cache["BASE"]).as_posix()
             )  # keep this
 
-            # Javascript scroll above happens async
-            time.sleep(11)
-            see_more: WebElement = self.find_element(
-                By.XPATH,
-                "//div[@id = 'productOverview_feature_div']"
-                "//span[contains(@class, 'a-expander-prompt')]"
-                "[contains(text(), 'See more')]",
-            )
-            if see_more and see_more.is_displayed():
-                see_more.click()
 
-            read_more: WebElement = self.find_element(
-                By.XPATH,
-                "//div[@id = 'bookDescription_feature_div']"
-                "//span[contains(@class, 'a-expander-prompt')]"
-                "[contains(text(), 'Read more')]",
-            )
-            if read_more and read_more.is_displayed():
-                read_more.click()
-
-            self.browser_cleanup_item_page()
             item_html_filename = self.part_to_filename(
                 PagePart.ORDER_ITEM,
                 order_id=order_id,
                 item_id=item_id,
                 ext="html",
             )
+            item_pdf_file = (
+                order_cache_dir / Path(f"item-{item_id}.pdf")
+            ).resolve()
+            if (
+                not self.can_read(item_pdf_file)
+                or not self.can_read(item_html_filename)
+                or self.options.force_scrape_item_pdf
+            ):
+                self.log.debug("Slowly scrolling to bottom of item page")
+                brws.execute_script(
+                    """
+                    var hlo_wh = window.innerHeight/2;
+                    var hlo_count = 0;
+                    var intervalID = setInterval(function() {
+                        window.scrollTo(0,hlo_wh*hlo_count)
+                        hlo_count = hlo_count + 1;
+                        console.log(hlo_count)
+                        if (hlo_count > 40) {
+                            clearInterval(intervalID);
+                        }
+                    }, 250);
+                    """,
+                )
+                # Javascript scroll above happens async
+                time.sleep(11)
+                see_more: WebElement = self.find_element(
+                    By.XPATH,
+                    "//div[@id = 'productOverview_feature_div']"
+                    "//span[contains(@class, 'a-expander-prompt')]"
+                    "[contains(text(), 'See more')]",
+                )
+                if see_more and see_more.is_displayed():
+                    see_more.click()
 
-            self.log.debug(
-                "Saving item %s HTML to %s", item_id, item_html_filename
-            )
+                read_more: WebElement = self.find_element(
+                    By.XPATH,
+                    "//div[@id = 'bookDescription_feature_div']"
+                    "//span[contains(@class, 'a-expander-prompt')]"
+                    "[contains(text(), 'Read more')]",
+                )
+                if read_more and read_more.is_displayed():
+                    read_more.click()
 
-            self.write(item_html_filename, self.browser.page_source, html=True)
-            self.append_thumnails_to_item_html()
+                self.browser_cleanup_item_page()
+
+
+                self.log.debug(
+                    "Saving item %s HTML to %s", item_id, item_html_filename
+                )
+
+                self.write(item_html_filename, self.browser.page_source, html=True)
+
+
+                self.append_thumnails_to_item_html()
+                self.log.debug("Printing page to PDF")
+                for pdf in self.cache["TEMP"].glob("*.pdf"):
+                    # Remove old/random PDFs
+                    os.remove(pdf)
+                brws.execute_script("window.print();")
+
+                self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
+
+                
+                self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
+                self.log.debug("PDF moved to cache")
+            else:
+                self.log.debug("Found item PDF for %s, not printing", item_id)
+            item_dict["pdf"] = str(
+                    Path(item_pdf_file)
+                    .relative_to(self.cache["BASE"])
+                    .as_posix()
+                )
         else:
             self.log.debug("Item page for %s has been removed", item_id)
             item_dict["removed"] = True
-
-        self.log.debug("Printing page to PDF")
-        for pdf in self.cache["TEMP"].glob("*.pdf"):
-            # Remove old/random PDFs
-            os.remove(pdf)
-        brws.execute_script("window.print();")
-
-        self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-        item_pdf_file = (
-            order_cache_dir / Path(f"item-{item_id}.pdf")
-        ).resolve()
-        item_dict["pdf"] = str(
-            Path(item_pdf_file).relative_to(self.cache["BASE"])
-        )
-        self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
-        self.log.debug("PDF moved to cache")
 
         brws.close()
         self.log.debug("Closed page for item %s", item_id)
