@@ -8,15 +8,19 @@
         "metadata",
         "orders"
     ],
+    "self": {
+        "vendor": "no.hild1",
+        "name": "webshop-order-export",
+        "format": "jsonschema",
+        "version": "2-0-0"
+      },
+    "additionalProperties": false,
     "properties": {
         "metadata": {
             "description": "Web shop metadata",
             "type": "object",
             "required": [
-                "name",
-                "branch_name",
-                "order_url",
-                "item_url"
+                "name"
             ],
             "properties": {
                 "name": {
@@ -51,6 +55,7 @@
                 "title": "Order",
                 "description": "A single order, possibly with items details",
                 "type": "object",
+                "additionalProperties": false,
                 "properties": {
                     "id": {
                         "description": "The unique identifier for a order",
@@ -104,6 +109,12 @@
                                 "total": {
                                     "$ref": "#/$defs/currency"
                                 },
+                                "extra_data": {
+                                    "title": "Extra data",
+                                    "description": "Sub-object for extra (non-schema) data for this item.",
+                                    "type": "object",
+                                    "additionalProperties": true
+                                },
                                 "attachements": {
                                     "type": "array",
                                     "required": [
@@ -145,6 +156,12 @@
                     },
                     "total": {
                         "$ref": "#/$defs/currency"
+                    },
+                    "extra_data": {
+                        "title": "Extra data",
+                        "description": "Sub-object for extra (non-schema) data for this order.",
+                        "type": "object",
+                        "additionalProperties": true
                     },
                     "attachements": {
                         "type": "array",
