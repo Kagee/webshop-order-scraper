@@ -91,6 +91,27 @@ def parse_args():
             help="Include orders with negative item count in export.",
         )
 
+    def force_web_scrape(parser):
+        parser.add_argument(
+            "--force-web-scrape",
+            action="store_true",
+            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+        )
+
+    def force_scrape_item_pdf(parser):
+        parser.add_argument(
+            "--force-scrape-item-pdf",
+            action="store_true",
+            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+        )
+
+    def force_scrape_order_json(parser):
+        parser.add_argument(
+            "--force-scrape-order-json",
+            action="store_true",
+            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+        )
+
     parser_adafruit = subparsers.add_parser("adafruit")
 
     to_std_json(parser_adafruit)
@@ -103,6 +124,9 @@ def parse_args():
     parser_amazon = subparsers.add_parser("amazon")
 
     use_cached_orderlist(parser_amazon)
+    force_web_scrape(parser_amazon)
+    force_scrape_item_pdf(parser_amazon)
+    force_scrape_order_json(parser_amazon)
 
     parser_amazon.add_argument(
         "-y",
