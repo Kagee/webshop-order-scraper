@@ -299,12 +299,14 @@ class BaseScraper(object):
         """
         if self.browser_status != "created":
             self.log.debug(
-                "Using Selenium webdriver_manager to download webdriver binary"
+                "Loading Firefox webdriver binary"
             )
             os.environ["WDM_LOG"] = str(logging.NOTSET)
+
             service = FirefoxService(
                 executable_path=FirefoxDriverManager(
-                    cache_manager=DriverCacheManager()
+                    cache_manager=DriverCacheManager(),
+                    version="v0.33.0"
                 ).install()
             )
             self.log.debug("Initializing browser")
