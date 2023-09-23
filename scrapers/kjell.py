@@ -626,7 +626,7 @@ class KjellScraper(BaseScraper):
             files = {}
 
             for file in order_cache_dir.glob("*"):
-                if file.name.endswith('.missing'):
+                if file.name.endswith(".missing"):
                     continue
                 file_item_id = re.match(
                     r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)", file.name
@@ -692,11 +692,15 @@ class KjellScraper(BaseScraper):
                         for attachement in files[item_id]["attachements"]:
                             item_dict["attachements"].append(
                                 {
-                                    "name": base64.urlsafe_b64decode(
-                                        attachement.name.split("-")[3]
-                                        .split(".")[0]
-                                        .encode("utf-8")
-                                    ).decode("utf-8").split('--')[0],
+                                    "name": (
+                                        base64.urlsafe_b64decode(
+                                            attachement.name.split("-")[3]
+                                            .split(".")[0]
+                                            .encode("utf-8")
+                                        )
+                                        .decode("utf-8")
+                                        .split("--")[0]
+                                    ),
                                     "path": (
                                         Path(attachement)
                                         .relative_to(self.cache["BASE"])
@@ -712,17 +716,16 @@ class KjellScraper(BaseScraper):
                 del item["price"]["vatAmount"]
                 del item["price"]["currentExclVat"]
 
-                item_dict['extra_data'] = item
+                item_dict["extra_data"] = item
                 order_object["items"].append(item_dict)
 
-            
             del orig_order["transactionNumber"]
             del orig_order["purchaseDate"]
             del orig_order["total"]
             del orig_order["vatAmount"]
             del orig_order["shippingFee"]["exclVat"]
             del orig_order["lineItems"]
-            order_object['extra_data'] = orig_order
+            order_object["extra_data"] = orig_order
             orders.append(order_object)
 
         structure["orders"] = orders
