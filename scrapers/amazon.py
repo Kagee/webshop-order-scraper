@@ -34,10 +34,10 @@ class AmazonScraper(BaseScraper):
 
     # Scraper commands and __init__
     def command_scrape(self) -> None:
-        order_lists_html = self.load_order_lists_html()
-        order_lists = self.lxml_parse_order_lists_html(order_lists_html)
-        self.save_order_lists_to_json(order_lists)
-        order_lists = self.load_order_lists_from_json()
+        order_lists_html = self.__load_order_lists_html()
+        order_lists = self.__lxml_parse_order_lists_html(order_lists_html)
+        self.__save_order_lists_to_json(order_lists)
+        order_lists = self.__load_order_lists_from_json()
 
         if settings.AMZ_ORDERS_SKIP:
             self.log.debug(
@@ -53,7 +53,7 @@ class AmazonScraper(BaseScraper):
                 if self.skip_order(order_id, count):
                     continue
                 count += 1
-                self.parse_order(order_id, order_lists[year][order_id])
+                self.__parse_order(order_id, order_lists[year][order_id])
                 # self.pprint({ order_id: order_lists[year][order_id]})
                 # Write order to json here?
         # self.pprint(order_lists)
@@ -79,7 +79,7 @@ class AmazonScraper(BaseScraper):
         self.name = f"amazon.{options.tld}"
         self.tla = "AMZ"
 
-    def load_order_lists_from_json(self):
+    def __load_order_lists_from_json(self):
         order_lists = {}
         for year in self.YEARS:
             order_lists[year] = self.read_json(
@@ -87,7 +87,7 @@ class AmazonScraper(BaseScraper):
             )
         return order_lists
 
-    def parse_order(self, order_id: str, order_id_dict: Dict):
+    def __parse_order(self, order_id: str, order_id_dict: Dict):
         order_json_filename = self.part_to_filename(
             PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
         )
@@ -163,7 +163,7 @@ class AmazonScraper(BaseScraper):
             return order_id_dict
         """
 
-    def append_thumnails_to_item_html(self):
+    def __append_thumnails_to_item_html(self):
         brws = self.browser
         self.log.debug("View and preload all item images")
 
@@ -411,7 +411,7 @@ class AmazonScraper(BaseScraper):
             brws.switch_to.window(order_handle)
         return invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath
 
-    def lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
+    def __lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
         order_lists = {}
         if order_lists_html:
             for key in order_lists_html:
@@ -514,7 +514,7 @@ class AmazonScraper(BaseScraper):
         self.rand_sleep()
         return self.write(cache_file, self.browser.page_source, html=True)
 
-    def load_order_lists_html(self) -> Dict[int, str]:  # FIN
+    def __load_order_lists_html(self) -> Dict[int, str]:  # FIN
         """
         Returns the order list html, eithter from disk
         cache or using Selenium to visit the url.
@@ -587,7 +587,7 @@ class AmazonScraper(BaseScraper):
             )
         return order_list_html
 
-    def save_order_lists_to_json(self, order_lists: Dict) -> None:
+    def __save_order_lists_to_json(self, order_lists: Dict) -> None:
         for year in order_lists:
             json_filename = self.part_to_filename(
                 PagePart.ORDER_LIST_JSON, year=year
@@ -954,7 +954,7 @@ class AmazonScraper(BaseScraper):
                     item_html_filename, self.browser.page_source, html=True
                 )
 
-                self.append_thumnails_to_item_html()
+                self.__append_thumnails_to_item_html()
                 self.log.debug("Printing page to PDF")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
                     # Remove old/random PDFs
