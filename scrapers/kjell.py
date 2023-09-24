@@ -10,23 +10,14 @@ from typing import Any, Dict, Final, List, Union
 from urllib.parse import urlparse, urlencode, parse_qs
 import requests
 import filetype
-import json
 
-from lxml.etree import tostring
-from lxml.html import HtmlElement
-from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import (
-    ElementClickInterceptedException,
     NoSuchElementException,
     NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
 )
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
 
 from . import settings
 from .base import BaseScraper
