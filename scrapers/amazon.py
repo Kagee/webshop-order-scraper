@@ -276,6 +276,7 @@ class AmazonScraper(BaseScraper):
                 if self.skip_order(order_id, count):
                     continue
                 count += 1
+                self.log.debug("Parsing order id %s", order_id)
                 self.__parse_order(order_id, order_lists[year][order_id])
                 # self.pprint({ order_id: order_lists[year][order_id]})
                 # Write order to json here?
@@ -424,7 +425,7 @@ class AmazonScraper(BaseScraper):
         )
         time.sleep(1)
 
-    def save_order_attachements(self, order_cache_dir, attachement_dict):
+    def __save_order_attachements(self, order_cache_dir, attachement_dict):
         brws = self.browser
         wait2 = WebDriverWait(brws, 2)
         order_handle = brws.current_window_handle
@@ -651,7 +652,7 @@ class AmazonScraper(BaseScraper):
                             value_matches.update(
                                 {k: v for (k, v) in matches_dict.items() if v}
                             )
-
+                        self.log.debug("Parsing order id %s in order list", value_matches["id"])
                         if value_matches["id"] not in order_lists[year]:
                             order_lists[year][value_matches["id"]] = {
                                 "items": {}
@@ -883,7 +884,7 @@ class AmazonScraper(BaseScraper):
         order["attachements"] = []
         order_handle = brws.current_window_handle
         invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
-            self.save_order_attachements(order_cache_dir, order["attachements"])
+            self.__save_order_attachements(order_cache_dir, order["attachements"])
         )
 
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
@@ -1529,13 +1530,13 @@ class AmazonScraper(BaseScraper):
 
     def skip_order(self, order_id: str, count: int) -> bool:
         if order_id.startswith("D01"):
-            # self.log.info(
-            #    (
-            #        "Digital orders (%s) is PITA to scrape, "
-            #        "so we don't support them for now"
-            #    ),
-            #    order_id,
-            # )
+            self.log.info(
+               (
+                   "Digital orders (%s) is PITA to scrape, "
+                   "so we don't support them for now"
+               ),
+               order_id,
+            )
             return True
         if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
             order_id in settings.AMZ_ORDERS_SKIP
