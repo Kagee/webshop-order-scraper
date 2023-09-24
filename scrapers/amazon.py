@@ -48,6 +48,7 @@ class AmazonScraper(BaseScraper):
 
         # pylint: disable=consider-using-dict-items,consider-iterating-dictionary
         for order_id in orig_orders.keys():
+            self.log.debug("Processing order %s", order_id)
             order = {
                 "id": order_id,
                 "date": (
@@ -101,9 +102,12 @@ class AmazonScraper(BaseScraper):
             for item in current_order["items"].items():
                 item_id = item[0]
                 item_orig_dict = item[1]
+                name = item_orig_dict["name_from_order"]
+                if 'name_from_item' in item_orig_dict:
+                    name = item_orig_dict["name_from_item"]
                 item_dict = {
                     "id": item_id,
-                    "name": item_orig_dict["name_from_item"],
+                    "name": name,
                     "quantity": item_orig_dict["quantity"],
                     "total": item_orig_dict["total"],
                     "extra_data": {},
@@ -866,13 +870,17 @@ class AmazonScraper(BaseScraper):
                 )
                 if product_link:
                     item_id = product_link.group("id")
+                    name_from_order = atag.text.strip()
+
             self.log.debug("Item id: %s", item_id)
             assert item_id
-            if item_id not in order["items"]:
-                order["items"][item_id] = {}
 
             # Don't save anything for gift cards
             if item_id != "gc":
+                if item_id not in order["items"]:
+                    order["items"][item_id] = {}
+                order['items'][item_id]['name_from_order'] = name_from_order
+
                 # We save a thumb here in case the item bpage has been removed
                 thumb = item.find_element(
                     By.XPATH,
@@ -900,7 +908,7 @@ class AmazonScraper(BaseScraper):
                     .relative_to(self.cache["BASE"])
                     .as_posix()
                 )  # keep this
-
+                
                 order["items"][item_id]["total"] = self.get_value_currency(
                     "price",
                     item.find_element(
