@@ -74,7 +74,8 @@ def main():
             order["total"]["currency"]
         ] + Decimal(order["total"]["value"])
 
-    print(f"Shop: {shop_json['metadata']['name']}")
+    branch = "" if shop_json['metadata']['name'] == shop_json['metadata']['branch_name'] else f" ({shop_json['metadata']['branch_name']})"
+    print(f"Shop: {shop_json['metadata']['name']}{branch}")
     print(f"Number of orders: {num_order}")
     print(f"Number of items (possible duplicates): {num_items}")
     print(f"Largest order (# items): {max_num_items}")
