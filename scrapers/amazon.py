@@ -501,9 +501,14 @@ class AmazonScraper(BaseScraper):
                 )
                 ## Look for PDF in folder
                 pdf = list(self.cache["TEMP"].glob("*.pdf"))
+                wait_count = 0
                 while not pdf:
                     pdf = list(self.cache["TEMP"].glob("*.pdf"))
                     time.sleep(3)
+                    wait_count += 1
+                    if wait_count > 60:
+                        self.log.error(RED("We have been waiting for a PDF for 3 minutes, something is wrong..."))
+                        raise NotImplementedError()
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
                 attachement["file"] = str(
