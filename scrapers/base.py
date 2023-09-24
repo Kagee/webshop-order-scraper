@@ -101,13 +101,13 @@ class BaseScraper(object):
             "orders": [],
         }
 
-    @classmethod
-    def get_value_currency(cls, name, value, force_currency=None):
+    #@classmethod
+    def get_value_currency(self, name, value, force_currency=None):
         """Will assume $ is USD and € is EUR, we can do better"""
         guess_price = Price.fromstring(value)
         if not guess_price.amount:
-            cls.log.error(RED("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
-            raise NotImplementedError()
+            self.log.warning(AMBER("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
+            guess_price.amount = 0
         amount = guess_price.amount + Decimal("0.00")
         value_curr_dict = {"value": str(amount)}
 
@@ -127,6 +127,8 @@ class BaseScraper(object):
             elif value == "Free shipping":
                 curr_dict = {}
             else:
+                self.log.warning(AMBER("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
+                self.log.warning(AMBER("Unexpected value/currency: %s/%s/%s"), name, value, guess_price.currency)
                 raise NotImplementedError(
                     "Unexpected value/currency:"
                     f" {name}/{value}/{guess_price.currency}"
