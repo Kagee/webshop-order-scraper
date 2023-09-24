@@ -30,7 +30,58 @@ class AmazonScraper(BaseScraper):
     ORDER_CARD_XPATH: Final[str] = "//div[contains(@class, 'js-order-card')]"
 
     def command_to_std_json(self):
-        raise NotImplementedError("Std export not implemented")
+        structure = self.get_structure(
+            "Amazon",
+            self.name,  # Actually branch name
+            f"https://www.amazon.{self.TLD}/"
+            "gp/your-account/order-details/?ie=UTF8&orderID={order_id}",
+            f"https://www.amazon.{self.TLD}/"
+            "-/en/gp/product/{item_id}/?ie=UTF8",
+        )
+        orders = []
+
+        orig_orders = {}
+        for order_list_json in self.cache["ORDER_LISTS"].glob(
+            "order-list-*.json"
+        ):
+            orig_orders.update(self.read(order_list_json, from_json=True))
+
+        # pylint: disable=consider-using-dict-items,consider-iterating-dictionary
+        for order_id in orig_orders.keys():
+            order = {
+                "id": order_id,
+                "date": (
+                    datetime.datetime.strptime(
+                        orig_orders[order_id]["date_from_order_list"],
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .date()
+                    .isoformat()
+                ),
+                'items': [],
+            }
+
+            current_order = self.read(self.cache["ORDERS"] / Path(f"{order_id}/order.json"), from_json=True)
+
+            del current_order['date_from_order_list']
+            del current_order['items'] # TODO: parse later
+            del current_order['pricing'] # TODO: parse later
+            del current_order['total_from_order_list']
+            del current_order['shipping_address'] # TODO: extra data
+            self.pprint(current_order)
+            a= """ "subtotal": {
+                    "shipping": {
+                    "tax": {
+                    "total": {
+                    "extra_data": {
+                    "attachements": 
+            """
+
+            orders.append(order)
+
+        structure["orders"] = orders
+        self.pprint(orders)
+        self.output_schema_json(structure)
 
     # Scraper commands and __init__
     def command_scrape(self) -> None:
@@ -111,7 +162,6 @@ class AmazonScraper(BaseScraper):
         self.write(order_json_filename, order_id_dict, to_json=True)
         # self.pprint(order_id_dict)
         self.pprint({order_id: order_id_dict})
-
 
     def __append_thumnails_to_item_html(self):
         brws = self.browser
@@ -429,10 +479,10 @@ class AmazonScraper(BaseScraper):
                                 "items": {}
                             }
 
-                        order_lists[year][value_matches["id"]]["total_from_order_list"] = (
-                            self.get_value_currency(
-                                "total", value_matches["total"]
-                            )
+                        order_lists[year][value_matches["id"]][
+                            "total_from_order_list"
+                        ] = self.get_value_currency(
+                            "total", value_matches["total"]
                         )
 
                         order_lists[year][value_matches["id"]][
@@ -442,9 +492,7 @@ class AmazonScraper(BaseScraper):
                             "Order ID %s, %s, %s",
                             value_matches["id"],
                             value_matches["total"],
-                            value_matches["date"].strftime(
-                                "%Y-%m-%d"
-                            ),
+                            value_matches["date"].strftime("%Y-%m-%d"),
                         )
         else:
             self.log.debug("No order HTML to parse")
@@ -663,11 +711,10 @@ class AmazonScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         time.sleep(2)
 
-           
-        # TODO: shipping
-        # .a-fixed-right-grid
-        #    .od-shipping-address-container        
-
+        shipping_info: str = self.find_element(
+            By.CSS_SELECTOR, ".od-shipping-address-container div"
+        ).text.strip()
+        order["shipping_address"] = shipping_info
         subtotals = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
         order["pricing"] = {}
         for subtotal in subtotals:
@@ -739,9 +786,12 @@ class AmazonScraper(BaseScraper):
                     ).text.strip(),
                 )
                 try:
-                    order["items"][item_id]["quantity"] = int(item.find_element(
-                        By.XPATH, ".//span[contains(@class, 'item-view-qty')]"
-                    ).text.strip())
+                    order["items"][item_id]["quantity"] = int(
+                        item.find_element(
+                            By.XPATH,
+                            ".//span[contains(@class, 'item-view-qty')]",
+                        ).text.strip()
+                    )
                 except NoSuchElementException:
                     order["items"][item_id]["quantity"] = 1
 
@@ -818,6 +868,7 @@ class AmazonScraper(BaseScraper):
             thumbs = brws.find_elements(
                 By.CSS_SELECTOR, "#main-image-container .imgTagWrapper img"
             )
+
             for thumb in thumbs:
                 high_res_thumb_url = thumb.get_attribute("data-old-hires")
                 # Some lazy-loading shennanigans means we may not
@@ -826,7 +877,9 @@ class AmazonScraper(BaseScraper):
                     break
             if high_res_thumb_url == "":
                 # Fallback to src if we have no data-old-hires
-                high_res_thumb_url = thumb.get_attribute("src")
+                high_res_thumb_url = thumbs[len(thumbs) - 1].get_attribute(
+                    "src"
+                )
             # _AC_UY300_SX300_
             # 1. Autocrop
             # 2. Resize Y to 300px

@@ -127,6 +127,7 @@ def parse_args():
     force_web_scrape(parser_amazon)
     force_scrape_item_pdf(parser_amazon)
     force_scrape_order_json(parser_amazon)
+    to_std_json(parser_amazon)
 
     parser_amazon.add_argument(
         "-y",
@@ -147,8 +148,8 @@ def parse_args():
     parser_amazon.add_argument(
         "--tld",
         type=str.lower,
-        default="de",
-        help="What tld to scrape. Default `de`",
+        required=True,
+        help="What tld to scrape.",
     )
 
     parser_amazon.add_argument(
