@@ -60,52 +60,43 @@ class AmazonScraper(BaseScraper):
                 ),
                 "items": [],
                 "attachements": [],
-                "extra_data": {}
+                "extra_data": {},
             }
-            # order["attachements"] = []
-            for attachement in (self.cache["ORDERS"] / Path(f"{order_id}")).glob("attachement-*.pdf"):
-                #  "order.html"
-                attachement_dict = {
-                                    "name": (
-                                        base64.urlsafe_b64decode(
-                                            attachement.name.split("-")[1]
-                                            .split(".")[0]
-                                            .encode("utf-8")
-                                        )
-                                        .decode("utf-8")
-                                    ),
-                                    "path": (
-                                        Path(attachement)
-                                        .relative_to(self.cache["BASE"])
-                                        .as_posix()
-                                    ),
-                                }
-
-                order["attachements"].append(attachement_dict)
-                self.pprint(attachement_dict)
-            orderhtml = self.cache["ORDERS"] / Path(f"{order_id}/order.html")
+            if "items" in orig_orders[order_id]:
+                del orig_orders[order_id]["items"]
             
-            if self.can_read(orderhtml):
-                self.log.debug(orderhtml)
-                self.log.debug(orderhtml.name)
-                self.log.debug(Path(orderhtml).relative_to(self.cache["BASE"]))
-                self.log.debug(Path(orderhtml).relative_to(self.cache["BASE"]).as_posix())
-                orderhtmldict = {
-                                    "name": "Order HTML", # orderhtml.name,
-                                    "path": (
-                                        Path(orderhtml)
-                                        .relative_to(self.cache["BASE"])
-                                        .as_posix()
-                                    ),
-                                    "comment": "HTML Scrape of order page",
-                                }
-                self.pprint(orderhtmldict)
-                order["attachements"].append(orderhtmldict)
 
             current_order = self.read(
                 self.cache["ORDERS"] / Path(f"{order_id}/order.json"),
                 from_json=True,
             )
+
+            del orig_orders[order_id]["date_from_order_list"]
+            del current_order["date_from_order_list"]
+
+            for attachement in current_order["attachements"]:
+                attachement_dict = {
+                    "name": attachement["text"],
+                    "path": attachement["file"],
+                    "comment": attachement["href"],
+                }
+                order["attachements"].append(attachement_dict)
+
+            del current_order["attachements"]
+
+            orderhtml = self.cache["ORDERS"] / Path(f"{order_id}/order.html")
+
+            if self.can_read(orderhtml):
+                orderhtmldict = {
+                    "name": "Order HTML",  # orderhtml.name,
+                    "path": (
+                        Path(orderhtml)
+                        .relative_to(self.cache["BASE"])
+                        .as_posix()
+                    ),
+                    "comment": "HTML Scrape of order page",
+                }
+                order["attachements"].append(orderhtmldict)
 
             for item in current_order["items"].items():
                 item_id = item[0]
@@ -114,14 +105,26 @@ class AmazonScraper(BaseScraper):
                     "id": item_id,
                     "name": item_orig_dict["name_from_item"],
                     "quantity": item_orig_dict["quantity"],
+                    "total": item_orig_dict["total"],
+                    "extra_data": {},
+                    "attachements": [],
                 }
-                # item_dict["attachements"] = []
+
+                if "thumbnail_from_item" in item_orig_dict:
+                    item_dict["thumbnail"] = item_orig_dict["thumbnail_from_item"]
+                elif "thumbnail_from_order" in item_orig_dict:
+                    item_dict["thumbnail"] = item_orig_dict["thumbnail_from_order"]
+
+                if "pdf" in item_orig_dict:
+                    item_dict["attachements"].append({
+                        "name": "PDF print",
+                        "path": item_orig_dict["pdf"],
+                        "comment": "PDF print of item page",
+                    })
+
                 order["items"].append(item_dict)
 
-            del current_order["date_from_order_list"]
-            del current_order["items"]  # TODO: parse later
-            del current_order["total_from_order_list"]
-            del current_order["shipping_address"]  # TODO: extra data
+            del current_order["items"]
 
             prices_to_remove = []
             for price_re_name_pair in [
@@ -130,10 +133,14 @@ class AmazonScraper(BaseScraper):
                 (r"subtotal", "subtotal"),
             ]:
                 for value_name in current_order["pricing"]:
-                    if re.search(price_re_name_pair[0], value_name, re.IGNORECASE):
+                    if re.search(
+                        price_re_name_pair[0], value_name, re.IGNORECASE
+                    ):
                         # self.log.debug("'%s' should be '%s'", value_name, price_re_name_pair[1])
                         if price_re_name_pair[1] not in order:
-                            order[price_re_name_pair[1]] = current_order["pricing"][value_name]
+                            order[price_re_name_pair[1]] = current_order[
+                                "pricing"
+                            ][value_name]
                             prices_to_remove.append(value_name)
                         else:
                             self.log.error(
@@ -141,24 +148,55 @@ class AmazonScraper(BaseScraper):
                                 value_name,
                                 price_re_name_pair[1],
                             )
+
+            # Secondary values
+            for price_re_name_pair in [
+                # We prefeer Grand Total
+                (r"^total", "total"),
+            ]:
+                for value_name in current_order["pricing"]:
+                    if re.search(
+                        price_re_name_pair[0], value_name, re.IGNORECASE
+                    ):
+                        if price_re_name_pair[1] not in order:
+                            order[price_re_name_pair[1]] = current_order[
+                                "pricing"
+                            ][value_name]
+                            prices_to_remove.append(value_name)
+                        else:
+                            prices_to_remove.append(value_name)
+                            if "pricing" not in order["extra_data"]:
+                                order["extra_data"]["pricing"] = {}
+                            order["extra_data"]["pricing"][value_name] = (
+                                current_order["pricing"][value_name]
+                            )
+
+            if "total" not in order:
+                order["total"] = orig_orders[order_id]["total_from_order_list"]
+            else:
+                order["extra_data"]["pricing"]["total_from_order_list"] = (
+                    orig_orders[order_id]["total_from_order_list"]
+                )
+            del orig_orders[order_id]["total_from_order_list"]
+            del current_order["total_from_order_list"]
+
             for value_name in prices_to_remove:
                 del current_order["pricing"][value_name]
 
-            order["extra_data"]['pricing'] = current_order["pricing"]
+            assert current_order["pricing"] == {}, current_order["pricing"]
             del current_order["pricing"]
-            #self.pprint(current_order)
-            a = """ "subtotal": {
-                    "shipping": {
-                    "tax": {
-                    "total": {
-                    "extra_data": {
-                    "attachements": 
-            """
 
+            order["extra_data"]["shipping_address"] = current_order[
+                "shipping_address"
+            ]
+            del current_order["shipping_address"]
+
+            assert orig_orders[order_id] == {}, orig_orders[order_id]
+            assert current_order == {}, current_order
             orders.append(order)
 
         structure["orders"] = orders
-        #self.pprint(orders)
+        # self.pprint(orders)
         self.output_schema_json(structure)
 
     # Scraper commands and __init__
