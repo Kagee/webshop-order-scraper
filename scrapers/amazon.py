@@ -76,12 +76,14 @@ class AmazonScraper(BaseScraper):
             del current_order["date_from_order_list"]
 
             for attachement in current_order["attachements"]:
-                attachement_dict = {
-                    "name": attachement["text"],
-                    "path": attachement["file"],
-                    "comment": attachement["href"],
-                }
-                order["attachements"].append(attachement_dict)
+                if "path" in attachement:
+                    # Some links are sometimes added as attachements
+                    attachement_dict = {
+                        "name": attachement["text"],
+                        "path": attachement["file"],
+                        "comment": attachement["href"],
+                    }
+                    order["attachements"].append(attachement_dict)
 
             del current_order["attachements"]
 
@@ -102,9 +104,12 @@ class AmazonScraper(BaseScraper):
             for item in current_order["items"].items():
                 item_id = item[0]
                 item_orig_dict = item[1]
-                name = item_orig_dict["name_from_order"]
+
                 if 'name_from_item' in item_orig_dict:
                     name = item_orig_dict["name_from_item"]
+                else:
+                    name = item_orig_dict["name_from_order"]
+
                 item_dict = {
                     "id": item_id,
                     "name": name,
@@ -132,16 +137,18 @@ class AmazonScraper(BaseScraper):
 
             prices_to_remove = []
             for price_re_name_pair in [
-                (r"grand total", "total"),
+                (r"payment grand total", "total"),
                 (r"shipping", "shipping"),
-                (r"subtotal", "subtotal"),
+                (r"total before vat", "subtotal"),
+                (r"estimated vat", "tax")
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
                         price_re_name_pair[0], value_name, re.IGNORECASE
                     ):
-                        # self.log.debug("'%s' should be '%s'", value_name, price_re_name_pair[1])
+                        
                         if price_re_name_pair[1] not in order:
+                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
                             order[price_re_name_pair[1]] = current_order[
                                 "pricing"
                             ][value_name]
@@ -155,19 +162,47 @@ class AmazonScraper(BaseScraper):
 
             # Secondary values
             for price_re_name_pair in [
-                # We prefeer Grand Total
-                (r"^total", "total"),
+                # We prefeer Payment Grand Total
+                (r"^grand total", "total"),
+                (r"postage|packing", "shipping"),
+                (r"subtotal", "subtotal"),
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
                         price_re_name_pair[0], value_name, re.IGNORECASE
                     ):
                         if price_re_name_pair[1] not in order:
+                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
                             order[price_re_name_pair[1]] = current_order[
                                 "pricing"
                             ][value_name]
                             prices_to_remove.append(value_name)
                         else:
+                            self.log.debug("'%s' could be '%s', but was already taken", value_name, price_re_name_pair[1])
+                            prices_to_remove.append(value_name)
+                            if "pricing" not in order["extra_data"]:
+                                order["extra_data"]["pricing"] = {}
+                            order["extra_data"]["pricing"][value_name] = (
+                                current_order["pricing"][value_name]
+                            )
+
+            # Tertiary values
+            for price_re_name_pair in [
+                # We prefeer Grand Total
+                (r"^total:", "total"),
+            ]:
+                for value_name in current_order["pricing"]:
+                    if re.search(
+                        price_re_name_pair[0], value_name, re.IGNORECASE
+                    ):
+                        if price_re_name_pair[1] not in order:
+                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
+                            order[price_re_name_pair[1]] = current_order[
+                                "pricing"
+                            ][value_name]
+                            prices_to_remove.append(value_name)
+                        else:
+                            self.log.debug("'%s' could be '%s', but was already taken", value_name, price_re_name_pair[1])
                             prices_to_remove.append(value_name)
                             if "pricing" not in order["extra_data"]:
                                 order["extra_data"]["pricing"] = {}
@@ -183,6 +218,21 @@ class AmazonScraper(BaseScraper):
                 )
             del orig_orders[order_id]["total_from_order_list"]
             del current_order["total_from_order_list"]
+
+            for value_name in prices_to_remove:
+                del current_order["pricing"][value_name]
+
+            prices_to_remove = []
+            prices_re_to_move = [
+                r"refund total",
+                r"import fees deposit"
+            ]
+
+            for value_name_re in prices_re_to_move:
+                for key, value in current_order["pricing"].items():
+                    if re.search(value_name_re,key,re.IGNORECASE):
+                        prices_to_remove.append(key)
+                        order["extra_data"]["pricing"][key] =  current_order["pricing"][key]
 
             for value_name in prices_to_remove:
                 del current_order["pricing"][value_name]
