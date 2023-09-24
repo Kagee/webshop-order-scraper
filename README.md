@@ -15,10 +15,12 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
   * Complete.
-* [Polyalkemi.no](#polyalkemino)
-  * Complete.
+* [Amazon](#amazon)
+  * Complete. Tested on `.com`, `.co.uk`, `.co.jp` and `.de`.
 * [Kjell.com](#kjellcom)
-  * Complete.
+  * Complete. Tested on norwegian shop language.
+* [Polyalkemi.no](#polyalkemino)
+  * Complete. Not much testing done.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
 
@@ -26,8 +28,7 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
 * NTR
 
 ## Scraping not complete
-* [Amazon](#amazon)
-  * Mostly complete. Login, parse order lists, cache item info.
+
 * [Distrelec](#distrelec)
   * Initial. Login.
 * [eBay](#ebay)
@@ -64,6 +65,7 @@ To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubun
 ## Scrapers
 
 ### Adafruit
+Tested on three orders, 28 items.
 
 1. Login to <https://www.adafruit.com/>
 2. Click "Account" -> "My Account"
@@ -75,12 +77,12 @@ Run the command too see where you should put the files.
 
 ````python
 python scrape.py adafruit
-````
-````python
+
 python scrape.py adafruit --to-std-json
 ````
 
 ### Aliexpress
+Tested on 229 orders, 409 items
 
 Scrapes order list, item info and details to JSON, and saves a PDF copy of the Aliexpress item snapshot.
 
@@ -98,13 +100,13 @@ to scrape the order list every time.
 
 ````python
 python scrape.py aliexpress --use-cached-orderlist
-````
 
-````python
 python scrape.py aliexpress --to-std-json
 ````
 
 ### Polyalkemi.no
+Only tested on two orders.
+
 This scraper supports the arguments 
 * `--skip-item-thumb`
 * `--skip-item-pdf`
@@ -122,13 +124,13 @@ for export. It will include negative orders (returns) in the export.
 
 ````python
 python scraper.py polyalkemi 
-````
 
-````python
 python scraper.py polyalkemi --to-std-json 
 ````
 
 ### Kjell.com
+Tested on 53 orders, 191 items.
+
 Currently only supports the norwegian shop front. (Swedish testers welcome!)
 
 ````python
@@ -140,12 +142,16 @@ python scraper.py kjell --to-std-json
 ````
 
 ### Amazon
-Currently can save order lists to HTML cache and convert to
-JOSN that contains order is, total and date.
+Tested on TLDs (orders/items):
+* `.de` 59/210
+* `.com` 12/15
+* `co.uk` 8/11
+* `co.jp` 2/2
+
 
 ````python
 # Scrape this year and archived orders orders on amazon.de
-python scrape.py amazon --use-cached-orderlist
+python scrape.py amazon --tld de --use-cached-orderlist
 
 # Scrape orders from 2021 and 2023 on amazon.es
 python scrape.py amazon --use-cached-orderlist --year 2021,2023 --not-archived --tld es
@@ -155,6 +161,9 @@ python scrape.py amazon --use-cached-orderlist --start-year 2022 --tld co.jp
 
 # See help for details
 python scrape.py --help
+
+# Export scraped data for amazon.de
+python scrape.py --tld de --to-std-json
 ````
 ### Distrelec
 
