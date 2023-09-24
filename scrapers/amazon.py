@@ -51,6 +51,10 @@ class AmazonScraper(BaseScraper):
         # pylint: disable=consider-using-dict-items,consider-iterating-dictionary
         for order_id in orig_orders.keys():
             self.log.debug("Processing order %s", order_id)
+            if order_id.startswith("D01-"):
+                self.log.debug("Skipping digital order")
+                continue
+
             order = {
                 "id": order_id,
                 "date": (
@@ -226,7 +230,7 @@ class AmazonScraper(BaseScraper):
 
             prices_to_remove = []
             prices_re_to_move = [
-                r"refund total",
+                r"refund",
                 r"import fees deposit",
                 r"promotion applied",
                 r"free shipping"
