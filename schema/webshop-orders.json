@@ -135,7 +135,8 @@
                                         ],
                                         "items": {
                                             "name": {
-                                                "type": "string"
+                                                "type": "string",
+                                                "description": "The name (not nesessarily the filename!) of the attachement"
                                             },
                                             "path": {
                                                 "$ref": "#/$defs/file-path"
@@ -183,7 +184,8 @@
                             ],
                             "items": {
                                 "name": {
-                                    "type": "string"
+                                    "type": "string",
+                                    "description": "The name (not nesessarily the filename!) of the attachement"
                                 },
                                 "path": {
                                     "$ref": "#/$defs/file-path"
