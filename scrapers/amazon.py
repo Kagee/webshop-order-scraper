@@ -138,9 +138,9 @@ class AmazonScraper(BaseScraper):
             prices_to_remove = []
             for price_re_name_pair in [
                 (r"payment grand total", "total"),
-                (r"shipping", "shipping"),
-                (r"total before vat", "subtotal"),
-                (r"estimated vat", "tax")
+                (r"^shipping", "shipping"),
+                (r"total before (vat|tax)", "subtotal"),
+                (r"estimated vat|estimated tax to be collected", "tax")
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
@@ -225,11 +225,13 @@ class AmazonScraper(BaseScraper):
             prices_to_remove = []
             prices_re_to_move = [
                 r"refund total",
-                r"import fees deposit"
+                r"import fees deposit",
+                r"promotion applied",
+                r"free shipping"
             ]
 
             for value_name_re in prices_re_to_move:
-                for key, value in current_order["pricing"].items():
+                for key in current_order["pricing"].keys():
                     if re.search(value_name_re,key,re.IGNORECASE):
                         prices_to_remove.append(key)
                         order["extra_data"]["pricing"][key] =  current_order["pricing"][key]
@@ -517,7 +519,7 @@ class AmazonScraper(BaseScraper):
             contact_link = re.match(r".+contact/contact.+", href)
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
             if order_summary:
-                assert text != ""
+                assert text != "", "Order summary text was empty"
                 self.remove(self.cache["PDF_TEMP_FILENAME"])
                 brws.switch_to.new_window("tab")
                 brws.get(href)
@@ -534,7 +536,7 @@ class AmazonScraper(BaseScraper):
                 )
                 brws.close()
             elif download_pdf:
-                assert text != ""
+                assert text != "", "PDF to download text was empty"
                 self.log.debug("This is a invoice/warranty/p-slip PDF.")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
                     # Remove old/random PDFs
