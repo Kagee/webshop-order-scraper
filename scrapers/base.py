@@ -105,6 +105,9 @@ class BaseScraper(object):
     def get_value_currency(cls, name, value, force_currency=None):
         """Will assume $ is USD and € is EUR, we can do better"""
         guess_price = Price.fromstring(value)
+        if not guess_price.amount:
+            cls.log.error(RED("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
+            raise NotImplementedError()
         amount = guess_price.amount + Decimal("0.00")
         value_curr_dict = {"value": str(amount)}
 
