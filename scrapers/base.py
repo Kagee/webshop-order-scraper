@@ -96,6 +96,7 @@ class BaseScraper(object):
                 "branch_name": name if not branch_name else branch_name,
                 "order_url": order_url,
                 "item_url": item_url,
+                "generator": "gitlab.com/Kagee/web-order-scraper"
             },
             "orders": [],
         }

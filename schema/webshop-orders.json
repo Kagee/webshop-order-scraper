@@ -42,6 +42,10 @@
                     "type": "string",
                     "format": "uri-reference",
                     "pattern": "^https?://.*\\..*.*{item_id}.*$"
+                },
+                "generator": {
+                    "description": "Name/version of generator",
+                    "type": "string"
                 }
             }
         },
