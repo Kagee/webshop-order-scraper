@@ -271,7 +271,7 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Scraping only order IDs: %s", self.AMZ_ORDERS)
         count = 0
         for year in self.YEARS:
-            # self.log.debug("Year: %s", year)
+            self.log.debug("Year: %s", year)
             for order_id in order_lists[year]:
                 if self.skip_order(order_id, count):
                     continue
@@ -894,18 +894,32 @@ class AmazonScraper(BaseScraper):
             By.CSS_SELECTOR, ".od-shipping-address-container div"
         ).text.strip()
         order["shipping_address"] = shipping_info
-        subtotals = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
+        subtotals: List[WebElement] = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
         order["pricing"] = {}
+        brws.execute_script("window.scrollTo(0,0)")
+        time.sleep(1)
         for subtotal in subtotals:
             price_columns: List[WebElement] = subtotal.find_elements(
                 By.CSS_SELECTOR, "div"
             )
+            
             if len(price_columns) == 2:
-                price_name = price_columns[0].text.strip()
-                order["pricing"][price_name] = self.get_value_currency(
-                    price_name, price_columns[1].text.strip()
-                )
 
+                self.log.debug("Subtotal text: %s", subtotal.text)
+                price_name = price_columns[0].text.strip()
+                price_value = price_columns[1].text.strip()
+                if price_name != "" and price_value != "":
+                    # Refunds etc may be hidden, use this trick to get the text
+                    price_name = self.browser.execute_script("return arguments[0].textContent", price_columns[0]).strip()
+                    price_value = self.browser.execute_script("return arguments[0].textContent", price_columns[1]).strip()
+                if price_name != "" and price_value != "":
+                    self.log.debug("price_name: %s, price_value: %s", price_name, price_value)
+                    order["pricing"][price_name] = self.get_value_currency(
+                        price_name, price_value
+                    )
+                else:
+                    self.log.warning(AMBER("Skipping price %s/%s"), price_name, price_value)
+        input()
         if "items" not in order:
             order["items"] = {}
 
