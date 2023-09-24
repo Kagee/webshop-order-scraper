@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
+
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
@@ -894,11 +896,26 @@ class AmazonScraper(BaseScraper):
             By.CSS_SELECTOR, ".od-shipping-address-container div"
         ).text.strip()
         order["shipping_address"] = shipping_info
-        subtotals: List[WebElement] = self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
-        order["pricing"] = {}
         brws.execute_script("window.scrollTo(0,0)")
+        subtotals: List[WebElement] = []
+        subtotals_element: List[WebElement] = self.find_element(By.CSS_SELECTOR, "#od-subtotals")
+        try:
+            poptrig = subtotals_element.find_element(By.CSS_SELECTOR, ".a-popover-trigger")
+            if poptrig:
+                self.log.debug("Found popover - moving to")
+                ActionChains(brws).move_to_element(poptrig).click().perform()
+                time.sleep(1)
+                subtotals: List[WebElement] = self.find_elements(By.CSS_SELECTOR, ".a-popover-content .a-row")
+
+        except NoSuchElementException:
+            pass
+        subtotals = subtotals + self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
+        order["pricing"] = {}
+        
         time.sleep(1)
+
         for subtotal in subtotals:
+           
             price_columns: List[WebElement] = subtotal.find_elements(
                 By.CSS_SELECTOR, "div"
             )
@@ -919,7 +936,6 @@ class AmazonScraper(BaseScraper):
                     )
                 else:
                     self.log.warning(AMBER("Skipping price %s/%s"), price_name, price_value)
-        input()
         if "items" not in order:
             order["items"] = {}
 
