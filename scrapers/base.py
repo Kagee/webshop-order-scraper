@@ -160,18 +160,6 @@ class BaseScraper(object):
                 if "attachements" in order:
                     for attach in order["attachements"]:
                         orig_file = self.cache["BASE"] / attach["path"]
-                        path = Path(attach["path"])
-                        safe_order_id = base64.urlsafe_b64encode(
-                            order["id"].encode("utf-8")
-                        ).decode("utf-8")
-                        if path.name == "order.html":
-                            attach["path"] = str(
-                                path.with_name(f"order-{safe_order_id}.html")
-                            )
-                        elif path.name == "tracking.html":
-                            attach["path"] = str(
-                                path.with_name(f"tracking-{safe_order_id}.html")
-                            )
                         files_from_to.append((orig_file, attach["path"]))
                 for item in order["items"]:
                     if "thumbnail" in item:
