@@ -9,4 +9,5 @@ from .pimoroni import PimoroniScraper
 from .ebay import EbayScraper
 from .kjell import KjellScraper
 from .polyalkemi import PolyalkemiScraper
+from .komplett import KomplettScraper
 from .utils import RED, BLUE, AMBER, GREEN
