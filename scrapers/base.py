@@ -96,17 +96,22 @@ class BaseScraper(object):
                 "branch_name": name if not branch_name else branch_name,
                 "order_url": order_url,
                 "item_url": item_url,
-                "generator": "gitlab.com/Kagee/web-order-scraper"
+                "generator": "gitlab.com/Kagee/web-order-scraper",
             },
             "orders": [],
         }
 
-    #@classmethod
+    # @classmethod
     def get_value_currency(self, name, value, force_currency=None):
         """Will assume $ is USD and € is EUR, we can do better"""
         guess_price = Price.fromstring(value)
         if not guess_price.amount:
-            self.log.warning(AMBER("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
+            self.log.warning(
+                AMBER("name: %s, value: %s, force_currency: %s"),
+                name,
+                value,
+                force_currency,
+            )
             guess_price.amount = 0
         amount = guess_price.amount + Decimal("0.00")
         value_curr_dict = {"value": str(amount)}
@@ -127,8 +132,18 @@ class BaseScraper(object):
             elif value == "Free shipping":
                 curr_dict = {}
             else:
-                self.log.warning(AMBER("name: %s, value: %s, force_currency: %s"), name, value, force_currency)
-                self.log.warning(AMBER("Unexpected value/currency: %s/%s/%s"), name, value, guess_price.currency)
+                self.log.warning(
+                    AMBER("name: %s, value: %s, force_currency: %s"),
+                    name,
+                    value,
+                    force_currency,
+                )
+                self.log.warning(
+                    AMBER("Unexpected value/currency: %s/%s/%s"),
+                    name,
+                    value,
+                    guess_price.currency,
+                )
                 raise NotImplementedError(
                     "Unexpected value/currency:"
                     f" {name}/{value}/{guess_price.currency}"
@@ -232,7 +247,7 @@ class BaseScraper(object):
 
     def find_element(
         self, by_obj: str, value: Union[str, None], element=None
-    ) -> Union[WebElement, None]:
+    ) -> Union[WebElement]:
         try:
             if not element:
                 element = self.browser
@@ -242,7 +257,7 @@ class BaseScraper(object):
 
     def find_elements(
         self, by_obj: str, value: Union[str, None], element=None
-    ) -> Union[WebElement, None]:
+    ) -> Union[WebElement]:
         try:
             if not element:
                 element = self.browser
@@ -297,7 +312,7 @@ class BaseScraper(object):
 
             service = FirefoxService(
                 executable_path=FirefoxDriverManager(
-                    cache_manager=DriverCacheManager(), version="v0.33.0"
+                    cache_manager=DriverCacheManager()  #  , version="v0.33.0"
                 ).install()
             )
             self.log.debug("Initializing browser")
@@ -357,8 +372,13 @@ class BaseScraper(object):
             self.browser = webdriver.Firefox(options=options, service=service)
 
             self.browser_status = "created"
+            self._browser_post_init()
             self.log.debug("Returning browser")
         return self.browser
+
+    def _browser_post_init(self):
+        # Stuff we should do before returning the first browser session
+        return
 
     def browser_safe_quit(self):
         """
