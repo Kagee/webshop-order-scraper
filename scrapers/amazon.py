@@ -71,7 +71,6 @@ class AmazonScraper(BaseScraper):
             }
             if "items" in orig_orders[order_id]:
                 del orig_orders[order_id]["items"]
-            
 
             current_order = self.read(
                 self.cache["ORDERS"] / Path(f"{order_id}/order.json"),
@@ -111,7 +110,7 @@ class AmazonScraper(BaseScraper):
                 item_id = item[0]
                 item_orig_dict = item[1]
 
-                if 'name_from_item' in item_orig_dict:
+                if "name_from_item" in item_orig_dict:
                     name = item_orig_dict["name_from_item"]
                 else:
                     name = item_orig_dict["name_from_order"]
@@ -126,16 +125,22 @@ class AmazonScraper(BaseScraper):
                 }
 
                 if "thumbnail_from_item" in item_orig_dict:
-                    item_dict["thumbnail"] = item_orig_dict["thumbnail_from_item"]
+                    item_dict["thumbnail"] = item_orig_dict[
+                        "thumbnail_from_item"
+                    ]
                 elif "thumbnail_from_order" in item_orig_dict:
-                    item_dict["thumbnail"] = item_orig_dict["thumbnail_from_order"]
+                    item_dict["thumbnail"] = item_orig_dict[
+                        "thumbnail_from_order"
+                    ]
 
                 if "pdf" in item_orig_dict:
-                    item_dict["attachements"].append({
-                        "name": "PDF print",
-                        "path": item_orig_dict["pdf"],
-                        "comment": "PDF print of item page",
-                    })
+                    item_dict["attachements"].append(
+                        {
+                            "name": "PDF print",
+                            "path": item_orig_dict["pdf"],
+                            "comment": "PDF print of item page",
+                        }
+                    )
 
                 order["items"].append(item_dict)
 
@@ -146,15 +151,18 @@ class AmazonScraper(BaseScraper):
                 (r"payment grand total", "total"),
                 (r"^shipping", "shipping"),
                 (r"total before (vat|tax)", "subtotal"),
-                (r"estimated vat|estimated tax to be collected", "tax")
+                (r"estimated vat|estimated tax to be collected", "tax"),
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
                         price_re_name_pair[0], value_name, re.IGNORECASE
                     ):
-                        
                         if price_re_name_pair[1] not in order:
-                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
+                            self.log.debug(
+                                "'%s' is '%s'",
+                                value_name,
+                                price_re_name_pair[1],
+                            )
                             order[price_re_name_pair[1]] = current_order[
                                 "pricing"
                             ][value_name]
@@ -178,13 +186,21 @@ class AmazonScraper(BaseScraper):
                         price_re_name_pair[0], value_name, re.IGNORECASE
                     ):
                         if price_re_name_pair[1] not in order:
-                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
+                            self.log.debug(
+                                "'%s' is '%s'",
+                                value_name,
+                                price_re_name_pair[1],
+                            )
                             order[price_re_name_pair[1]] = current_order[
                                 "pricing"
                             ][value_name]
                             prices_to_remove.append(value_name)
                         else:
-                            self.log.debug("'%s' could be '%s', but was already taken", value_name, price_re_name_pair[1])
+                            self.log.debug(
+                                "'%s' could be '%s', but was already taken",
+                                value_name,
+                                price_re_name_pair[1],
+                            )
                             prices_to_remove.append(value_name)
                             if "pricing" not in order["extra_data"]:
                                 order["extra_data"]["pricing"] = {}
@@ -202,13 +218,21 @@ class AmazonScraper(BaseScraper):
                         price_re_name_pair[0], value_name, re.IGNORECASE
                     ):
                         if price_re_name_pair[1] not in order:
-                            self.log.debug("'%s' is '%s'", value_name, price_re_name_pair[1])
+                            self.log.debug(
+                                "'%s' is '%s'",
+                                value_name,
+                                price_re_name_pair[1],
+                            )
                             order[price_re_name_pair[1]] = current_order[
                                 "pricing"
                             ][value_name]
                             prices_to_remove.append(value_name)
                         else:
-                            self.log.debug("'%s' could be '%s', but was already taken", value_name, price_re_name_pair[1])
+                            self.log.debug(
+                                "'%s' could be '%s', but was already taken",
+                                value_name,
+                                price_re_name_pair[1],
+                            )
                             prices_to_remove.append(value_name)
                             if "pricing" not in order["extra_data"]:
                                 order["extra_data"]["pricing"] = {}
@@ -233,14 +257,16 @@ class AmazonScraper(BaseScraper):
                 r"refund",
                 r"import fees deposit",
                 r"promotion applied",
-                r"free shipping"
+                r"free shipping",
             ]
 
             for value_name_re in prices_re_to_move:
                 for key in current_order["pricing"].keys():
-                    if re.search(value_name_re,key,re.IGNORECASE):
+                    if re.search(value_name_re, key, re.IGNORECASE):
                         prices_to_remove.append(key)
-                        order["extra_data"]["pricing"][key] =  current_order["pricing"][key]
+                        order["extra_data"]["pricing"][key] = current_order[
+                            "pricing"
+                        ][key]
 
             for value_name in prices_to_remove:
                 del current_order["pricing"][value_name]
@@ -570,7 +596,12 @@ class AmazonScraper(BaseScraper):
                     time.sleep(3)
                     wait_count += 1
                     if wait_count > 60:
-                        self.log.error(RED("We have been waiting for a PDF for 3 minutes, something is wrong..."))
+                        self.log.error(
+                            RED(
+                                "We have been waiting for a PDF for 3 minutes,"
+                                " something is wrong..."
+                            )
+                        )
                         raise NotImplementedError()
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
@@ -658,7 +689,10 @@ class AmazonScraper(BaseScraper):
                             value_matches.update(
                                 {k: v for (k, v) in matches_dict.items() if v}
                             )
-                        self.log.debug("Parsing order id %s in order list", value_matches["id"])
+                        self.log.debug(
+                            "Parsing order id %s in order list",
+                            value_matches["id"],
+                        )
                         if value_matches["id"] not in order_lists[year]:
                             order_lists[year][value_matches["id"]] = {
                                 "items": {}
@@ -890,7 +924,9 @@ class AmazonScraper(BaseScraper):
         order["attachements"] = []
         order_handle = brws.current_window_handle
         invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
-            self.__save_order_attachements(order_cache_dir, order["attachements"])
+            self.__save_order_attachements(
+                order_cache_dir, order["attachements"]
+            )
         )
 
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
@@ -902,44 +938,60 @@ class AmazonScraper(BaseScraper):
         order["shipping_address"] = shipping_info
         brws.execute_script("window.scrollTo(0,0)")
         subtotals: List[WebElement] = []
-        subtotals_element: List[WebElement] = self.find_element(By.CSS_SELECTOR, "#od-subtotals")
+        subtotals_element: List[WebElement] = self.find_element(
+            By.CSS_SELECTOR, "#od-subtotals"
+        )
         try:
-            poptrig = subtotals_element.find_element(By.CSS_SELECTOR, ".a-popover-trigger")
+            poptrig = subtotals_element.find_element(
+                By.CSS_SELECTOR, ".a-popover-trigger"
+            )
             if poptrig:
                 self.log.debug("Found popover - moving to")
                 ActionChains(brws).move_to_element(poptrig).click().perform()
                 time.sleep(1)
-                subtotals: List[WebElement] = self.find_elements(By.CSS_SELECTOR, ".a-popover-content .a-row")
+                subtotals: List[WebElement] = self.find_elements(
+                    By.CSS_SELECTOR, ".a-popover-content .a-row"
+                )
 
         except NoSuchElementException:
             pass
-        subtotals = subtotals + self.find_elements(By.CSS_SELECTOR, "#od-subtotals .a-row")
+        subtotals = subtotals + self.find_elements(
+            By.CSS_SELECTOR, "#od-subtotals .a-row"
+        )
         order["pricing"] = {}
-        
+
         time.sleep(1)
 
         for subtotal in subtotals:
-           
             price_columns: List[WebElement] = subtotal.find_elements(
                 By.CSS_SELECTOR, "div"
             )
-            
-            if len(price_columns) == 2:
 
+            if len(price_columns) == 2:
                 self.log.debug("Subtotal text: %s", subtotal.text)
                 price_name = price_columns[0].text.strip()
                 price_value = price_columns[1].text.strip()
                 if price_name != "" and price_value != "":
                     # Refunds etc may be hidden, use this trick to get the text
-                    price_name = self.browser.execute_script("return arguments[0].textContent", price_columns[0]).strip()
-                    price_value = self.browser.execute_script("return arguments[0].textContent", price_columns[1]).strip()
+                    price_name = self.browser.execute_script(
+                        "return arguments[0].textContent", price_columns[0]
+                    ).strip()
+                    price_value = self.browser.execute_script(
+                        "return arguments[0].textContent", price_columns[1]
+                    ).strip()
                 if price_name != "" and price_value != "":
-                    self.log.debug("price_name: %s, price_value: %s", price_name, price_value)
+                    self.log.debug(
+                        "price_name: %s, price_value: %s",
+                        price_name,
+                        price_value,
+                    )
                     order["pricing"][price_name] = self.get_value_currency(
                         price_name, price_value
                     )
                 else:
-                    self.log.warning(AMBER("Skipping price %s/%s"), price_name, price_value)
+                    self.log.warning(
+                        AMBER("Skipping price %s/%s"), price_name, price_value
+                    )
         if "items" not in order:
             order["items"] = {}
 
@@ -966,7 +1018,7 @@ class AmazonScraper(BaseScraper):
             if item_id != "gc":
                 if item_id not in order["items"]:
                     order["items"][item_id] = {}
-                order['items'][item_id]['name_from_order'] = name_from_order
+                order["items"][item_id]["name_from_order"] = name_from_order
 
                 # We save a thumb here in case the item bpage has been removed
                 thumb = item.find_element(
@@ -995,7 +1047,7 @@ class AmazonScraper(BaseScraper):
                     .relative_to(self.cache["BASE"])
                     .as_posix()
                 )  # keep this
-                
+
                 order["items"][item_id]["total"] = self.get_value_currency(
                     "price",
                     item.find_element(
@@ -1565,11 +1617,9 @@ class AmazonScraper(BaseScraper):
     def skip_order(self, order_id: str, count: int) -> bool:
         if order_id.startswith("D01"):
             self.log.info(
-               (
-                   "Digital orders (%s) is PITA to scrape, "
-                   "so we don't support them for now"
-               ),
-               order_id,
+                "Digital orders (%s) is PITA to scrape, "
+                "so we don't support them for now",
+                order_id,
             )
             return True
         if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
