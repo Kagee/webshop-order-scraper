@@ -10,6 +10,8 @@ import random
 import re
 import time
 import zipfile
+import requests
+import filetype
 import argparse
 from datetime import date
 from decimal import Decimal
@@ -29,6 +31,8 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     WebDriverException,
 )
+from urllib.parse import urlparse, urlencode, parse_qs
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
@@ -247,20 +251,20 @@ class BaseScraper(object):
 
     def find_element(
         self, by_obj: str, value: Union[str, None], element=None
-    ) -> Union[WebElement]:
+    ) -> WebElement:
         try:
             if not element:
-                element = self.browser
+                element = element = self.browser_get_instance()
             return element.find_element(by_obj, value)
         except NoSuchElementException:
             return None
 
     def find_elements(
         self, by_obj: str, value: Union[str, None], element=None
-    ) -> Union[WebElement]:
+    ) -> List[WebElement]:
         try:
             if not element:
-                element = self.browser
+                element = self.browser_get_instance()
             return element.find_elements(by_obj, value)
         except NoSuchElementException:
             return []
@@ -296,7 +300,7 @@ class BaseScraper(object):
                 password_data,
             )
 
-    def browser_get_instance(self, change_ua=None):
+    def browser_get_instance(self, change_ua=None) -> webdriver.Firefox:
         """
         Initializing and configures a browser (Firefox)
         using Selenium.
@@ -368,6 +372,7 @@ class BaseScraper(object):
                     "general.useragent.override",
                     change_ua,
                 )
+            options.set_preference("detach", True)
             self.log.info("Starting browser")
             self.browser = webdriver.Firefox(options=options, service=service)
 
@@ -388,7 +393,7 @@ class BaseScraper(object):
             if self.browser_status == "created":
                 if self.options.no_close_browser:
                     self.log.info(
-                        "Not cloding browser because of --no-close-browser"
+                        "Not closing browser because of --no-close-browser"
                     )
                     return
                 self.log.info("Safely closing browser")
@@ -481,6 +486,77 @@ class BaseScraper(object):
     @classmethod
     def pprint(cls, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
+
+    def clear_folder(self, folder: Path = None):
+        if folder is None:
+            folder = self.cache["TEMP"]
+        for filename in folder.glob("*"):
+            os.remove(filename)
+
+    def external_download_image(self, glob: str, url: str, folder: Path = None):
+        """
+        Downloads image from url if no file matching glob in folder was found
+
+        Returns path to downloaded file or None if a exsisting file was found
+        """
+
+        if folder is None:
+            folder = self.cache["TEMP"]
+        self.log.debug(
+            "External image download. glob: %s, folder: %s, url: %s",
+            glob,
+            folder,
+            url,
+        )
+        if not list(Path(folder).glob(glob)):
+            self.clear_folder(folder)
+            headers = {
+                "User-Agent": (
+                    "python/webshop-order-scraper (hildenae@gmail.com)"
+                ),
+            }
+            response = requests.get(url=url, headers=headers, timeout=10)
+            url_parsed = urlparse(url)
+            image_name = Path(url_parsed.path).name
+            image_path = self.cache["TEMP"] / image_name
+            self.write(
+                image_path,
+                response.content,
+                binary=True,
+            )
+            kind = filetype.guess(image_path)
+            if kind.mime.startswith("image/") and kind.extension in [
+                "jpg",
+                "png",
+            ]:
+                return image_path
+            self.log.error(
+                "Thumbnail was not JPEG/PNG: %s, %s",
+                kind.mime,
+                kind.extension,
+            )
+            raise NotImplementedError()
+        # A file was found, nothing downloaded
+        return None
+
+    def wait_for_files(self, glob: str, folder: Path = None) -> List[Path]:
+        if folder is None:
+            folder = self.cache["TEMP"]
+        files = list(folder.glob(glob))
+        wait_count = 0
+        while not files:
+            files = list(folder.glob(glob))
+            time.sleep(3)
+            wait_count += 1
+            if wait_count > 60:
+                self.log.error(
+                    RED(
+                        "We have been waiting for a file for 3 minutes,"
+                        " something is wrong..."
+                    )
+                )
+                raise NotImplementedError(f"{folder}/{glob}")
+        return files
 
     def rand_sleep(self, min_seconds: int = 0, max_seconds: int = 5) -> None:
         """
