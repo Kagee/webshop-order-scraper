@@ -192,9 +192,10 @@ def parse_args():
 
     parser_ebay = subparsers.add_parser("pimoroni")
     use_cached_orderlist(parser_ebay)
-
+    
     parser_komplett = subparsers.add_parser("komplett")
     use_cached_orderlist(parser_komplett)
+    to_std_json(parser_komplett)
 
     parser_polyalkemi = subparsers.add_parser("polyalkemi")
     use_cached_orderlist(parser_polyalkemi)

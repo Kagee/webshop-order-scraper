@@ -5,12 +5,13 @@ Command line scraper for orders and item info from webshop(s)
 This project was separated from it's parent project [Homelab Organizer](https://gitlab.com/Kagee/homelab-organizer) (having outgrown it), a web-based tool (Django) for keeping control of items and tools in your homelab.
 
 ## Output
+
 Output from finished scrapers consists of one JSON and a ZIP in a subfolder of the `output/` folder.
 
 The JSON file will follow the JSON schema defined in [output/schema.json](output/schema.json). Any extra data avaliable for the order or items will be added as keys to this file. All paths are relative to the root of the accompanying ZIP file. 
 
-
 ## Completed
+
 * [Adafruit](#adafruit)
   * Complete. Does not require login. Requires minimal manual work (download) before starting.
 * [Aliexpress](#aliexpress)
@@ -21,10 +22,13 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete. Tested on norwegian shop language.
 * [Polyalkemi.no](#polyalkemino)
   * Complete. Not much testing done.
+* [Komplett.no](#komplettno)
+  * Scraping complete. Export not started on.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
 
 ## Missing export
+
 * NTR
 
 ## Scraping not complete
@@ -44,7 +48,8 @@ Requires Firefox installed (not from snap, see instructions), and a profile setu
 
 ## Creating and configuring a separate Firefox profile
 
-Run 
+Run
+
 ````bash
 firefox -p
 ````
@@ -52,6 +57,7 @@ firefox -p
 Create a new profile, named i.e. `selenum`. In the examples below you named the profile `selenium`, and your username is `awesomeuser``.
 
 Find the path to the profile, you can start looking in these paths:
+
 * Windows: `C:\Users\awesomeuser\AppData\Roaming\Mozilla\Firefox\Profiles\SOMETHINGRANDOM.selenium1`
 * Linux / Mac: `/home/awesomeuser/.mozilla/firefox/SOMETHINGRANDOM.selenium1`
 
@@ -65,6 +71,7 @@ To change to a apt install on i.e. Ubuntu 22.04, read [this](https://www.omgubun
 ## Scrapers
 
 ### Adafruit
+
 Tested on three orders, 28 items.
 
 1. Login to <https://www.adafruit.com/>
@@ -82,6 +89,7 @@ python scrape.py adafruit --to-std-json
 ````
 
 ### Aliexpress
+
 Tested on 229 orders, 409 items
 
 Scrapes order list, item info and details to JSON, and saves a PDF copy of the Aliexpress item snapshot.
@@ -105,9 +113,11 @@ python scrape.py aliexpress --to-std-json
 ````
 
 ### Polyalkemi.no
+
 Only tested on two orders.
 
-This scraper supports the arguments 
+This scraper supports the arguments
+
 * `--skip-item-thumb`
 * `--skip-item-pdf`
 * `--skip-order-pdf`
@@ -117,10 +127,10 @@ for scraping and export.
 They will skip storing the item thumbnail, item PDF print, and order invoice while scraping and exporting.
 
 It also supports the and the option
+
 * `--include-negative-orders`
 
 for export. It will include negative orders (returns) in the export.
-
 
 ````python
 python scraper.py polyalkemi 
@@ -129,6 +139,7 @@ python scraper.py polyalkemi --to-std-json
 ````
 
 ### Kjell.com
+
 Tested on 53 orders, 191 items.
 
 Currently only supports the norwegian shop front. (Swedish testers welcome!)
@@ -142,12 +153,13 @@ python scraper.py kjell --to-std-json
 ````
 
 ### Amazon
+
 Tested on TLDs (orders/items):
+
 * `.de` 59/210
 * `.com` 12/15
 * `co.uk` 8/11
 * `co.jp` 2/2
-
 
 ````python
 # Scrape this year and archived orders orders on amazon.de
@@ -165,6 +177,19 @@ python scrape.py --help
 # Export scraped data for amazon.de
 python scrape.py --tld de --to-std-json
 ````
+
+### Komplett.no
+
+Tested on xxx orders, xxx items.
+
+Komplett has a weird scrape detector, that makes Firefox give weird transport/TLS errors.
+If this happens, the script shoult thell you to clear all the profile data
+ (only komplett.no is not enough) and re-login to Komplett.no
+
+````python
+python scraper.py komplett
+````
+
 ### Distrelec
 
 ### eBay
@@ -174,6 +199,7 @@ python scrape.py --tld de --to-std-json
 ### Pimoroni
 
 ## Installation (git)
+
 ### Linux, Mac OS X 101
 
 Terminal:
@@ -221,6 +247,7 @@ This simple script will output stats per shop based on output files.
 ## Acknowledgements
 
 For steadfast bug fixing, having orders that totally scramble my scraping, and coming up with those excellent ideas when I have been struggling with a bug for an hour.
+
 <table>
 <tr><td>
 
