@@ -23,7 +23,7 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
 * [Polyalkemi.no](#polyalkemino)
   * Complete. Not much testing done.
 * [Komplett.no](#komplettno)
-  * Scraping complete. Export not started on.
+  * Complete.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
 
@@ -146,9 +146,7 @@ Currently only supports the norwegian shop front. (Swedish testers welcome!)
 
 ````python
 python scraper.py kjell
-````
 
-````python
 python scraper.py kjell --to-std-json 
 ````
 
@@ -180,7 +178,7 @@ python scrape.py --tld de --to-std-json
 
 ### Komplett.no
 
-Tested on xxx orders, xxx items.
+Tested on 80 orders, 155 items.
 
 Komplett has a weird scrape detector, that makes Firefox give weird transport/TLS errors.
 If this happens, the script shoult thell you to clear all the profile data
@@ -188,6 +186,8 @@ If this happens, the script shoult thell you to clear all the profile data
 
 ````python
 python scraper.py komplett
+
+python scrape.py komplett --to-std-json
 ````
 
 ### Distrelec
