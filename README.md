@@ -180,9 +180,12 @@ python scrape.py --tld de --to-std-json
 
 Tested on 80 orders, 155 items.
 
+Make sure to log in Komplett using the `selenium` Firefox profile BEFORE starting scraping.
+
 Komplett has a weird scrape detector, that makes Firefox give weird transport/TLS errors.
-If this happens, the script shoult thell you to clear all the profile data
- (only komplett.no is not enough) and re-login to Komplett.no
+If this happens, the script should tell you to clear all the profile data
+ (only komplett.no is not enough) and re-login to Komplett.no. If this happens you
+ should be able to continue from where you left.
 
 ````python
 python scraper.py komplett
