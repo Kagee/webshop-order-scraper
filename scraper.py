@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import argparse
 import datetime
 import logging.config
@@ -9,6 +10,9 @@ python_checks()
 # pylint: disable=wrong-import-position
 from scrapers import *  # pylint: disable=unused-wildcard-import,wildcard-import
 from scrapers import settings
+
+if settings.GH_TOKEN:
+    os.environ['GH_TOKEN'] = settings.GH_TOKEN
 
 logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("scraper")

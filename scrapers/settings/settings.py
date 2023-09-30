@@ -56,6 +56,9 @@ with env.prefixed("WS_"):
             else "Mozilla Save to PDF"
         ),
     )
+
+    GH_TOKEN: str = env("GH_TOKEN", default=None)
+
     OUTPUT_FOLDER: Path = Path(
         env("OUTPUT_FOLDER", default="./output")
     ).resolve()
