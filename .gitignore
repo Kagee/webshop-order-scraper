@@ -27,5 +27,6 @@ logos/
 .vscode
 scraper-cache
 logos
+output
 # Do not ignore
 !output/schema.json
