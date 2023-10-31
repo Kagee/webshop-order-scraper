@@ -126,6 +126,12 @@ class AliExpressScraper(BaseScraper):
                     " item"
                     f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']})"
                 )
+                if 'price' in item_obj:
+                    price = item_obj["price"]
+                    del oob["items"][item_sku_id]["price"]
+                else:
+                    price = item_obj["total"]
+                    del oob["items"][item_sku_id]["total"]
                 item_obj = {
                     "id": item_sku_id.split("-")[0],
                     "name": item_obj["title"],
@@ -133,7 +139,7 @@ class AliExpressScraper(BaseScraper):
                     "quantity": item_obj["count"],
                     "thumbnail": item_obj["thumbnail"],
                     "total": self.get_value_currency(
-                        "price", item_obj["price"]
+                        "price", price
                     ),
                     "attachements": [
                         {
@@ -151,7 +157,6 @@ class AliExpressScraper(BaseScraper):
 
                 order_obj["items"].append(item_obj)
 
-                del oob["items"][item_sku_id]["price"]
                 del oob["items"][item_sku_id]["sku"]
                 del oob["items"][item_sku_id]["count"]
                 del oob["items"][item_sku_id]["title"]
