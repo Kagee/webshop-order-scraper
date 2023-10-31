@@ -449,6 +449,8 @@ class KjellScraper(BaseScraper):
         return attachements
 
     def browser_load_order_list(self):
+        self.options.use_cached_orderlist = True
+        self.log.critical("Scraping is broken, forsing use of cached orderlist")
         if self.options.use_cached_orderlist:
             if self.can_read(self.ORDER_LIST_JSON_FILENAME):
                 return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
