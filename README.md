@@ -18,14 +18,17 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete.
 * [Amazon](#amazon)
   * Complete. Tested on `.com`, `.co.uk`, `.co.jp` and `.de`.
-* [Kjell.com](#kjellcom)
-  * Complete. Tested on norwegian shop language.
 * [Polyalkemi.no](#polyalkemino)
   * Complete. Not much testing done.
 * [Komplett.no](#komplettno)
   * Complete.
 * [IMAP](#imap)
   * Complete. Currently only used to extract old eBay order numbers from email.
+
+## Broken
+
+* [Kjell.com](#kjellcom)
+  * BROKEN. window.CURRENT_PAGE.transactions no longer contains all transactions, and unable to find easy replacement. Might have to redesign scraping all the way.
 
 ## Missing export
 
