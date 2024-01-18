@@ -1,6 +1,7 @@
 # pylint: disable=unused-import
 import base64
 from decimal import Decimal
+import json
 import os
 import re
 import time
@@ -449,8 +450,7 @@ class KjellScraper(BaseScraper):
         return attachements
 
     def browser_load_order_list(self):
-        self.options.use_cached_orderlist = True
-        self.log.critical("Scraping is broken, forsing use of cached orderlist")
+        #self.log.critical("Scraping is broken, forsing use of cached orderlist")
         if self.options.use_cached_orderlist:
             if self.can_read(self.ORDER_LIST_JSON_FILENAME):
                 return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
@@ -491,11 +491,19 @@ class KjellScraper(BaseScraper):
         if cookie_accept:
             cookie_accept.click()
 
-        transactions = self.browser.execute_script("""
-            return window.CURRENT_PAGE.transactions;
-            """)
-        self.write(self.ORDER_LIST_JSON_FILENAME, transactions, to_json=True)
-        return transactions
+        # view-source:
+        self.browser_visit_page(
+            r"https://www.kjell.com/resolvedynamicdata?d=[{t:%22Avensia.Common.Features.Account.MyPages.MyTransactions.UserTransactions,Avensia.Common%22}]"
+        )
+
+        # transactions = self.browser.execute_script("""
+        #    return window.CURRENT_PAGE.transactions;
+        #    """)
+        #content = self.browser.find_element_by_tag_name('pre').text
+        content = self.browser.find_element(By.XPATH, "//div[@id='json']").text
+        shop_data = json.loads(content)
+        self.write(self.ORDER_LIST_JSON_FILENAME, shop_data, to_json=True)
+        return shop_data
 
     # Random utility functions
 
