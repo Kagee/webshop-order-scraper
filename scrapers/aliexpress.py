@@ -707,7 +707,8 @@ class AliExpressScraper(BaseScraper):
                 len(sku_element) == 0
                 or len(sku_element[0].text.replace("\xa0", " ").strip()) == 0
             ):
-                sku_hash = self.make_make_sku_hash("no-sku")
+                sku_element_text = "no-sku"
+                sku_hash = self.make_make_sku_hash(sku_element_text)
                 sku_element = ""
             else:
                 sku_element_text = (
