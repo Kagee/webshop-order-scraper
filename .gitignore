@@ -12,6 +12,7 @@ geckodriver.log
 *.log
 *~
 .idea
+*.csv
 */migrations/*
 *.code-workspace
 output/*.json

@@ -8,9 +8,13 @@ from scrapers import settings
 import csv
 import sys
 import argparse
+import decimal
+from decimal import Decimal
 from pathlib import Path
 from scrapers.base import BaseScraper
+import datetime as dt
 from datetime import datetime
+
 
 import logging.config
 
@@ -26,20 +30,19 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--loglevel",
-        type=str.upper,
-        default="DEBUG",
-        choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
-    )
-
-    parser.add_argument(
         "--after",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
         help="only export order after this date (default 1970-01-01)",
         default="1970-01-01",
     )
+
     parser.add_argument(
         "--stdout",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--nok",
         action="store_true",
     )
 
@@ -69,7 +72,94 @@ def parse_args():
 
 def main():
     args = parse_args()
-    log.setLevel(level=args.loglevel)
+
+    conv_data = {}
+
+    if not args.nok:
+
+        def convert_to_nok(value, conv, mult):
+            return str(value)
+
+        def curr_to_nok(curr):
+            return str(curr)
+
+    else:
+
+        def convert_to_nok(value, curr, date):
+            if value == "" or curr == "":
+                return str(value)
+
+            value = Decimal(value.replace(",", "."))
+            conv = Decimal(conv_data[curr][date]["value"].replace(",", "."))
+            mult = conv_data[curr][date]["mult"]
+
+            if mult == "0":
+                return str(
+                    (value * conv).quantize(
+                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP
+                    )
+                )
+            elif mult == "2":
+                return str(
+                    ((value * conv) / 100).quantize(
+                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP
+                    )
+                )
+            raise ValueError(f"Unexpected mult: {mult}")
+
+        def curr_to_nok(curr):
+            return str("NOK")
+
+        if not Path("EXR.csv").is_file():
+            log.error(
+                'Download "Alle valutakurser - Daglige kurser - Siste 10 år"'
+                " from"
+                " https://www.norges-bank.no/tema/Statistikk/Valutakurser/?tab=api"
+                " and save as EXR.csv"
+            )
+            sys.exit(1)
+        log.info("Loading EXR.csv, this may take some time...")
+        with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
+            prev_base = None
+            # prev_quote = None
+            prev_mult = None
+            prev_date = None
+            prev_value = None
+            reader = csv.DictReader(csvfile, delimiter=";")
+            for row in reader:
+                if prev_base and prev_base != row["BASE_CUR"]:
+                    # prev_quote = None
+                    prev_mult = None
+                    prev_date = None
+                    prev_value = None
+                date = datetime.strptime(row["TIME_PERIOD"], "%Y-%m-%d")
+                if prev_date:
+                    exp_date = prev_date + dt.timedelta(days=1)
+                    if date != exp_date:
+                        while True:
+                            prev_date += dt.timedelta(days=1)
+                            if date == prev_date:
+                                break
+                            if row["BASE_CUR"] not in conv_data:
+                                conv_data[row["BASE_CUR"]] = {}
+                            conv_data[row["BASE_CUR"]][
+                                prev_date.strftime("%Y-%m-%d")
+                            ] = {
+                                "mult": prev_mult,
+                                "value": prev_value,
+                            }
+                if row["BASE_CUR"] not in conv_data:
+                    conv_data[row["BASE_CUR"]] = {}
+                conv_data[row["BASE_CUR"]][date.strftime("%Y-%m-%d")] = {
+                    "mult": row["UNIT_MULT"],
+                    "value": row["OBS_VALUE"],
+                }
+                prev_base = row["BASE_CUR"]
+                # prev_quote = row["QUOTE_CUR"]
+                prev_mult = row["UNIT_MULT"]
+                prev_date = date
+                prev_value = row["OBS_VALUE"]
+
     shop_json = BaseScraper.read(
         Path(settings.OUTPUT_FOLDER) / Path(args.source + ".json"),
         from_json=True,
@@ -87,24 +177,84 @@ def main():
         if date > args.after and date < args.before:
             if order["date"] not in output:
                 output[order["date"]] = []
-
-            output[order["date"]].append(  [
-                        order["date"],
-                        order["id"],
-                        order["subtotal"]["value"] if "subtotal" in order else "",
-                        order["subtotal"]["currency"] if "subtotal" in order and "currency" in order["subtotal"] else "",
-                        order["shipping"]["value"] if "shipping" in order else "",
-                        order["shipping"]["currency"] if "shipping" in order and "currency" in order["shipping"] else "",
-                        order["tax"]["value"] if "tax" in order else "",
-                        order["tax"]["currency"] if "tax" in order and "currency" in order["tax"] else "",
+            # convert_to_nok(value, curr, date) curr_to_nok
+            output[order["date"]].append(
+                [
+                    order["date"],
+                    order["id"],
+                    (
+                        convert_to_nok(
+                            order["subtotal"]["value"],
+                            (
+                                order["subtotal"]["currency"]
+                                if "currency" in order["subtotal"]
+                                else ""
+                            ),
+                            order["date"],
+                        )
+                        if "subtotal" in order
+                        else ""
+                    ),
+                    (
+                        curr_to_nok(order["subtotal"]["currency"])
+                        if "subtotal" in order
+                        and "currency" in order["subtotal"]
+                        else ""
+                    ),
+                    (
+                        convert_to_nok(
+                            order["shipping"]["value"],
+                            (
+                                order["shipping"]["currency"]
+                                if "currency" in order["shipping"]
+                                else ""
+                            ),
+                            order["date"],
+                        )
+                        if "shipping" in order
+                        else ""
+                    ),
+                    (
+                        curr_to_nok(order["shipping"]["currency"])
+                        if "shipping" in order
+                        and "currency" in order["shipping"]
+                        else ""
+                    ),
+                    (
+                        convert_to_nok(
+                            order["tax"]["value"],
+                            (
+                                order["tax"]["currency"]
+                                if "currency" in order["tax"]
+                                else ""
+                            ),
+                            order["date"],
+                        )
+                        if "tax" in order
+                        else ""
+                    ),
+                    (
+                        curr_to_nok(order["tax"]["currency"])
+                        if "tax" in order and "currency" in order["tax"]
+                        else ""
+                    ),
+                    convert_to_nok(
                         order["total"]["value"],
-                        order["total"]["currency"],
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                    ])
+                        (
+                            order["total"]["currency"]
+                            if "currency" in order["total"]
+                            else ""
+                        ),
+                        order["date"],
+                    ),
+                    curr_to_nok(order["total"]["currency"]),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                ]
+            )
             for item in order["items"]:
                 output[order["date"]].append(
                     [
@@ -119,16 +269,35 @@ def main():
                         "",
                         "",
                         item["name"],
-                        (
-                            item["variation"] if "variation" in item else ""
-                        ),
+                        (item["variation"] if "variation" in item else ""),
                         item["quantity"],
-                        item["total"]["value"] if "total" in item else "",
-                        item["total"]["currency"] if "total" in item else "",
+                        (
+                            convert_to_nok(
+                                item["total"]["value"],
+                                (
+                                    item["total"]["currency"]
+                                    if "currency" in order["total"]
+                                    else ""
+                                ),
+                                order["date"],
+                            )
+                            if "total" in item
+                            else ""
+                        ),
+                        (
+                            curr_to_nok(item["total"]["currency"])
+                            if "total" in item
+                            else ""
+                        ),
                     ]
                 )
 
-    with open(Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv"), 'w', newline='', encoding='utf-8') as csvfile:
+    with open(
+        Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv"),
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as csvfile:
         if args.stdout:
             out = sys.stdout
         else:
