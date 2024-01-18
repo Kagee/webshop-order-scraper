@@ -42,6 +42,10 @@ with env.prefixed("WS_"):
                 "handlers": ["console"],
                 "level": "DEBUG",
             },
+            "json_to_csv": {
+                "handlers": ["console"],
+                "level": "DEBUG",
+            },
         },
     }
 

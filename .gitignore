@@ -16,6 +16,7 @@ geckodriver.log
 *.code-workspace
 output/*.json
 output/*.zip
+output/*.csv
 # folders
 scraper-cache/
 .vscode/

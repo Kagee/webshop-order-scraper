@@ -190,8 +190,8 @@ def parse_args():
 
     _ = subparsers.add_parser("imap")
 
-    parser_ebay = subparsers.add_parser("pimoroni")
-    use_cached_orderlist(parser_ebay)
+    parser_pimoroni = subparsers.add_parser("pimoroni")
+    use_cached_orderlist(parser_pimoroni)
     
     parser_komplett = subparsers.add_parser("komplett")
     use_cached_orderlist(parser_komplett)
