@@ -1,5 +1,6 @@
 import argparse
 import base64
+import contextlib
 import datetime
 import math
 import os
@@ -7,14 +8,13 @@ import re
 import time
 import urllib.request
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from urllib.parse import urlparse
 
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
@@ -23,6 +23,9 @@ from .base import BaseScraper, PagePart
 
 # pylint: disable=unused-import
 from .utils import AMBER, BLUE, GREEN, RED
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class AmazonScraper(BaseScraper):
@@ -49,7 +52,7 @@ class AmazonScraper(BaseScraper):
             orig_orders.update(self.read(order_list_json, from_json=True))
 
         # pylint: disable=consider-using-dict-items,consider-iterating-dictionary
-        for order_id in orig_orders.keys():
+        for order_id in orig_orders:
             self.log.debug("Processing order %s", order_id)
             if order_id.startswith("D01-"):
                 self.log.debug("Skipping digital order")
@@ -261,7 +264,7 @@ class AmazonScraper(BaseScraper):
             ]
 
             for value_name_re in prices_re_to_move:
-                for key in current_order["pricing"].keys():
+                for key in current_order["pricing"]:
                     if re.search(value_name_re, key, re.IGNORECASE):
                         prices_to_remove.append(key)
                         order["extra_data"]["pricing"][key] = current_order[
@@ -477,12 +480,10 @@ class AmazonScraper(BaseScraper):
         # connected to this link to load
         time.sleep(2)
         elements_to_loop: list[WebElement] = None
-        try:
+        with contextlib.suppress(NoSuchElementException):
             elements_to_loop: list[WebElement] = [
                 brws.find_element(By.XPATH, order_summary_a_xpath),
             ]
-        except NoSuchElementException:
-            pass
         if not elements_to_loop:
             try:
                 wait2.until(
@@ -508,9 +509,12 @@ class AmazonScraper(BaseScraper):
                 "We found no order summary, invoices or other attachementes to"
                 " save. This is possibly a bug.",
             )
-            raise RuntimeError(
+            msg = (
                 "We found no order summary, invoices or other attachementes to"
-                " save. This is possibly a bug.",
+                " save. This is possibly a bug."
+            )
+            raise RuntimeError(
+                msg,
             )
 
         self.log.debug("Looping and possibly downloading attachements")
@@ -663,9 +667,12 @@ class AmazonScraper(BaseScraper):
                                 txtvalue,
                             )
                             if not matches:
-                                raise RuntimeError(
+                                msg = (
                                     f"We failed to match '{txtvalue}' "
-                                    "to one of id/date/total",
+                                    "to one of id/date/total"
+                                )
+                                raise RuntimeError(
+                                    msg,
                                 )
 
                             matches_dict = matches.groupdict().copy()
@@ -878,7 +885,7 @@ class AmazonScraper(BaseScraper):
                 sign_in.click()
                 self.rand_sleep()
 
-            except TimeoutException as tee:
+            except TimeoutException:
                 self.browser_safe_quit()
                 self.log.error(
                     RED(
@@ -886,7 +893,7 @@ class AmazonScraper(BaseScraper):
                         "because we could not find a expected element..",
                     ),
                 )
-                raise tee
+                raise
         if (
             re.match(self.LOGIN_PAGE_RE, self.browser.current_url)
             or "transactionapproval" in self.browser.current_url
@@ -1101,10 +1108,13 @@ class AmazonScraper(BaseScraper):
                     )
                 except TimeoutException:
                     # pylint: disable=raise-missing-from
-                    raise RuntimeError(
+                    msg = (
                         "Invoice popup did not open as expected, or did not"
                         " find invoice link. We need this open to save it to"
-                        " HTML cache.",
+                        " HTML cache."
+                    )
+                    raise RuntimeError(
+                        msg,
                     )
         self.write(
             self.part_to_filename(
@@ -1456,7 +1466,8 @@ class AmazonScraper(BaseScraper):
                     'But we found a "Next" button. '
                     "Don't know how to handle this...",
                 )
-                raise RuntimeError("See critical error above")
+                msg = "See critical error above"
+                raise RuntimeError(msg)
             return False
 
         return found_next_button and next_button_works
@@ -1464,12 +1475,13 @@ class AmazonScraper(BaseScraper):
     # Init / Utility Functions
 
     def check_year(self, opt_years, start_year, not_archived):  # FIN
-        years = list()
+        years = []
         if opt_years and start_year:
             self.log.error("cannot use both --year and --start-year")
-            raise RuntimeError("cannot use both --year and --start-year")
+            msg = "cannot use both --year and --start-year"
+            raise RuntimeError(msg)
         if opt_years:
-            opt_years = sorted(set(int(year) for year in opt_years.split(",")))
+            opt_years = sorted({int(year) for year in opt_years.split(",")})
             if any(
                 year > datetime.date.today().year or year < 1990
                 for year in opt_years

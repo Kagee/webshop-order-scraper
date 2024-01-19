@@ -1,16 +1,19 @@
 import re
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 from . import settings
 from .base import BaseScraper, PagePart
 from .utils import *
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class EbayScraper(BaseScraper):
@@ -32,7 +35,6 @@ class EbayScraper(BaseScraper):
                 and counter == settings.EBY_ORDERS_MAX
             ):
                 break
-            is_old_style_order_id = True
             if isinstance(order_id, list):
                 # Old style transid, itemid order data
                 order_url = self.ORDER_URL_TEMPLATE_TRANS.format(
@@ -41,14 +43,13 @@ class EbayScraper(BaseScraper):
                 key = f"{order_id[0]}-{order_id[1]}"
             elif isinstance(order_id, str):
                 # New style orderid order data
-                is_old_style_order_id = False
                 order_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
                 key = order_id
 
-            order_html_filename = self.ORDER_FILENAME_TEMPLATE.format(
+            self.ORDER_FILENAME_TEMPLATE.format(
                 key=key, ext="html",
             )
-            order_json_filename = self.ORDER_FILENAME_TEMPLATE.format(
+            self.ORDER_FILENAME_TEMPLATE.format(
                 key=key, ext="json",
             )
 
@@ -340,9 +341,12 @@ class EbayScraper(BaseScraper):
                 captcha_test()
             except TimeoutException as toe:
                 # self.browser_safe_quit()
-                raise RuntimeError(
+                msg = (
                     "Login to eBay was not successful "
-                    "because we could not find a expected element..",
+                    "because we could not find a expected element.."
+                )
+                raise RuntimeError(
+                    msg,
                 ) from toe
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(
@@ -373,7 +377,8 @@ class EbayScraper(BaseScraper):
         elif not to_mobile_link and not to_classic_link:
             if switch_to_mode != "classic":
                 self.log.debug("Failed to find a mode change link!!")
-                raise CommandError("Failed to find a mode change link!!")
+                msg = "Failed to find a mode change link!!"
+                raise CommandError(msg)
         self.WEBSITE_MODE = switch_to_mode
         self.log.debug(
             "Switching to %s: %s",

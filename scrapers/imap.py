@@ -1,3 +1,4 @@
+import contextlib
 import email.header
 import json
 import logging
@@ -44,9 +45,9 @@ class IMAPScraper:
         )
         try:
             imap_client.login(imap_username, imap_password)
-        except LoginError as login_error:
+        except LoginError:
             self.log.error("Invalid credentials")
-            raise login_error
+            raise
         mailboxes = []
         if settings.IMAP_FLAGS:
             self.log.debug(
@@ -56,15 +57,13 @@ class IMAPScraper:
 
             for mailbox in imap_client.list_folders():
                 if any(
-                    [
-                        flag
+                    flag
                         for flag in mailbox[0]
                         if any(
                             f
                             for f in settings.IMAP_FLAGS
                             if flag.decode("utf-8") == f
                         )
-                    ],
                 ):
                     self.log.debug(
                         "Folder '%s' has one of flags '%s'",
@@ -131,6 +130,7 @@ class IMAPScraper:
                 matches = find_in_html(content)
                 if matches:
                     return matches
+                return None
             else:
                 # Images, PDFs, icals, etc. Ignore
                 return None
@@ -172,10 +172,8 @@ class IMAPScraper:
         # (transid, itemid)
         self.log.info("Found %s possible eBay order number tuples", len(orders))
         imap_folder = Path(settings.CACHE_BASE, "imap")
-        try:
+        with contextlib.suppress(FileExistsError):
             os.makedirs(imap_folder)
-        except FileExistsError:
-            pass
         with open(
             imap_folder / "imap-ebay.json", "w", encoding="utf-8",
         ) as file:

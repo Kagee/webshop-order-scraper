@@ -217,9 +217,9 @@ def main():
     args = parse_args()
     log.setLevel(level=args.loglevel)
 
-    scraper_class = [
+    scraper_class = next(
         y for x, y in globals().items() if x.lower() == args.source + "scraper"
-    ][0]
+    )
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
     # TODO: Move this check to individual class inits

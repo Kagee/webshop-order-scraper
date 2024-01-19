@@ -4,13 +4,15 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 
 from . import settings
 from .base import BaseScraper, PagePart
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class AdafruitScraper(BaseScraper):
@@ -64,10 +66,12 @@ class AdafruitScraper(BaseScraper):
     def command_scrape(self):
         if not self.can_read(self.ORDERS_CSV):
             self.usage()
-            raise OSError("Could not find order_history.csv")
+            msg = "Could not find order_history.csv"
+            raise OSError(msg)
         if not self.can_read(self.ITEMS_CSV):
             self.usage()
-            raise OSError("Could not find products_history.csv")
+            msg = "Could not find products_history.csv"
+            raise OSError(msg)
 
         orders = self.combine_orders_items(self.parse_order_csv())
         self.browser_save_item_info(orders)

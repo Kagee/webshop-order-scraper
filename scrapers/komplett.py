@@ -5,19 +5,21 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from selenium.common.exceptions import (
     NoSuchElementException,
     WebDriverException,
 )
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 
 from .base import BaseScraper
 
 # pylint: disable=unused-import
 from .utils import AMBER, RED
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class KomplettScraper(BaseScraper):
@@ -375,7 +377,8 @@ class KomplettScraper(BaseScraper):
                             " something is wrong...",
                         ),
                     )
-                    raise NotImplementedError(f"{thumb_url}")
+                    msg = f"{thumb_url}"
+                    raise NotImplementedError(msg)
             image_dataurl: str = self.browser.execute_script("""
                             const canvas = document.createElement('canvas');
                             dwimg = document.querySelector('#image-to-download');
@@ -621,7 +624,7 @@ class KomplettScraper(BaseScraper):
         )
 
         order_lists: dict = self.read(self.ORDER_LIST_JSON, from_json=True)
-        statuses = set([x["status"] for x in order_lists.values()])
+        statuses = {x["status"] for x in order_lists.values()}
         known_statuses = ["Sendt", "Levert", "Kansellert"]
         export_statuses = ["Sendt", "Levert"]
         for status in statuses:

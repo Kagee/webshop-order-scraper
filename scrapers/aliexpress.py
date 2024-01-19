@@ -4,7 +4,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from lxml.etree import tostring
 from lxml.html import HtmlElement
@@ -18,7 +18,6 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
@@ -27,6 +26,9 @@ from .base import BaseScraper
 
 # pylint: disable=unused-import
 from .utils import AMBER, RED
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class AliExpressScraper(BaseScraper):
@@ -95,7 +97,8 @@ class AliExpressScraper(BaseScraper):
             if "total" in order_obj:
                 del oob["total"]
             else:
-                raise NotImplementedError("Total not from price_items")
+                msg = "Total not from price_items"
+                raise NotImplementedError(msg)
 
             del oob["tracking"]
             del oob["id"]
@@ -568,10 +571,7 @@ class AliExpressScraper(BaseScraper):
                 './/span[@class="order-item-content-opt-price-total"]',
             )
             info = re.match(r".+\$(?P<dollas>\d+\.\d+)", order_total.text)
-            if info:
-                order_total = float(info.group("dollas"))
-            else:
-                order_total = float("0.00")
+            order_total = float(info.group("dollas")) if info else float("0.00")
 
             order_store_id, *_ = order.xpath(
                 './/span[@class="order-item-store-name"]/a',
@@ -1109,8 +1109,9 @@ class AliExpressScraper(BaseScraper):
         self.log.info(AMBER("We need to log in to Aliexpress"))
         self.log.error(RED("Manual profile update required, terminating."))
         self.browser_safe_quit()
+        msg = "Automatic loging for newer Aliexpress not implemented."
         raise NotImplementedError(
-            "Automatic loging for newer Aliexpress not implemented.",
+            msg,
         )
 
     # Command functions, used in scrape.py

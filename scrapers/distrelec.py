@@ -1,15 +1,18 @@
 import re
 import time
+from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 # pylint: disable=unused-import
 from .base import BaseScraper, PagePart
 from .utils import AMBER, GREEN
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 # Scraper for trying out code for other scrapers
@@ -120,9 +123,12 @@ class DistrelecScraper(BaseScraper):
             input()
             if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
                 # pylint: disable=raise-missing-from
-                raise RuntimeError(
+                msg = (
                     f"Login to {self.DOMAIN} was not successful, "
-                    "even after user interaction.",
+                    "even after user interaction."
+                )
+                raise RuntimeError(
+                    msg,
                 )
         self.log.info(GREEN("Login to %s was successful."), self.DOMAIN)
 

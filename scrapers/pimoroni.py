@@ -1,15 +1,18 @@
 import re
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 from .base import BaseScraper, PagePart
 from .utils import *
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class PimoroniScraper(BaseScraper):
@@ -149,13 +152,13 @@ class PimoroniScraper(BaseScraper):
                 ).click()
                 self.rand_sleep(0, 2)
 
-            except TimeoutException as toe:
+            except TimeoutException:
                 self.log.error(
                     "Login to %s was not successful "
                     "because we could not find a expected element..",
                     self.name,
                 )
-                raise toe
+                raise
         time.sleep(2)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(

@@ -1,12 +1,13 @@
 # pylint: disable=unused-import
 import base64
+import contextlib
 import json
 import os
 import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import filetype
@@ -16,12 +17,14 @@ from selenium.common.exceptions import (
     NoSuchWindowException,
 )
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 
 from .base import BaseScraper
 
 # pylint: disable=unused-import
 from .utils import AMBER, RED
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class KjellScraper(BaseScraper):
@@ -184,22 +187,18 @@ class KjellScraper(BaseScraper):
         brws = self.browser_get_instance()
         self.log.debug("Hide fluff, ads, etc")
         cookie_accept = None
-        try:
+        with contextlib.suppress(NoSuchElementException):
             cookie_accept = brws.find_element(
                 By.XPATH,
                 "//h4[contains(text(),'"
                 " cookies')]/parent::div/div/button/span[contains(text(),"
                 " 'Godta')]",
             )
-        except NoSuchElementException:
-            pass
-        try:
+        with contextlib.suppress(NoSuchElementException):
             cookie_accept = brws.find_element(
                 By.XPATH,
                 '//span[contains(text(),"Aksepterer")]/parent::button',
             )
-        except NoSuchElementException:
-            pass
         if cookie_accept:
             cookie_accept.click()
         elemets_to_hide: list[WebElement] = []
@@ -426,9 +425,12 @@ class KjellScraper(BaseScraper):
                         self.log.debug("No pdf, waiting 3 sec")
                         time.sleep(3)
                     if len(pdf) > 1:
-                        raise NotImplementedError(
+                        msg = (
                             "Found multiple PDFs after download, unknown"
-                            " condition.",
+                            " condition."
+                        )
+                        raise NotImplementedError(
+                            msg,
                         )
 
                     self.wait_for_stable_file(pdf[0])
@@ -469,22 +471,18 @@ class KjellScraper(BaseScraper):
         self.browser_visit_page(self.ORDER_LIST_URL)
 
         cookie_accept = None
-        try:
+        with contextlib.suppress(NoSuchElementException):
             cookie_accept = brws.find_element(
                 By.XPATH,
                 "//h4[contains(text(),'"
                 " cookies')]/parent::div/div/button/span[contains(text(),"
                 " 'Godta')]",
             )
-        except NoSuchElementException:
-            pass
-        try:
+        with contextlib.suppress(NoSuchElementException):
             cookie_accept = brws.find_element(
                 By.XPATH,
                 '//span[contains(text(),"Aksepterer")]/parent::button',
             )
-        except NoSuchElementException:
-            pass
         if cookie_accept:
             cookie_accept.click()
 
@@ -508,7 +506,8 @@ class KjellScraper(BaseScraper):
     def check_country(cls, country: str):
         country = country.lower()
         if country not in ["no", "se"]:
-            raise NotImplementedError("Only supports Kjell.com/[no/se]")
+            msg = "Only supports Kjell.com/[no/se]"
+            raise NotImplementedError(msg)
         return country
 
     def setup_templates(self):
@@ -546,8 +545,9 @@ class KjellScraper(BaseScraper):
                     code_len_min = min(code_len_min, len(pli["code"]))
                     products[pli["code"]] = pli
                 else:
+                    msg = "Not implemented: Product code appeared twice"
                     raise NotImplementedError(
-                        "Not implemented: Product code appeared twice",
+                        msg,
                     )
             self.log.debug(
                 "Item code was from %s to %s chars", code_len_min, code_len_max,

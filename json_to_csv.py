@@ -103,7 +103,8 @@ def main():
                         decimal.Decimal(".00"), decimal.ROUND_HALF_UP,
                     ),
                 )
-            raise ValueError(f"Unexpected mult: {mult}")
+            msg = f"Unexpected mult: {mult}"
+            raise ValueError(msg)
 
         def curr_to_nok(curr):
             return "NOK"
@@ -296,10 +297,7 @@ def main():
         newline="",
         encoding="utf-8",
     ) as csvfile:
-        if args.stdout:
-            out = sys.stdout
-        else:
-            out = csvfile
+        out = sys.stdout if args.stdout else csvfile
         writer = csv.writer(out, dialect=csv.excel)
         writer.writerow(
             [

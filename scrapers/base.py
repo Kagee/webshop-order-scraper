@@ -1,5 +1,6 @@
 import argparse
 import base64
+import contextlib
 import csv
 import datetime
 import json
@@ -18,7 +19,7 @@ from getpass import getpass
 from json.encoder import JSONEncoder
 from logging import Logger
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 from urllib.parse import urlparse
 
 import filetype
@@ -96,7 +97,7 @@ class BaseScraper:
         return {
             "metadata": {
                 "name": name,
-                "branch_name": name if not branch_name else branch_name,
+                "branch_name": branch_name if branch_name else name,
                 "order_url": order_url,
                 "item_url": item_url,
                 "generator": "gitlab.com/Kagee/web-order-scraper",
@@ -147,9 +148,12 @@ class BaseScraper:
                     value,
                     guess_price.currency,
                 )
-                raise NotImplementedError(
+                msg = (
                     "Unexpected value/currency:"
-                    f" {name}/{value}/{guess_price.currency}",
+                    f" {name}/{value}/{guess_price.currency}"
+                )
+                raise NotImplementedError(
+                    msg,
                 )
 
         value_curr_dict.update(curr_dict)
@@ -249,7 +253,7 @@ class BaseScraper:
         )
 
     def find_element(
-        self, by_obj: str, value: Union[str, None], element=None,
+        self, by_obj: str, value: str | None, element=None,
     ) -> WebElement:
         try:
             if not element:
@@ -259,7 +263,7 @@ class BaseScraper:
             return None
 
     def find_elements(
-        self, by_obj: str, value: Union[str, None], element=None,
+        self, by_obj: str, value: str | None, element=None,
     ) -> list[WebElement]:
         try:
             if not element:
@@ -457,21 +461,26 @@ class BaseScraper:
 
     def browser_login(self, expected_url):
         if True:
+            msg = "Child does not implement browser_login()"
             raise NotImplementedError(
-                "Child does not implement browser_login()",
+                msg,
             )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
         if True:
-            raise NotImplementedError(
+            msg = (
                 "Child does not implement browser_detect_handle_interrupt(self,"
-                " expected_url)...",
+                " expected_url)..."
+            )
+            raise NotImplementedError(
+                msg,
             )
 
     def part_to_filename(self, part: PagePart, **kwargs):
         if True:
+            msg = "Child does not implement _part_to_filename(...)"
             raise NotImplementedError(
-                "Child does not implement _part_to_filename(...)",
+                msg,
             )
 
     def has_json(self, part: PagePart, **kwargs) -> bool:
@@ -486,13 +495,13 @@ class BaseScraper:
     def pprint(cls, value: Any) -> None:
         pprint.PrettyPrinter(indent=2).pprint(value)
 
-    def clear_folder(self, folder: Path = None):
+    def clear_folder(self, folder: Path | None = None):
         if folder is None:
             folder = self.cache["TEMP"]
         for filename in folder.glob("*"):
             os.remove(filename)
 
-    def external_download_image(self, glob: str, url: str, folder: Path = None):
+    def external_download_image(self, glob: str, url: str, folder: Path | None = None):
         """
         Downloads image from url if no file matching glob in folder was found
 
@@ -538,7 +547,7 @@ class BaseScraper:
         # A file was found, nothing downloaded
         return None
 
-    def wait_for_files(self, glob: str, folder: Path = None) -> list[Path]:
+    def wait_for_files(self, glob: str, folder: Path | None = None) -> list[Path]:
         if folder is None:
             folder = self.cache["TEMP"]
         files = list(folder.glob(glob))
@@ -554,7 +563,8 @@ class BaseScraper:
                         " something is wrong...",
                     ),
                 )
-                raise NotImplementedError(f"{folder}/{glob}")
+                msg = f"{folder}/{glob}"
+                raise NotImplementedError(msg)
         return files
 
     def rand_sleep(self, min_seconds: int = 0, max_seconds: int = 5) -> None:
@@ -581,25 +591,23 @@ class BaseScraper:
                 continue
             break
 
-    def makedir(self, path: Union[Path, str]) -> None:
-        try:
+    def makedir(self, path: Path | str) -> None:
+        with contextlib.suppress(FileExistsError):
             os.makedirs(path)
-        except FileExistsError:
-            pass
 
-    def remove(self, path: Union[Path, str]) -> bool:
+    def remove(self, path: Path | str) -> bool:
         try:
             os.remove(path)
             return True
         except FileNotFoundError:
             return False
 
-    def can_read(self, path: Union[Path, str]):
+    def can_read(self, path: Path | str):
         return os.access(path, os.R_OK)
 
     def write(
         self,
-        path: Union[Path, str],
+        path: Path | str,
         content: Any,
         to_json=False,
         binary=False,
@@ -629,7 +637,7 @@ class BaseScraper:
     @classmethod
     def read(
         cls,
-        path: Union[Path, str],
+        path: Path | str,
         from_json=False,
         from_html=False,
         from_csv=False,
@@ -644,14 +652,15 @@ class BaseScraper:
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
                     cls.log.error("Encountered error when reading %s", path)
+                    msg = f"Encountered error when reading {path}"
                     raise OSError(
-                        f"Encountered error when reading {path}", jde,
+                        msg, jde,
                     ) from jde
             elif from_html:
                 contents = fromstring(contents)
             return contents
 
-    def wait_for_stable_file(self, filename: Union[Path, str]):
+    def wait_for_stable_file(self, filename: Path | str):
         while not self.can_read(filename):
             self.log.debug("File does not exist yet: %s", filename.name)
             time.sleep(1)
@@ -674,9 +683,12 @@ class BaseScraper:
             )
             counter -= 1
             if counter == 0:
-                raise OSError(
+                msg = (
                     f"Waited 40 seconds for {filename} to be stable, never"
-                    " stabilized.",
+                    " stabilized."
+                )
+                raise OSError(
+                    msg,
                 )
         self.log.debug("File %s appears stable.", filename)
 
@@ -684,11 +696,19 @@ class BaseScraper:
         # We are not modifying the values
         # pylint: disable=dangerous-default-value
         self,
-        xpaths: list = [],
-        ids: list = [],
-        css_selectors: list = [],
-        element_tuples: list = [],
+        xpaths: list | None = None,
+        ids: list | None = None,
+        css_selectors: list | None = None,
+        element_tuples: list | None = None,
     ) -> None:
+        if element_tuples is None:
+            element_tuples = []
+        if css_selectors is None:
+            css_selectors = []
+        if ids is None:
+            ids = []
+        if xpaths is None:
+            xpaths = []
         if len(xpaths + ids + css_selectors + element_tuples) == 0:
             self.log.debug(
                 "browser_cleanup_page called, but no cleanup defined",
