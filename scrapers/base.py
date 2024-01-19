@@ -169,7 +169,8 @@ class BaseScraper:
         if self.valid_json(structure):
             self.makedir(settings.OUTPUT_FOLDER)
             json_file_path = Path(
-                settings.OUTPUT_FOLDER, self.simple_name + ".json",
+                settings.OUTPUT_FOLDER,
+                self.simple_name + ".json",
             ).resolve()
             zip_file_path = json_file_path.with_suffix(".zip")
             self.log.debug(
@@ -201,7 +202,9 @@ class BaseScraper:
             count_files = len(files_from_to)
             if count_files > 0:
                 self.log.debug(
-                    "Copying %s files to %s", count_files, zip_file_path,
+                    "Copying %s files to %s",
+                    count_files,
+                    zip_file_path,
                 )
                 per_count = max(10, math.ceil(count_files / 20))
                 with zipfile.ZipFile(zip_file_path, "a") as zip_file:
@@ -220,7 +223,8 @@ class BaseScraper:
                         self.log.debug("Added %s as logo.png", logo.name)
                     else:
                         self.log.warning(
-                            AMBER("Found no %s in logos/"), logo.name,
+                            AMBER("Found no %s in logos/"),
+                            logo.name,
                         )
             else:
                 self.log.warning(AMBER("No files to add to zip, not creating"))
@@ -253,7 +257,10 @@ class BaseScraper:
         )
 
     def find_element(
-        self, by_obj: str, value: str | None, element=None,
+        self,
+        by_obj: str,
+        value: str | None,
+        element=None,
     ) -> WebElement:
         try:
             if not element:
@@ -263,7 +270,10 @@ class BaseScraper:
             return None
 
     def find_elements(
-        self, by_obj: str, value: str | None, element=None,
+        self,
+        by_obj: str,
+        value: str | None,
+        element=None,
     ) -> list[WebElement]:
         try:
             if not element:
@@ -334,7 +344,8 @@ class BaseScraper:
             self.log.debug("Printer set to %s", settings.PDF_PRINTER)
             printer_name = settings.PDF_PRINTER.replace(" ", "_")
             options.set_preference(
-                f"print.printer_{ printer_name }.print_to_file", True,
+                f"print.printer_{ printer_name }.print_to_file",
+                True,
             )
             # Hide all printing metadata so it is easier to use
             # pdf2text
@@ -349,7 +360,8 @@ class BaseScraper:
 
             options.set_preference("browser.download.folderList", 2)
             options.set_preference(
-                "browser.download.manager.showWhenStarting", False,
+                "browser.download.manager.showWhenStarting",
+                False,
             )
             options.set_preference(
                 "browser.download.alwaysOpenInSystemViewerContextMenuItem",
@@ -357,10 +369,12 @@ class BaseScraper:
             )
             options.set_preference("browser.download.alwaysOpenPanel", False)
             options.set_preference(
-                "browser.download.dir", str(self.cache["TEMP"]),
+                "browser.download.dir",
+                str(self.cache["TEMP"]),
             )
             options.set_preference(
-                "browser.helperApps.neverAsk.saveToDisk", "application/pdf",
+                "browser.helperApps.neverAsk.saveToDisk",
+                "application/pdf",
             )
             options.set_preference("pdfjs.disabled", True)
             options.set_preference(
@@ -368,7 +382,8 @@ class BaseScraper:
                 str(self.cache["PDF_TEMP_FILENAME"]),
             )
             options.set_preference(
-                f"print.printer_{ printer_name }.show_print_progress", True,
+                f"print.printer_{ printer_name }.show_print_progress",
+                True,
             )
             if change_ua:
                 options.set_preference(
@@ -454,19 +469,21 @@ class BaseScraper:
             self.browser_login(url)
             if goto_url_after_login:
                 self.browser_visit_page(
-                    url, goto_url_after_login, do_login=False,
+                    url,
+                    goto_url_after_login,
+                    do_login=False,
                 )
         else:
             self.log.debug("Login not required")
 
-    def browser_login(self, expected_url):
+    def browser_login(self, _expected_url):
         if True:
             msg = "Child does not implement browser_login()"
             raise NotImplementedError(
                 msg,
             )
 
-    def browser_detect_handle_interrupt(self, expected_url) -> None:
+    def browser_detect_handle_interrupt(self, _expected_url) -> None:
         if True:
             msg = (
                 "Child does not implement browser_detect_handle_interrupt(self,"
@@ -501,7 +518,9 @@ class BaseScraper:
         for filename in folder.glob("*"):
             os.remove(filename)
 
-    def external_download_image(self, glob: str, url: str, folder: Path | None = None):
+    def external_download_image(
+        self, glob: str, url: str, folder: Path | None = None
+    ):
         """
         Downloads image from url if no file matching glob in folder was found
 
@@ -547,7 +566,9 @@ class BaseScraper:
         # A file was found, nothing downloaded
         return None
 
-    def wait_for_files(self, glob: str, folder: Path | None = None) -> list[Path]:
+    def wait_for_files(
+        self, glob: str, folder: Path | None = None
+    ) -> list[Path]:
         if folder is None:
             folder = self.cache["TEMP"]
         files = list(folder.glob(glob))
@@ -627,7 +648,9 @@ class BaseScraper:
             write_mode += "b"
             kwargs = {}
         with open(  # pylint: disable=unspecified-encoding
-            path, write_mode, **kwargs,
+            path,
+            write_mode,
+            **kwargs,
         ) as file:
             file.write(content)
         if html:
@@ -654,7 +677,8 @@ class BaseScraper:
                     cls.log.error("Encountered error when reading %s", path)
                     msg = f"Encountered error when reading {path}"
                     raise OSError(
-                        msg, jde,
+                        msg,
+                        jde,
                     ) from jde
             elif from_html:
                 contents = fromstring(contents)
@@ -730,7 +754,8 @@ class BaseScraper:
 
         for element_tuple in element_tuples:
             elemets_to_hide += brws.find_elements(
-                By.CSS_SELECTOR, element_tuple,
+                By.CSS_SELECTOR,
+                element_tuple,
             )
 
         brws.execute_script(
@@ -762,7 +787,8 @@ class BaseScraper:
             data_dict[date_name][line["BASE_CUR"]] = (
                 Decimal(math.pow(10, int(line["UNIT_MULT"]))),
                 Price.fromstring(
-                    line["OBS_VALUE"], decimal_separator=",",
+                    line["OBS_VALUE"],
+                    decimal_separator=",",
                 ).amount,
             )
 

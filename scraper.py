@@ -7,9 +7,8 @@ import os
 from bootstrap import python_checks
 
 python_checks()
-
-# pylint: disable=wrong-import-position
-from scrapers import *  # pylint: disable=unused-wildcard-import,wildcard-import
+# ruff: noqa: E402, F403
+from scrapers import *
 from scrapers import settings
 
 if settings.GH_TOKEN:
@@ -19,7 +18,7 @@ logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("scraper")
 
 
-def parse_args():
+def parse_args():  # noqa: PLR0915
     log.debug("Parsing command line arguments")
     parser = argparse.ArgumentParser(
         description="Allows you to scrape and save webshop order info",
@@ -100,21 +99,30 @@ def parse_args():
         parser.add_argument(
             "--force-web-scrape",
             action="store_true",
-            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+            help=(
+                "Force scraping of order(s) even if cached. "
+                "Will probably only update JSON."
+            ),
         )
 
     def force_scrape_item_pdf(parser):
         parser.add_argument(
             "--force-scrape-item-pdf",
             action="store_true",
-            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+            help=(
+                "Force scraping of order(s) even if cached. "
+                "Will probably only update JSON."
+            ),
         )
 
     def force_scrape_order_json(parser):
         parser.add_argument(
             "--force-scrape-order-json",
             action="store_true",
-            help="Force scraping of order(s) even if cached. Will probably only update JSON.",
+            help=(
+                "Force scraping of order(s) even if cached. "
+                "Will probably only update JSON."
+            ),
         )
 
     parser_adafruit = subparsers.add_parser("adafruit")
@@ -141,7 +149,7 @@ def parse_args():
         metavar="YEAR[,YEAR...]",
         help=(
             "What year(s) to get orders for. "
-            f"Default is current year ({datetime.date.today().year})."
+            f"Default is current year ({datetime.date.today().year})."  # noqa: DTZ011
         ),
     )
     parser_amazon.add_argument(
@@ -222,7 +230,6 @@ def main():
     )
     log.debug("Loaded %s based on %s", scraper_class, args.source)
 
-    # TODO: Move this check to individual class inits
     if (
         hasattr(args, "to_std_json")
         and args.to_std_json

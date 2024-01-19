@@ -29,7 +29,7 @@ def parse_args():
 
     parser.add_argument(
         "--after",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
         help="only export order after this date (default 1970-01-01)",
         default="1970-01-01",
     )
@@ -46,7 +46,7 @@ def parse_args():
 
     parser.add_argument(
         "--before",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
         help="only export order before this date (default 3070-01-01)",
         default="3070-01-01",
     )
@@ -68,14 +68,14 @@ def parse_args():
     return args
 
 
-def main():
+def main():  # noqa: PLR0915, C901
     args = parse_args()
 
     conv_data = {}
 
     if not args.nok:
 
-        def convert_to_nok(value, conv, mult):
+        def convert_to_nok(value, _conv, _mult):
             return str(value)
 
         def curr_to_nok(curr):
@@ -94,19 +94,21 @@ def main():
             if mult == "0":
                 return str(
                     (value * conv).quantize(
-                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP,
+                        decimal.Decimal(".00"),
+                        decimal.ROUND_HALF_UP,
                     ),
                 )
-            elif mult == "2":
+            if mult == "2":
                 return str(
                     ((value * conv) / 100).quantize(
-                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP,
+                        decimal.Decimal(".00"),
+                        decimal.ROUND_HALF_UP,
                     ),
                 )
             msg = f"Unexpected mult: {mult}"
             raise ValueError(msg)
 
-        def curr_to_nok(curr):
+        def curr_to_nok(_curr):
             return "NOK"
 
         if not Path("EXR.csv").is_file():
@@ -120,18 +122,19 @@ def main():
         log.info("Loading EXR.csv, this may take some time...")
         with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
             prev_base = None
-            # prev_quote = None
             prev_mult = None
             prev_date = None
             prev_value = None
             reader = csv.DictReader(csvfile, delimiter=";")
             for row in reader:
                 if prev_base and prev_base != row["BASE_CUR"]:
-                    # prev_quote = None
                     prev_mult = None
                     prev_date = None
                     prev_value = None
-                date = datetime.strptime(row["TIME_PERIOD"], "%Y-%m-%d")
+                date = datetime.strptime(
+                    row["TIME_PERIOD"],
+                    "%Y-%m-%d",
+                ).astimezone()
                 if prev_date:
                     exp_date = prev_date + dt.timedelta(days=1)
                     if date != exp_date:
@@ -154,7 +157,6 @@ def main():
                     "value": row["OBS_VALUE"],
                 }
                 prev_base = row["BASE_CUR"]
-                # prev_quote = row["QUOTE_CUR"]
                 prev_mult = row["UNIT_MULT"]
                 prev_date = date
                 prev_value = row["OBS_VALUE"]
@@ -168,11 +170,11 @@ def main():
         if shop_json["metadata"]["name"] == shop_json["metadata"]["branch_name"]
         else shop_json["metadata"]["branch_name"]
     )
-    log.info(f"Shop: {shop}")
+    log.info("Shop: %s", shop)
     output = {}
 
     for order in shop_json["orders"]:
-        date = datetime.strptime(order["date"], "%Y-%m-%d")
+        date = datetime.strptime(order["date"], "%Y-%m-%d").astimezone()
         if date > args.after and date < args.before:
             if order["date"] not in output:
                 output[order["date"]] = []
@@ -291,8 +293,7 @@ def main():
                     ],
                 )
 
-    with open(
-        Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv"),
+    with Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv").open(
         "w",
         newline="",
         encoding="utf-8",

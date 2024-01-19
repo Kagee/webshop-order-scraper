@@ -2,7 +2,6 @@
 import base64
 import contextlib
 import json
-import os
 import re
 import time
 from datetime import datetime
@@ -36,7 +35,11 @@ class KjellScraper(BaseScraper):
     # Methods that use Selenium to scrape webpages in a browser
 
     def browser_save_item_and_attachments(
-        self, order_id, order_cache_dir, item_id, line_item,
+        self,
+        order_id,
+        order_cache_dir,
+        item_id,
+        line_item,
     ):
         item_pdf_file = (
             order_cache_dir / Path(f"item-{item_id}.pdf")
@@ -98,7 +101,11 @@ class KjellScraper(BaseScraper):
             self.write(item_pdf_missing, "1")
 
     def browser_save_item_thumbnail(
-        self, order_id, order_cache_dir, item_id, line_item,
+        self,
+        order_id,
+        order_cache_dir,
+        item_id,
+        line_item,
     ):
         item_thumb_file = (
             order_cache_dir / Path(f"item-thumb-{item_id}.jpg")
@@ -125,15 +132,15 @@ class KjellScraper(BaseScraper):
         if line_item["imageUrl"]["url"] and line_item["imageUrl"]["url"] != "":
             image_url = "https://kjell.com" + line_item["imageUrl"]["url"]
             url_parsed = urlparse(image_url)
-            # image_name = Path(url_parsed.path).name
+
             query_parsed = parse_qs(url_parsed.query, keep_blank_values=True)
             query_parsed.pop("w", None)
             query_parsed.pop("h", None)
             query_parsed["w"] = "900"
             image_url = url_parsed._replace(
-                query=urlencode(query_parsed, True),
+                query=urlencode(query_parsed, doseq=True),
             ).geturl()
-            # self.log.debug("Trying to download thumbnail: %s", image_url)
+            self.log.debug("Trying to download thumbnail: %s", image_url)
             headers = {
                 "User-Agent": (
                     "python/webshop-order-scraper (hildenae@gmail.com)"
@@ -159,29 +166,26 @@ class KjellScraper(BaseScraper):
                         item_thumb_file,
                     )
                     return item_thumb_path
-                else:
-                    self.log.error(
-                        "Thumbnail was not image or JPEG: %s, %s",
-                        kind.mime,
-                        kind.extension,
-                    )
-                    self.write(item_thumb_missing, "1")
-                    return None
-            else:
                 self.log.error(
-                    RED("Failed to identify filetype: %s"),
-                    image_url,
+                    "Thumbnail was not image or JPEG: %s, %s",
+                    kind.mime,
+                    kind.extension,
                 )
                 self.write(item_thumb_missing, "1")
                 return None
-        else:
             self.log.error(
-                RED("Item id %s in order %s, has no thumbnail"),
-                item_id,
-                order_id,
+                RED("Failed to identify filetype: %s"),
+                image_url,
             )
             self.write(item_thumb_missing, "1")
             return None
+        self.log.error(
+            RED("Item id %s in order %s, has no thumbnail"),
+            item_id,
+            order_id,
+        )
+        self.write(item_thumb_missing, "1")
+        return None
 
     def browser_cleanup_item_page(self) -> None:
         brws = self.browser_get_instance()
@@ -246,11 +250,13 @@ class KjellScraper(BaseScraper):
             ),
             (
                 '//h3[contains(text(),"Fri'
-                ' standardfrakt")]/parent::div/parent::div/parent::div/parent::div'
+                ' standardfrakt")]/parent::div/'
+                "parent::div/parent::div/parent::div"
             ),
             (
                 '//h3[contains(text(),"Går bra'
-                ' med")]/parent::div/parent::div/parent::div/parent::div/parent::div'
+                ' med")]/parent::div/parent::div'
+                "/parent::div/parent::div/parent::div"
             ),
             '//h4[contains(text(),"Kombiner med")]/parent::div',
             (
@@ -276,7 +282,6 @@ class KjellScraper(BaseScraper):
             elemets_to_hide += brws.find_elements(By.CSS_SELECTOR, css_selector)
 
         for element in [
-            # (By.TAG_NAME, "hr"),
             (By.TAG_NAME, "iframe"),
         ]:
             elemets_to_hide += brws.find_elements(element[0], element[1])
@@ -295,7 +300,8 @@ class KjellScraper(BaseScraper):
 
     def browser_expand_item_page(self):
         brws = self.browser_get_instance()
-        brws.execute_script("""
+        brws.execute_script(
+            """
                 sections = document.getElementsByTagName("section")
                 for (let i = 0; i < sections.length; i++) {
                     sections[i].style.width = "100%"
@@ -313,9 +319,11 @@ class KjellScraper(BaseScraper):
                 element = document.getElementsByTagName("body")[0]
                 element.style.fontFamily="none";
 
-            """)
+            """,
+        )
         large_images = brws.find_elements(
-            By.XPATH, '//img[contains(@intrinsicsize,"960")]',
+            By.XPATH,
+            '//img[contains(@intrinsicsize,"960")]',
         )
         try:
             thumbs_div = brws.find_element(
@@ -327,7 +335,8 @@ class KjellScraper(BaseScraper):
             thumbs_div = None
 
         content_container = brws.find_element(
-            By.CSS_SELECTOR, "div#content-container",
+            By.CSS_SELECTOR,
+            "div#content-container",
         )
         brws.execute_script(
             """
@@ -359,14 +368,12 @@ class KjellScraper(BaseScraper):
             thumbs_div,
         )
         for text_expand in ["Teknisk informasjon", "Support"]:
-            try:
+            with contextlib.suppress(NoSuchElementException):
                 btn = brws.find_element(
                     By.XPATH,
                     f'//span[contains(text(),"{text_expand}")]/ancestor::button',
                 )
                 btn.click()
-            except NoSuchElementException:
-                pass
 
         figures = brws.find_elements(By.TAG_NAME, "figure")
         for figure in figures:
@@ -409,12 +416,13 @@ class KjellScraper(BaseScraper):
                     ).resolve()
                     if self.can_read(attachement_file):
                         self.log.debug(
-                            "Skipping %s, already downloaded", orig_filename,
+                            "Skipping %s, already downloaded",
+                            orig_filename,
                         )
                         continue
                     for pdf in self.cache["TEMP"].glob("*.pdf"):
                         # Remove old/random PDFs
-                        os.remove(pdf)
+                        pdf.unlink()
                     a_element.click()
                     self.log.debug(
                         "Opening PDF, waiting for it to download in background",
@@ -449,15 +457,14 @@ class KjellScraper(BaseScraper):
         return attachements
 
     def browser_load_order_list(self):
-        #self.log.critical("Scraping is broken, forsing use of cached orderlist")
         if self.options.use_cached_orderlist:
             if self.can_read(self.ORDER_LIST_JSON_FILENAME):
                 return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
-            else:
-                self.log.info("Could not find cached orderlist.")
+            self.log.info("Could not find cached orderlist.")
 
         brws = self.browser_visit_page(
-            self.ORDER_LIST_URL, default_login_detect=False,
+            self.ORDER_LIST_URL,
+            default_login_detect=False,
         )
         time.sleep(2)
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
@@ -494,7 +501,7 @@ class KjellScraper(BaseScraper):
         # transactions = self.browser.execute_script("""
         #    return window.CURRENT_PAGE.transactions;
         #    """)
-        #content = self.browser.find_element_by_tag_name('pre').text
+        # content = self.browser.find_element_by_tag_name('pre').text
         content = self.browser.find_element(By.XPATH, "//div[@id='json']").text
         shop_data = json.loads(content)
         self.write(self.ORDER_LIST_JSON_FILENAME, shop_data, to_json=True)
@@ -550,7 +557,9 @@ class KjellScraper(BaseScraper):
                         msg,
                     )
             self.log.debug(
-                "Item code was from %s to %s chars", code_len_min, code_len_max,
+                "Item code was from %s to %s chars",
+                code_len_min,
+                code_len_max,
             )
             order_dict = {}
             for order in orders["items"]:
@@ -562,23 +571,30 @@ class KjellScraper(BaseScraper):
                 order_cache_dir = self.cache["ORDERS"] / Path(order_id)
                 self.makedir(order_cache_dir)
                 for line_item in order["lineItems"]:
-                    # Item codes are in general 5 numbers. Below that is bags etc.
+                    # Item codes are in general 5 numbers.
+                    # Below that is bags etc.
                     item_id = line_item["code"]
                     # if item_id != "36159":
                     #   continue
-                    if len(item_id) > 4:
+                    if len(item_id) > 4:  # noqa: PLR2004
                         self.log.debug("Order: %s, item: %s", order_id, item_id)
                         self.browser_save_item_thumbnail(
-                            order_id, order_cache_dir, item_id, line_item,
+                            order_id,
+                            order_cache_dir,
+                            item_id,
+                            line_item,
                         )
                         self.browser_save_item_and_attachments(
-                            order_id, order_cache_dir, item_id, line_item,
+                            order_id,
+                            order_cache_dir,
+                            item_id,
+                            line_item,
                         )
         except NoSuchWindowException:
             pass
         self.browser_safe_quit()
 
-    def command_to_std_json(self):
+    def command_to_std_json(self):  # noqa: PLR0912, PLR0915, C901
         """
         Convert all data we have to a JSON that validates with schema,
          and a .zip with all attachements
@@ -599,11 +615,13 @@ class KjellScraper(BaseScraper):
             order_id = orig_order["transactionNumber"]
             try:
                 purchase_datetime = datetime.strptime(
-                    orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S%z",
+                    orig_order["purchaseDate"],
+                    "%Y-%m-%dT%H:%M:%S%z",
                 )
             except ValueError:
                 purchase_datetime = datetime.strptime(
-                    orig_order["purchaseDate"], "%Y-%m-%dT%H:%M:%S.%f%z",
+                    orig_order["purchaseDate"],
+                    "%Y-%m-%dT%H:%M:%S.%f%z",
                 )
 
             order_object = {
@@ -611,13 +629,19 @@ class KjellScraper(BaseScraper):
                 "date": purchase_datetime.date().isoformat(),
                 "items": [],
                 "total": self.get_value_currency(
-                    "total", str(orig_order["total"]), "NOK",
+                    "total",
+                    str(orig_order["total"]),
+                    "NOK",
                 ),
                 "tax": self.get_value_currency(
-                    "tax", str(orig_order["vatAmount"]), "NOK",
+                    "tax",
+                    str(orig_order["vatAmount"]),
+                    "NOK",
                 ),
                 "shipping": self.get_value_currency(
-                    "shipping", str(orig_order["shippingFee"]["exclVat"]), "NOK",
+                    "shipping",
+                    str(orig_order["shippingFee"]["exclVat"]),
+                    "NOK",
                 ),
             }
             order_cache_dir = self.cache["ORDERS"] / Path(order_id)
@@ -627,7 +651,8 @@ class KjellScraper(BaseScraper):
                 if file.name.endswith(".missing"):
                     continue
                 file_item_id = re.match(
-                    r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)", file.name,
+                    r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)",
+                    file.name,
                 ).group(1)
                 files[file_item_id] = {}
                 item_file_type = "pdf"
@@ -644,23 +669,31 @@ class KjellScraper(BaseScraper):
                 item_id = item["code"]
                 if not item["displayName"]:
                     prodname = re.match(
-                        rf".*/([^/]*)-p{item['code']}.*", item["url"],
+                        rf".*/([^/]*)-p{item['code']}.*",
+                        item["url"],
                     ).group(1)
                     item["displayName"] = prodname.replace(
-                        "-", " ",
+                        "-",
+                        " ",
                     ).capitalize()
                 item_dict = {
                     "id": item_id,
                     "name": item["displayName"],
                     "quantity": item["quantity"],
                     "subtotal": self.get_value_currency(
-                        "subtotal", str(item["price"]["currentExclVat"]), "NOK",
+                        "subtotal",
+                        str(item["price"]["currentExclVat"]),
+                        "NOK",
                     ),
                     "vat": self.get_value_currency(
-                        "vat", str(item["price"]["vatAmount"]), "NOK",
+                        "vat",
+                        str(item["price"]["vatAmount"]),
+                        "NOK",
                     ),
                     "total": self.get_value_currency(
-                        "total", str(item["price"]["currentInclVat"]), "NOK",
+                        "total",
+                        str(item["price"]["currentInclVat"]),
+                        "NOK",
                     ),
                 }
                 if item_id in files:

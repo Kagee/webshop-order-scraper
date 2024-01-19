@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 from .base import BaseScraper, PagePart
-from .utils import *
+from .utils import AMBER, BLUE, GREEN, RED
 
 if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
@@ -33,7 +33,8 @@ class PimoroniScraper(BaseScraper):
                 order_divs = self.find_elements(By.CSS_SELECTOR, "div.order")
                 self.log.debug("Found %s orders on this page", len(order_divs))
                 more_pages = self.find_elements(
-                    By.XPATH, "//a[contains(text(),'Next ')]",
+                    By.XPATH,
+                    "//a[contains(text(),'Next ')]",
                 )
                 if not more_pages:
                     self.log.debug("There are no more pages")
@@ -97,7 +98,8 @@ class PimoroniScraper(BaseScraper):
     def browser_detect_handle_interrupt(self, expected_url):
         time.sleep(1)
         country_sel: WebElement = self.find_element(
-            By.XPATH, "//button[text()='Continue']",
+            By.XPATH,
+            "//button[text()='Continue']",
         )
         if country_sel:
             self.log.debug("Accepting country")
@@ -120,7 +122,9 @@ class PimoroniScraper(BaseScraper):
                 xpath_sel = "//form[@id='customer_login']//input[@type='email']"
                 self.log.debug("Looking for %s", xpath_sel)
                 username = wait.until(
-                    EC.presence_of_element_located((By.XPATH, xpath_sel)),
+                    expected_conditions.presence_of_element_located(
+                        (By.XPATH, xpath_sel)
+                    ),
                     "Could not find " + xpath_sel,
                 )
                 username.click()
@@ -132,7 +136,9 @@ class PimoroniScraper(BaseScraper):
                 )
                 self.log.debug("Looking for %s", xpath_sel)
                 password = wait.until(
-                    EC.presence_of_element_located((By.XPATH, xpath_sel)),
+                    expected_conditions.presence_of_element_located(
+                        (By.XPATH, xpath_sel)
+                    ),
                     "Could not find " + xpath_sel,
                 )
                 password.click()
@@ -145,7 +151,7 @@ class PimoroniScraper(BaseScraper):
                 )
                 self.log.debug("Looking for %s", xpath_sel)
                 wait.until(
-                    EC.presence_of_element_located(
+                    expected_conditions.presence_of_element_located(
                         (By.XPATH, xpath_sel),
                     ),
                     "Could not find " + xpath_sel,
@@ -153,7 +159,7 @@ class PimoroniScraper(BaseScraper):
                 self.rand_sleep(0, 2)
 
             except TimeoutException:
-                self.log.error(
+                self.log.exception(
                     "Login to %s was not successful "
                     "because we could not find a expected element..",
                     self.name,

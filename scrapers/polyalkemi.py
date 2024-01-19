@@ -407,7 +407,8 @@ class PolyalkemiScraper(BaseScraper):
                     self.move_file(pdf[0], order_pdf_path)
 
             order_date = datetime.strptime(
-                order_cols[1].text, "%d/%m/%Y",
+                order_cols[1].text,
+                "%d/%m/%Y",
             ).astimezone()
             order_status = order_cols[2].text
 
