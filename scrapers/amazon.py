@@ -1,3 +1,4 @@
+import argparse
 import base64
 import datetime
 import math
@@ -5,29 +6,28 @@ import os
 import re
 import time
 import urllib.request
-import argparse
 from pathlib import Path
-from typing import Dict, Final, List
+from typing import Final
 from urllib.parse import urlparse
 
 from lxml.html.soupparser import fromstring
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
-
+from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+
 from . import settings
 from .base import BaseScraper, PagePart
 
 # pylint: disable=unused-import
-from .utils import RED, BLUE, GREEN, AMBER
+from .utils import AMBER, BLUE, GREEN, RED
 
 
 class AmazonScraper(BaseScraper):
     TLD: Final[str] = "test"
-    YEARS: Final[List]
+    YEARS: Final[list]
     # Xpath to individual order item parent element
     ORDER_CARD_XPATH: Final[str] = "//div[contains(@class, 'js-order-card')]"
 
@@ -44,7 +44,7 @@ class AmazonScraper(BaseScraper):
 
         orig_orders = {}
         for order_list_json in self.cache["ORDER_LISTS"].glob(
-            "order-list-*.json"
+            "order-list-*.json",
         ):
             orig_orders.update(self.read(order_list_json, from_json=True))
 
@@ -139,7 +139,7 @@ class AmazonScraper(BaseScraper):
                             "name": "PDF print",
                             "path": item_orig_dict["pdf"],
                             "comment": "PDF print of item page",
-                        }
+                        },
                     )
 
                 order["items"].append(item_dict)
@@ -155,7 +155,7 @@ class AmazonScraper(BaseScraper):
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
-                        price_re_name_pair[0], value_name, re.IGNORECASE
+                        price_re_name_pair[0], value_name, re.IGNORECASE,
                     ):
                         if price_re_name_pair[1] not in order:
                             self.log.debug(
@@ -183,7 +183,7 @@ class AmazonScraper(BaseScraper):
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
-                        price_re_name_pair[0], value_name, re.IGNORECASE
+                        price_re_name_pair[0], value_name, re.IGNORECASE,
                     ):
                         if price_re_name_pair[1] not in order:
                             self.log.debug(
@@ -215,7 +215,7 @@ class AmazonScraper(BaseScraper):
             ]:
                 for value_name in current_order["pricing"]:
                     if re.search(
-                        price_re_name_pair[0], value_name, re.IGNORECASE
+                        price_re_name_pair[0], value_name, re.IGNORECASE,
                     ):
                         if price_re_name_pair[1] not in order:
                             self.log.debug(
@@ -330,7 +330,7 @@ class AmazonScraper(BaseScraper):
 
         super().setup_cache(Path(f'amazon_{self.TLD.replace(".","_")}'))
         self.YEARS = self.check_year(
-            options.year, options.start_year, options.not_archived
+            options.year, options.start_year, options.not_archived,
         )
         self.setup_templates()
         self.name = f"amazon.{options.tld}"
@@ -340,13 +340,13 @@ class AmazonScraper(BaseScraper):
         order_lists = {}
         for year in self.YEARS:
             order_lists[year] = self.read_json(
-                PagePart.ORDER_LIST_JSON, year=year
+                PagePart.ORDER_LIST_JSON, year=year,
             )
         return order_lists
 
-    def __parse_order(self, order_id: str, order_id_dict: Dict):
+    def __parse_order(self, order_id: str, order_id_dict: dict):
         order_json_filename = self.part_to_filename(
-            PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
+            PagePart.ORDER_DETAILS, order_id=order_id, ext="json",
         )
         if self.can_read(order_json_filename):
             order_id_dict.update(self.read(order_json_filename, from_json=True))
@@ -361,7 +361,7 @@ class AmazonScraper(BaseScraper):
         ):
             self.log.debug("Scraping order id %s", order_id)
             order_id_dict.update(
-                self.browser_scrape_order(order_id, order_cache_dir)
+                self.browser_scrape_order(order_id, order_cache_dir),
             )
 
         self.log.debug("Writing order JSON")
@@ -374,7 +374,7 @@ class AmazonScraper(BaseScraper):
         self.log.debug("View and preload all item images")
 
         img_btns = brws.find_elements(
-            By.XPATH, "//li[contains(@class,'imageThumbnail')]"
+            By.XPATH, "//li[contains(@class,'imageThumbnail')]",
         )
 
         # This will add the attribute data-old-hires for
@@ -398,7 +398,7 @@ class AmazonScraper(BaseScraper):
                 # No highres, get as big a image as possible
                 # Remove all resize etc, leave ayto crop
                 large_image_src = re.sub(
-                    r"(.+\._)[^\.]*(_\.+)", r"\1AC\2", image_src
+                    r"(.+\._)[^\.]*(_\.+)", r"\1AC\2", image_src,
                 )
             # print("Small:", image_src)
             # print("Large: ", large_image_src)
@@ -417,14 +417,14 @@ class AmazonScraper(BaseScraper):
         expanded_content = []
         try:
             expanded_content += brws.find_elements(
-                By.CSS_SELECTOR, ".a-expander-content"
+                By.CSS_SELECTOR, ".a-expander-content",
             )
         except NoSuchElementException:
             self.log.debug("No expanded content found")
             # pass
         try:
             expanded_content += brws.find_elements(
-                By.CSS_SELECTOR, ".a-expander-partial-collapse-container"
+                By.CSS_SELECTOR, ".a-expander-partial-collapse-container",
             )
         except NoSuchElementException:
             self.log.debug("No expanded content found")
@@ -441,7 +441,7 @@ class AmazonScraper(BaseScraper):
                 // Removeing these somehow stops main image
                 // from overflowing the text in PDF
                 if (arguments[2]) {
-                    arguments[2].style.removeProperty("max-height") 
+                    arguments[2].style.removeProperty("max-height")
                     arguments[2].style.removeProperty("max-width")
                 }
                 console.log("expanded_content")
@@ -476,10 +476,10 @@ class AmazonScraper(BaseScraper):
         # Need to wait a tiny bit for the JS
         # connected to this link to load
         time.sleep(2)
-        elements_to_loop: List[WebElement] = None
+        elements_to_loop: list[WebElement] = None
         try:
-            elements_to_loop: List[WebElement] = [
-                brws.find_element(By.XPATH, order_summary_a_xpath)
+            elements_to_loop: list[WebElement] = [
+                brws.find_element(By.XPATH, order_summary_a_xpath),
             ]
         except NoSuchElementException:
             pass
@@ -494,11 +494,11 @@ class AmazonScraper(BaseScraper):
                 # then this should appear
                 invoice_wrapper: WebElement = wait2.until(
                     EC.presence_of_element_located(
-                        (By.XPATH, invoice_wrapper_div_xpath)
+                        (By.XPATH, invoice_wrapper_div_xpath),
                     ),
                     "Timeout waiting for invoice wrapper",
                 )
-                elements_to_loop: List[WebElement] = (
+                elements_to_loop: list[WebElement] = (
                     invoice_wrapper.find_elements(By.TAG_NAME, "a")
                 )
             except (TimeoutException, NoSuchElementException):
@@ -506,11 +506,11 @@ class AmazonScraper(BaseScraper):
         if not elements_to_loop:
             self.log.debug(
                 "We found no order summary, invoices or other attachementes to"
-                " save. This is possibly a bug."
+                " save. This is possibly a bug.",
             )
             raise RuntimeError(
                 "We found no order summary, invoices or other attachementes to"
-                " save. This is possibly a bug."
+                " save. This is possibly a bug.",
             )
 
         self.log.debug("Looping and possibly downloading attachements")
@@ -528,7 +528,7 @@ class AmazonScraper(BaseScraper):
             attachement = {"text": text, "href": href}
 
             text_filename_safe = base64.urlsafe_b64encode(
-                text.encode("utf-8")
+                text.encode("utf-8"),
             ).decode("utf-8")
 
             attachement_file: Path = (
@@ -537,17 +537,17 @@ class AmazonScraper(BaseScraper):
 
             if self.can_read(attachement_file):
                 attachement["file"] = str(
-                    attachement_file.relative_to(self.cache["BASE"]).as_posix()
+                    attachement_file.relative_to(self.cache["BASE"]).as_posix(),
                 )
                 attachement_dict.append(attachement)
                 self.log.debug("We already have the file for '%s' saved", text)
                 continue
 
             order_summary = re.match(
-                r".+(summary/print|order-summary\.html.+print).+", href
+                r".+(summary/print|order-summary\.html.+print).+", href,
             )
             download_pdf = re.match(
-                r".+(/download/.+\.pdf|generated_invoices.+\.pdf.+)", href
+                r".+(/download/.+\.pdf|generated_invoices.+\.pdf.+)", href,
             )
             contact_link = re.match(r".+contact/contact.+", href)
             invoice_unavailable = re.match(r".+legal_invoice_help.+", href)
@@ -562,10 +562,10 @@ class AmazonScraper(BaseScraper):
                 attachement["file"] = str(
                     Path(attachement_file)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )  # keep this
                 self.move_file(
-                    self.cache["PDF_TEMP_FILENAME"], attachement_file
+                    self.cache["PDF_TEMP_FILENAME"], attachement_file,
                 )
                 brws.close()
             elif download_pdf:
@@ -575,7 +575,7 @@ class AmazonScraper(BaseScraper):
                     # Remove old/random PDFs
                     os.remove(pdf)
                 self.log.debug(
-                    "Opening PDF, waiting for it to download in background"
+                    "Opening PDF, waiting for it to download in background",
                 )
                 brws.switch_to.new_window()
                 # Can't use .get(...) here, since Selenium appears to
@@ -599,23 +599,23 @@ class AmazonScraper(BaseScraper):
                         self.log.error(
                             RED(
                                 "We have been waiting for a PDF for 3 minutes,"
-                                " something is wrong..."
-                            )
+                                " something is wrong...",
+                            ),
                         )
-                        raise NotImplementedError()
+                        raise NotImplementedError
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
                 attachement["file"] = str(
                     Path(attachement_file)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )  # keep this
                 self.move_file(pdf[0], attachement_file)
                 brws.close()
             elif contact_link or invoice_unavailable:
                 self.log.debug(
                     "Contact or lnvoice unavailable link, nothing useful to"
-                    " save"
+                    " save",
                 )
             else:
                 self.log.warning(
@@ -627,7 +627,7 @@ class AmazonScraper(BaseScraper):
             brws.switch_to.window(order_handle)
         return invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath
 
-    def __lxml_parse_order_lists_html(self, order_lists_html: Dict) -> None:
+    def __lxml_parse_order_lists_html(self, order_lists_html: dict) -> None:
         order_lists = {}
         if order_lists_html:
             for key in order_lists_html:
@@ -638,14 +638,14 @@ class AmazonScraper(BaseScraper):
                 if len(order_card) == 0:
                     order_lists[year] = {}
                     self.log.info(
-                        "%s has no orders, returning empty dict", year
+                        "%s has no orders, returning empty dict", year,
                     )
                 else:
                     if year not in order_lists:
                         order_lists[year] = {}
                     for order_card in order_card:
                         values = order_card.xpath(
-                            ".//span[contains(@class, 'value')]"
+                            ".//span[contains(@class, 'value')]",
                         )
 
                         value_matches = {
@@ -665,21 +665,21 @@ class AmazonScraper(BaseScraper):
                             if not matches:
                                 raise RuntimeError(
                                     f"We failed to match '{txtvalue}' "
-                                    "to one of id/date/total"
+                                    "to one of id/date/total",
                                 )
 
                             matches_dict = matches.groupdict().copy()
                             if matches.group("date1"):
                                 matches_dict["date"] = (
                                     datetime.datetime.strptime(
-                                        matches.group("date1"), "%d %B %Y"
+                                        matches.group("date1"), "%d %B %Y",
                                     )
                                 )
 
                             elif matches.group("date2"):
                                 matches_dict["date"] = (
                                     datetime.datetime.strptime(
-                                        matches.group("date2"), "%B %d, %Y"
+                                        matches.group("date2"), "%B %d, %Y",
                                     )
                                 )
 
@@ -687,7 +687,7 @@ class AmazonScraper(BaseScraper):
                             del matches_dict["date2"]
 
                             value_matches.update(
-                                {k: v for (k, v) in matches_dict.items() if v}
+                                {k: v for (k, v) in matches_dict.items() if v},
                             )
                         self.log.debug(
                             "Parsing order id %s in order list",
@@ -695,13 +695,13 @@ class AmazonScraper(BaseScraper):
                         )
                         if value_matches["id"] not in order_lists[year]:
                             order_lists[year][value_matches["id"]] = {
-                                "items": {}
+                                "items": {},
                             }
 
                         order_lists[year][value_matches["id"]][
                             "total_from_order_list"
                         ] = self.get_value_currency(
-                            "total", value_matches["total"]
+                            "total", value_matches["total"],
                         )
 
                         order_lists[year][value_matches["id"]][
@@ -723,15 +723,15 @@ class AmazonScraper(BaseScraper):
         if self.remove(json_file):
             self.log.debug("Removed json cache for %s", year)
         cache_file = self.part_to_filename(
-            PagePart.ORDER_LIST_HTML, year=year, start_index=start_index
+            PagePart.ORDER_LIST_HTML, year=year, start_index=start_index,
         )
         self.log.info(
-            "Saving cache to %s and appending to html list", cache_file
+            "Saving cache to %s and appending to html list", cache_file,
         )
         self.rand_sleep()
         return self.write(cache_file, self.browser.page_source, html=True)
 
-    def __load_order_lists_html(self) -> Dict[int, str]:  # FIN
+    def __load_order_lists_html(self) -> dict[int, str]:  # FIN
         """
         Returns the order list html, eithter from disk
         cache or using Selenium to visit the url.
@@ -748,12 +748,12 @@ class AmazonScraper(BaseScraper):
             self.log.debug("Checking orderlist caches")
             for year in self.YEARS:
                 self.log.debug(
-                    "Looking for cache of %s", str(year).capitalize()
+                    "Looking for cache of %s", str(year).capitalize(),
                 )
                 found_year = False
                 if self.has_json(PagePart.ORDER_LIST_JSON, year=year):
                     self.log.debug(
-                        "%s already has json", str(year).capitalize()
+                        "%s already has json", str(year).capitalize(),
                     )
                     json_cache.append(year)
                     found_year = True
@@ -767,7 +767,7 @@ class AmazonScraper(BaseScraper):
                             start_index=start_index,
                         )
                         self.log.debug(
-                            "Looking for cache in: %s", html_filename
+                            "Looking for cache in: %s", html_filename,
                         )
                         if self.can_read(html_filename):
                             found_year = True
@@ -777,7 +777,7 @@ class AmazonScraper(BaseScraper):
                                 start_index,
                             )
                             order_list_html[(year, start_index)] = fromstring(
-                                self.read(html_filename)
+                                self.read(html_filename),
                             )
                             start_index += 10
                         else:
@@ -800,20 +800,20 @@ class AmazonScraper(BaseScraper):
                 ", ".join(str(x) for x in missing_years),
             )
             order_list_html.update(
-                self.browser_scrape_order_lists(missing_years)
+                self.browser_scrape_order_lists(missing_years),
             )
         return order_list_html
 
-    def __save_order_lists_to_json(self, order_lists: Dict) -> None:
+    def __save_order_lists_to_json(self, order_lists: dict) -> None:
         for year in order_lists:
             json_filename = self.part_to_filename(
-                PagePart.ORDER_LIST_JSON, year=year
+                PagePart.ORDER_LIST_JSON, year=year,
             )
             self.write(json_filename, order_lists[year], to_json=True)
             self.log.debug("Saved order list %s to JSON", year)
 
     # Function primarily using Selenium to scrape websites
-    def browser_scrape_order_lists(self, years: List):
+    def browser_scrape_order_lists(self, years: list):
         """
         Uses Selenium to visit, load, save and then
         return the HTML from the order list page
@@ -822,7 +822,7 @@ class AmazonScraper(BaseScraper):
                 order_lists_html (Dict[str]): A list of the HTML from the order list pages
         """
         self.log.debug(
-            "Scraping %s using Selenium", ", ".join(str(x) for x in years)
+            "Scraping %s using Selenium", ", ".join(str(x) for x in years),
         )
         order_list_html = {}
         for year in years:
@@ -830,7 +830,7 @@ class AmazonScraper(BaseScraper):
             start_index = 0
             while more_pages:
                 more_pages = self.browser_scrape_individual_order_list_page(
-                    year, start_index, order_list_html
+                    year, start_index, order_list_html,
                 )
                 start_index += 10
                 self.rand_sleep()
@@ -852,28 +852,28 @@ class AmazonScraper(BaseScraper):
             try:
                 self.rand_sleep()
                 username = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_email"))
+                    EC.presence_of_element_located((By.ID, "ap_email")),
                 )
                 username.send_keys(username_data)
                 self.rand_sleep()
                 wait.until(
-                    EC.element_to_be_clickable(((By.ID, "continue")))
+                    EC.element_to_be_clickable((By.ID, "continue")),
                 ).click()
                 self.rand_sleep()
                 password = wait.until(
-                    EC.presence_of_element_located((By.ID, "ap_password"))
+                    EC.presence_of_element_located((By.ID, "ap_password")),
                 )
                 password.send_keys(password_data)
                 self.rand_sleep()
                 remember = wait.until(
-                    EC.presence_of_element_located((By.NAME, "rememberMe"))
+                    EC.presence_of_element_located((By.NAME, "rememberMe")),
                 )
                 remember.click()
                 self.rand_sleep()
                 sign_in = wait.until(
                     EC.presence_of_element_located(
-                        (By.ID, "auth-signin-button")
-                    )
+                        (By.ID, "auth-signin-button"),
+                    ),
                 )
                 sign_in.click()
                 self.rand_sleep()
@@ -883,8 +883,8 @@ class AmazonScraper(BaseScraper):
                 self.log.error(
                     RED(
                         "Login to Amazon was not successful "
-                        "because we could not find a expected element.."
-                    )
+                        "because we could not find a expected element..",
+                    ),
                 )
                 raise tee
         if (
@@ -895,8 +895,8 @@ class AmazonScraper(BaseScraper):
             self.log.error(
                 RED(
                     "If you want to continue please complete log (CAPTCHA/2FA),"
-                    " and then press enter."
-                )
+                    " and then press enter.",
+                ),
             )
             input()
             if (
@@ -906,15 +906,15 @@ class AmazonScraper(BaseScraper):
                 self.log.error(
                     RED(
                         "Login to Amazon was not successful, even after user"
-                        " interaction."
-                    )
+                        " interaction.",
+                    ),
                 )
-                raise RuntimeError()
+                raise RuntimeError
         self.log.info(GREEN("Login to Amazon was successful."))
 
     def browser_scrape_order(
-        self, order_id: str, order_cache_dir: Path
-    ) -> Dict:
+        self, order_id: str, order_cache_dir: Path,
+    ) -> dict:
         order = {}
         curr_url = self.ORDER_URL_TEMPLATE.format(order_id=order_id)
         self.log.debug("Scraping %s, visiting %s", order_id, curr_url)
@@ -925,7 +925,7 @@ class AmazonScraper(BaseScraper):
         order_handle = brws.current_window_handle
         invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath = (
             self.__save_order_attachements(
-                order_cache_dir, order["attachements"]
+                order_cache_dir, order["attachements"],
             )
         )
 
@@ -933,38 +933,38 @@ class AmazonScraper(BaseScraper):
         time.sleep(2)
 
         shipping_info: str = self.find_element(
-            By.CSS_SELECTOR, ".od-shipping-address-container div"
+            By.CSS_SELECTOR, ".od-shipping-address-container div",
         ).text.strip()
         order["shipping_address"] = shipping_info
         brws.execute_script("window.scrollTo(0,0)")
-        subtotals: List[WebElement] = []
-        subtotals_element: List[WebElement] = self.find_element(
-            By.CSS_SELECTOR, "#od-subtotals"
+        subtotals: list[WebElement] = []
+        subtotals_element: list[WebElement] = self.find_element(
+            By.CSS_SELECTOR, "#od-subtotals",
         )
         try:
             poptrig = subtotals_element.find_element(
-                By.CSS_SELECTOR, ".a-popover-trigger"
+                By.CSS_SELECTOR, ".a-popover-trigger",
             )
             if poptrig:
                 self.log.debug("Found popover - moving to")
                 ActionChains(brws).move_to_element(poptrig).click().perform()
                 time.sleep(1)
-                subtotals: List[WebElement] = self.find_elements(
-                    By.CSS_SELECTOR, ".a-popover-content .a-row"
+                subtotals: list[WebElement] = self.find_elements(
+                    By.CSS_SELECTOR, ".a-popover-content .a-row",
                 )
 
         except NoSuchElementException:
             pass
         subtotals = subtotals + self.find_elements(
-            By.CSS_SELECTOR, "#od-subtotals .a-row"
+            By.CSS_SELECTOR, "#od-subtotals .a-row",
         )
         order["pricing"] = {}
 
         time.sleep(1)
 
         for subtotal in subtotals:
-            price_columns: List[WebElement] = subtotal.find_elements(
-                By.CSS_SELECTOR, "div"
+            price_columns: list[WebElement] = subtotal.find_elements(
+                By.CSS_SELECTOR, "div",
             )
 
             if len(price_columns) == 2:
@@ -974,10 +974,10 @@ class AmazonScraper(BaseScraper):
                 if price_name != "" and price_value != "":
                     # Refunds etc may be hidden, use this trick to get the text
                     price_name = self.browser.execute_script(
-                        "return arguments[0].textContent", price_columns[0]
+                        "return arguments[0].textContent", price_columns[0],
                     ).strip()
                     price_value = self.browser.execute_script(
-                        "return arguments[0].textContent", price_columns[1]
+                        "return arguments[0].textContent", price_columns[1],
                     ).strip()
                 if price_name != "" and price_value != "":
                     self.log.debug(
@@ -986,11 +986,11 @@ class AmazonScraper(BaseScraper):
                         price_value,
                     )
                     order["pricing"][price_name] = self.get_value_currency(
-                        price_name, price_value
+                        price_name, price_value,
                     )
                 else:
                     self.log.warning(
-                        AMBER("Skipping price %s/%s"), price_name, price_value
+                        AMBER("Skipping price %s/%s"), price_name, price_value,
                     )
         if "items" not in order:
             order["items"] = {}
@@ -998,7 +998,7 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Scraping item IDs and thumbnails")
 
         for item in brws.find_elements(
-            By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div"
+            By.XPATH, "//div[contains(@class, 'yohtmlc-item')]/parent::div",
         ):
             item_id = None
             for atag in item.find_elements(By.TAG_NAME, "a"):
@@ -1045,13 +1045,13 @@ class AmazonScraper(BaseScraper):
                 order["items"][item_id]["thumbnail_from_order"] = str(
                     Path(item_thumb_file)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )  # keep this
 
                 order["items"][item_id]["total"] = self.get_value_currency(
                     "price",
                     item.find_element(
-                        By.XPATH, ".//span[contains(@class, 'color-price')]"
+                        By.XPATH, ".//span[contains(@class, 'color-price')]",
                     ).text.strip(),
                 )
                 try:
@@ -1059,7 +1059,7 @@ class AmazonScraper(BaseScraper):
                         item.find_element(
                             By.XPATH,
                             ".//span[contains(@class, 'item-view-qty')]",
-                        ).text.strip()
+                        ).text.strip(),
                     )
                 except NoSuchElementException:
                     order["items"][item_id]["quantity"] = 1
@@ -1067,7 +1067,7 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Saving item pages to PDF and HTML")
         for item_id in order["items"]:
             self.browser_scrape_item_page(
-                item_id, order["items"][item_id], order_id, order_cache_dir
+                item_id, order["items"][item_id], order_id, order_cache_dir,
             )
             brws.switch_to.window(order_handle)
 
@@ -1089,13 +1089,13 @@ class AmazonScraper(BaseScraper):
                 try:
                     wait2.until(
                         EC.presence_of_element_located(
-                            (By.XPATH, invoice_a_xpath)
+                            (By.XPATH, invoice_a_xpath),
                         ),
                         "Timeout waiting for Invoice button",
                     ).click()
                     wait2.until(
                         EC.presence_of_element_located(
-                            (By.XPATH, invoice_wrapper_div_xpath)
+                            (By.XPATH, invoice_wrapper_div_xpath),
                         ),
                         "Timeout waiting for Invoice popup",
                     )
@@ -1104,11 +1104,11 @@ class AmazonScraper(BaseScraper):
                     raise RuntimeError(
                         "Invoice popup did not open as expected, or did not"
                         " find invoice link. We need this open to save it to"
-                        " HTML cache."
+                        " HTML cache.",
                     )
         self.write(
             self.part_to_filename(
-                PagePart.ORDER_DETAILS, order_id=order_id, ext="html"
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="html",
             ),
             brws.page_source,
             html=True,
@@ -1119,7 +1119,7 @@ class AmazonScraper(BaseScraper):
     def browser_scrape_item_page(
         self,
         item_id: str,
-        item_dict: Dict,
+        item_dict: dict,
         order_id: str,
         order_cache_dir: Path,
     ):
@@ -1131,11 +1131,11 @@ class AmazonScraper(BaseScraper):
 
         if "Page Not Found" not in self.browser.title:
             product_title: WebElement = brws.find_element(
-                By.CSS_SELECTOR, "span#productTitle"
+                By.CSS_SELECTOR, "span#productTitle",
             )
             item_dict["name_from_item"] = product_title.text.strip()
             thumbs = brws.find_elements(
-                By.CSS_SELECTOR, "#main-image-container .imgTagWrapper img"
+                By.CSS_SELECTOR, "#main-image-container .imgTagWrapper img",
             )
 
             for thumb in thumbs:
@@ -1147,7 +1147,7 @@ class AmazonScraper(BaseScraper):
             if high_res_thumb_url == "":
                 # Fallback to src if we have no data-old-hires
                 high_res_thumb_url = thumbs[len(thumbs) - 1].get_attribute(
-                    "src"
+                    "src",
                 )
             # _AC_UY300_SX300_
             # 1. Autocrop
@@ -1172,7 +1172,7 @@ class AmazonScraper(BaseScraper):
                 )
                 urllib.request.urlretrieve(large_image_src, item_thumb_file)
             item_dict["thumbnail_from_item"] = str(
-                Path(item_thumb_file).relative_to(self.cache["BASE"]).as_posix()
+                Path(item_thumb_file).relative_to(self.cache["BASE"]).as_posix(),
             )  # keep this
 
             item_html_filename = self.part_to_filename(
@@ -1227,11 +1227,11 @@ class AmazonScraper(BaseScraper):
                 self.browser_cleanup_item_page()
 
                 self.log.debug(
-                    "Saving item %s HTML to %s", item_id, item_html_filename
+                    "Saving item %s HTML to %s", item_id, item_html_filename,
                 )
 
                 self.write(
-                    item_html_filename, self.browser.page_source, html=True
+                    item_html_filename, self.browser.page_source, html=True,
                 )
 
                 self.__append_thumnails_to_item_html()
@@ -1248,7 +1248,7 @@ class AmazonScraper(BaseScraper):
             else:
                 self.log.debug("Found item PDF for %s, not printing", item_id)
             item_dict["pdf"] = str(
-                Path(item_pdf_file).relative_to(self.cache["BASE"]).as_posix()
+                Path(item_pdf_file).relative_to(self.cache["BASE"]).as_posix(),
             )
         else:
             self.log.debug("Item page for %s has been removed", item_id)
@@ -1260,7 +1260,7 @@ class AmazonScraper(BaseScraper):
     def browser_cleanup_item_page(self) -> None:
         brws = self.browser
         self.log.debug("Hide fluff, ads, etc")
-        elemets_to_hide: List[WebElement] = []
+        elemets_to_hide: list[WebElement] = []
 
         for element_xpath in [
             (
@@ -1343,13 +1343,13 @@ class AmazonScraper(BaseScraper):
             elemets_to_hide += brws.find_elements(element[0], element[1])
         try:
             center_col = brws.find_element(
-                By.CSS_SELECTOR, "div.centerColAlign"
+                By.CSS_SELECTOR, "div.centerColAlign",
             )
         except NoSuchElementException:
             # co.jp?
             try:
                 center_col = brws.find_element(
-                    By.CSS_SELECTOR, "div.centerColumn"
+                    By.CSS_SELECTOR, "div.centerColumn",
                 )
             except NoSuchElementException:
                 # amazon fasion / apparel ?
@@ -1375,21 +1375,21 @@ class AmazonScraper(BaseScraper):
         time.sleep(2)
 
     def browser_scrape_individual_order_list_page(
-        self, year, start_index, order_list_html
+        self, year, start_index, order_list_html,
     ):
         """
         Returns False when there are no more pages
         """
         self.log.debug(
-            "Scraping order list for %s, index %s", year, start_index
+            "Scraping order list for %s, index %s", year, start_index,
         )
         if year != "archived":
             curr_url = self.ORDER_LIST_URL_TEMPLATE.format(
-                year=year, start_index=start_index
+                year=year, start_index=start_index,
             )
         else:
             curr_url = self.ORDER_LIST_ARCHIVED_URL_TEMPLATE.format(
-                year=year, start_index=start_index
+                year=year, start_index=start_index,
             )
 
         self.log.debug("Visiting %s", curr_url)
@@ -1401,8 +1401,8 @@ class AmazonScraper(BaseScraper):
         try:
             wait2.until(
                 EC.presence_of_element_located(
-                    (By.XPATH, self.ORDER_CARD_XPATH)
-                )
+                    (By.XPATH, self.ORDER_CARD_XPATH),
+                ),
             )
             # If we found any order items
             # the order list is not empty
@@ -1423,7 +1423,7 @@ class AmazonScraper(BaseScraper):
         self.log.debug("Page %s has orders", curr_url)
         try:
             num_orders = brws.find_element(
-                By.XPATH, "//span[contains(@class, 'num-orders')]"
+                By.XPATH, "//span[contains(@class, 'num-orders')]",
             )
             num_orders: int = int(re.match(r"^(\d+)", num_orders.text).group(1))
         except NoSuchElementException:
@@ -1439,7 +1439,7 @@ class AmazonScraper(BaseScraper):
         next_button_works = False
         try:
             next_button = brws.find_element(
-                By.XPATH, "//li[contains(@class, 'a-last')]"
+                By.XPATH, "//li[contains(@class, 'a-last')]",
             )
             found_next_button = True
             next_button.find_element(By.XPATH, ".//a")
@@ -1454,7 +1454,7 @@ class AmazonScraper(BaseScraper):
             if found_next_button:
                 self.log.critical(
                     'But we found a "Next" button. '
-                    "Don't know how to handle this..."
+                    "Don't know how to handle this...",
                 )
                 raise RuntimeError("See critical error above")
             return False
@@ -1602,16 +1602,16 @@ class AmazonScraper(BaseScraper):
         # File name templates
         self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
             self.cache["ORDER_LISTS"]
-            / Path("order-list-{year}-{start_index}.html")
+            / Path("order-list-{year}-{start_index}.html"),
         )
         self.ORDER_LIST_JSON_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json")
+            self.cache["ORDER_LISTS"] / Path("order-list-{year}.json"),
         )
         self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/order.{ext}"),
         )
         self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}"),
         )
 
     def skip_order(self, order_id: str, count: int) -> bool:
@@ -1622,7 +1622,7 @@ class AmazonScraper(BaseScraper):
                 order_id,
             )
             return True
-        if ((self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS)) or (
+        if (self.AMZ_ORDERS and order_id not in self.AMZ_ORDERS) or (
             order_id in settings.AMZ_ORDERS_SKIP
         ):
             # self.log.info("Skipping order ID %s", order_id)

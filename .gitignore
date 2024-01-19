@@ -21,6 +21,7 @@ output/*.csv
 # folders
 scraper-cache/
 .vscode/
+.vscode*
 logos/
 # symlinks
 .vscode

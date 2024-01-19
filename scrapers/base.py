@@ -1,3 +1,4 @@
+import argparse
 import base64
 import csv
 import datetime
@@ -10,9 +11,6 @@ import random
 import re
 import time
 import zipfile
-import requests
-import filetype
-import argparse
 from datetime import date
 from decimal import Decimal
 from enum import Enum
@@ -20,8 +18,11 @@ from getpass import getpass
 from json.encoder import JSONEncoder
 from logging import Logger
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Union
+from urllib.parse import urlparse
 
+import filetype
+import requests
 from jsonschema import ValidationError, validate
 from lxml.etree import tostring
 from lxml.html.soupparser import fromstring
@@ -31,19 +32,17 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     WebDriverException,
 )
-from urllib.parse import urlparse, urlencode, parse_qs
-
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.remote.webelement import WebElement
-from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 from webdriver_manager.core.driver_cache import DriverCacheManager
+from webdriver_manager.firefox import GeckoDriverManager as FirefoxDriverManager
 
 from . import settings
 
 # pylint: disable=unused-import
-from .utils import AMBER, BLUE, GREEN, RED
+from .utils import AMBER, BLUE, RED
 
 
 class PagePart(Enum):
@@ -53,13 +52,13 @@ class PagePart(Enum):
     ORDER_ITEM = 4
 
 
-class BaseScraper(object):
+class BaseScraper:
     browser: webdriver.Firefox
     browser_status: str = "no-created"
     orders: list
     username: str
     password: str
-    cache: Dict[str, Path]
+    cache: dict[str, Path]
     log: Logger
     options: argparse.Namespace
     LOGIN_PAGE_RE: str = r".+login.example.com.*"
@@ -150,7 +149,7 @@ class BaseScraper(object):
                 )
                 raise NotImplementedError(
                     "Unexpected value/currency:"
-                    f" {name}/{value}/{guess_price.currency}"
+                    f" {name}/{value}/{guess_price.currency}",
                 )
 
         value_curr_dict.update(curr_dict)
@@ -166,7 +165,7 @@ class BaseScraper(object):
         if self.valid_json(structure):
             self.makedir(settings.OUTPUT_FOLDER)
             json_file_path = Path(
-                settings.OUTPUT_FOLDER, self.simple_name + ".json"
+                settings.OUTPUT_FOLDER, self.simple_name + ".json",
             ).resolve()
             zip_file_path = json_file_path.with_suffix(".zip")
             self.log.debug(
@@ -198,7 +197,7 @@ class BaseScraper(object):
             count_files = len(files_from_to)
             if count_files > 0:
                 self.log.debug(
-                    "Copying %s files to %s", count_files, zip_file_path
+                    "Copying %s files to %s", count_files, zip_file_path,
                 )
                 per_count = max(10, math.ceil(count_files / 20))
                 with zipfile.ZipFile(zip_file_path, "a") as zip_file:
@@ -217,7 +216,7 @@ class BaseScraper(object):
                         self.log.debug("Added %s as logo.png", logo.name)
                     else:
                         self.log.warning(
-                            AMBER("Found no %s in logos/"), logo.name
+                            AMBER("Found no %s in logos/"), logo.name,
                         )
             else:
                 self.log.warning(AMBER("No files to add to zip, not creating"))
@@ -228,29 +227,29 @@ class BaseScraper(object):
             self.log.info("Export successful")
 
     def setup_cache(self, base_folder: Path):
-        self.cache: Dict[str, Path] = {
-            "BASE": Path(settings.CACHE_BASE, base_folder)
+        self.cache: dict[str, Path] = {
+            "BASE": Path(settings.CACHE_BASE, base_folder),
         }
         self.cache.update(
             {
                 "ORDER_LISTS": self.cache["BASE"] / Path("order_lists"),
                 "ORDERS": self.cache["BASE"] / Path("orders"),
                 "TEMP": self.cache["BASE"] / Path("temporary"),
-            }
+            },
         )
         for name, path in self.cache.items():
             self.log.debug("Cache folder %s: %s", name, path)
             self.makedir(path)
 
         self.cache.update(
-            {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary.pdf"}
+            {"PDF_TEMP_FILENAME": self.cache["TEMP"] / "temporary.pdf"},
         )
         self.cache.update(
-            {"IMG_TEMP_FILENAME": self.cache["TEMP"] / "temporary.jpg"}
+            {"IMG_TEMP_FILENAME": self.cache["TEMP"] / "temporary.jpg"},
         )
 
     def find_element(
-        self, by_obj: str, value: Union[str, None], element=None
+        self, by_obj: str, value: Union[str, None], element=None,
     ) -> WebElement:
         try:
             if not element:
@@ -260,8 +259,8 @@ class BaseScraper(object):
             return None
 
     def find_elements(
-        self, by_obj: str, value: Union[str, None], element=None
-    ) -> List[WebElement]:
+        self, by_obj: str, value: Union[str, None], element=None,
+    ) -> list[WebElement]:
         try:
             if not element:
                 element = self.browser_get_instance()
@@ -274,8 +273,8 @@ class BaseScraper(object):
             self.log.debug(
                 BLUE(
                     f"Please log in manually to {self.name} and press enter"
-                    " when ready."
-                )
+                    " when ready.",
+                ),
             )
             input()
             return self.browser_get_instance(change_ua), None, None
@@ -316,8 +315,8 @@ class BaseScraper(object):
 
             service = FirefoxService(
                 executable_path=FirefoxDriverManager(
-                    cache_manager=DriverCacheManager()  #  , version="v0.33.0"
-                ).install()
+                    cache_manager=DriverCacheManager(),  #  , version="v0.33.0"
+                ).install(),
             )
             self.log.debug("Initializing browser")
             options = Options()
@@ -331,7 +330,7 @@ class BaseScraper(object):
             self.log.debug("Printer set to %s", settings.PDF_PRINTER)
             printer_name = settings.PDF_PRINTER.replace(" ", "_")
             options.set_preference(
-                f"print.printer_{ printer_name }.print_to_file", True
+                f"print.printer_{ printer_name }.print_to_file", True,
             )
             # Hide all printing metadata so it is easier to use
             # pdf2text
@@ -346,7 +345,7 @@ class BaseScraper(object):
 
             options.set_preference("browser.download.folderList", 2)
             options.set_preference(
-                "browser.download.manager.showWhenStarting", False
+                "browser.download.manager.showWhenStarting", False,
             )
             options.set_preference(
                 "browser.download.alwaysOpenInSystemViewerContextMenuItem",
@@ -354,10 +353,10 @@ class BaseScraper(object):
             )
             options.set_preference("browser.download.alwaysOpenPanel", False)
             options.set_preference(
-                "browser.download.dir", str(self.cache["TEMP"])
+                "browser.download.dir", str(self.cache["TEMP"]),
             )
             options.set_preference(
-                "browser.helperApps.neverAsk.saveToDisk", "application/pdf"
+                "browser.helperApps.neverAsk.saveToDisk", "application/pdf",
             )
             options.set_preference("pdfjs.disabled", True)
             options.set_preference(
@@ -365,7 +364,7 @@ class BaseScraper(object):
                 str(self.cache["PDF_TEMP_FILENAME"]),
             )
             options.set_preference(
-                f"print.printer_{ printer_name }.show_print_progress", True
+                f"print.printer_{ printer_name }.show_print_progress", True,
             )
             if change_ua:
                 options.set_preference(
@@ -393,7 +392,7 @@ class BaseScraper(object):
             if self.browser_status == "created":
                 if self.options.no_close_browser:
                     self.log.info(
-                        "Not closing browser because of --no-close-browser"
+                        "Not closing browser because of --no-close-browser",
                     )
                     return
                 self.log.info("Safely closing browser")
@@ -445,13 +444,13 @@ class BaseScraper(object):
             if not do_login:
                 self.log.critical(
                     "We were told not to log in, but we are at the login url."
-                    " Probably something wrong happened."
+                    " Probably something wrong happened.",
                 )
             # We were redirected to the login page
             self.browser_login(url)
             if goto_url_after_login:
                 self.browser_visit_page(
-                    url, goto_url_after_login, do_login=False
+                    url, goto_url_after_login, do_login=False,
                 )
         else:
             self.log.debug("Login not required")
@@ -459,20 +458,20 @@ class BaseScraper(object):
     def browser_login(self, expected_url):
         if True:
             raise NotImplementedError(
-                "Child does not implement browser_login()"
+                "Child does not implement browser_login()",
             )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
         if True:
             raise NotImplementedError(
                 "Child does not implement browser_detect_handle_interrupt(self,"
-                " expected_url)..."
+                " expected_url)...",
             )
 
     def part_to_filename(self, part: PagePart, **kwargs):
         if True:
             raise NotImplementedError(
-                "Child does not implement _part_to_filename(...)"
+                "Child does not implement _part_to_filename(...)",
             )
 
     def has_json(self, part: PagePart, **kwargs) -> bool:
@@ -535,11 +534,11 @@ class BaseScraper(object):
                 kind.mime,
                 kind.extension,
             )
-            raise NotImplementedError()
+            raise NotImplementedError
         # A file was found, nothing downloaded
         return None
 
-    def wait_for_files(self, glob: str, folder: Path = None) -> List[Path]:
+    def wait_for_files(self, glob: str, folder: Path = None) -> list[Path]:
         if folder is None:
             folder = self.cache["TEMP"]
         files = list(folder.glob(glob))
@@ -552,8 +551,8 @@ class BaseScraper(object):
                 self.log.error(
                     RED(
                         "We have been waiting for a file for 3 minutes,"
-                        " something is wrong..."
-                    )
+                        " something is wrong...",
+                    ),
                 )
                 raise NotImplementedError(f"{folder}/{glob}")
         return files
@@ -620,7 +619,7 @@ class BaseScraper(object):
             write_mode += "b"
             kwargs = {}
         with open(  # pylint: disable=unspecified-encoding
-            path, write_mode, **kwargs
+            path, write_mode, **kwargs,
         ) as file:
             file.write(content)
         if html:
@@ -636,7 +635,7 @@ class BaseScraper(object):
         from_csv=False,
         **kwargs,
     ) -> Any:
-        with open(path, "r", encoding="utf-8-sig") as file:
+        with open(path, encoding="utf-8-sig") as file:
             if from_csv:
                 return list(csv.DictReader(file, **kwargs))
             contents: str = file.read()
@@ -645,8 +644,8 @@ class BaseScraper(object):
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
                     cls.log.error("Encountered error when reading %s", path)
-                    raise IOError(
-                        f"Encountered error when reading {path}", jde
+                    raise OSError(
+                        f"Encountered error when reading {path}", jde,
                     ) from jde
             elif from_html:
                 contents = fromstring(contents)
@@ -675,9 +674,9 @@ class BaseScraper(object):
             )
             counter -= 1
             if counter == 0:
-                raise IOError(
+                raise OSError(
                     f"Waited 40 seconds for {filename} to be stable, never"
-                    " stabilized."
+                    " stabilized.",
                 )
         self.log.debug("File %s appears stable.", filename)
 
@@ -685,20 +684,20 @@ class BaseScraper(object):
         # We are not modifying the values
         # pylint: disable=dangerous-default-value
         self,
-        xpaths: List = [],
-        ids: List = [],
-        css_selectors: List = [],
-        element_tuples: List = [],
+        xpaths: list = [],
+        ids: list = [],
+        css_selectors: list = [],
+        element_tuples: list = [],
     ) -> None:
         if len(xpaths + ids + css_selectors + element_tuples) == 0:
             self.log.debug(
-                "browser_cleanup_page called, but no cleanup defined"
+                "browser_cleanup_page called, but no cleanup defined",
             )
             return
 
         brws = self.browser
         self.log.debug("Hiding elements (fluff, ads, etc.) using Javscript")
-        elemets_to_hide: List[WebElement] = []
+        elemets_to_hide: list[WebElement] = []
 
         for element_xpath in xpaths:
             elemets_to_hide += brws.find_elements(By.XPATH, element_xpath)
@@ -711,7 +710,7 @@ class BaseScraper(object):
 
         for element_tuple in element_tuples:
             elemets_to_hide += brws.find_elements(
-                By.CSS_SELECTOR, element_tuple
+                By.CSS_SELECTOR, element_tuple,
             )
 
         brws.execute_script(
@@ -726,7 +725,7 @@ class BaseScraper(object):
 
     def load_currency_to_nok_dict(
         self,
-    ) -> Dict[date, Dict[str, tuple[int, str]]]:
+    ) -> dict[date, dict[str, tuple[int, str]]]:
         input_csv = settings.CACHE_BASE / "EXR.csv"
         self.log.debug("Loading currency conversion data from %s", input_csv)
         index: dict = self.read(
@@ -743,7 +742,7 @@ class BaseScraper(object):
             data_dict[date_name][line["BASE_CUR"]] = (
                 Decimal(math.pow(10, int(line["UNIT_MULT"]))),
                 Price.fromstring(
-                    line["OBS_VALUE"], decimal_separator=","
+                    line["OBS_VALUE"], decimal_separator=",",
                 ).amount,
             )
 

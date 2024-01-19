@@ -4,7 +4,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Final, List
+from typing import Final
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -18,7 +18,7 @@ class AdafruitScraper(BaseScraper):
     name: Final[str] = "Adafruit"
     simple_name: Final[str] = "adafruit"
 
-    def __init__(self, options: Dict):
+    def __init__(self, options: dict):
         super().__init__(options, __name__)
         self.setup_cache("adafruit")
         self.setup_templates()
@@ -28,11 +28,11 @@ class AdafruitScraper(BaseScraper):
     USAGE:
     ==================================================
     Login to https://www.adafruit.com/
-    Click "Account" -> "My Account" 
+    Click "Account" -> "My Account"
     Click "Order History" (https://www.adafruit.com/order_history)
-    Click "Export Products CSV" and save "products_history.csv" to 
+    Click "Export Products CSV" and save "products_history.csv" to
         {self.cache['BASE']}
-    Click "Export Orders CSV" and save "order_history.csv" to 
+    Click "Export Orders CSV" and save "order_history.csv" to
         {self.cache['BASE']}
         """)
 
@@ -42,7 +42,7 @@ class AdafruitScraper(BaseScraper):
             orders = {}
             for order in orders_dict:
                 order["date_purchased"] = datetime.strptime(
-                    order["date_purchased"], "%Y %m %d %H:%M:%S"
+                    order["date_purchased"], "%Y %m %d %H:%M:%S",
                 )
                 orders[order["order_id"].split(" ")[0]] = order
             return orders
@@ -64,16 +64,16 @@ class AdafruitScraper(BaseScraper):
     def command_scrape(self):
         if not self.can_read(self.ORDERS_CSV):
             self.usage()
-            raise IOError("Could not find order_history.csv")
+            raise OSError("Could not find order_history.csv")
         if not self.can_read(self.ITEMS_CSV):
             self.usage()
-            raise IOError("Could not find products_history.csv")
+            raise OSError("Could not find products_history.csv")
 
         orders = self.combine_orders_items(self.parse_order_csv())
         self.browser_save_item_info(orders)
         for order_id, order in orders.items():
             order_json_filename = self.part_to_filename(
-                PagePart.ORDER_DETAILS, order_id=order_id, ext="json"
+                PagePart.ORDER_DETAILS, order_id=order_id, ext="json",
             )
             self.write(order_json_filename, {order_id: order}, to_json=True)
 
@@ -102,7 +102,7 @@ class AdafruitScraper(BaseScraper):
                 order_object = {
                     "id": order_id,
                     "date": (
-                        datetime.fromisoformat((order_obj["date_purchased"]))
+                        datetime.fromisoformat(order_obj["date_purchased"])
                         .date()
                         .isoformat()
                     ),
@@ -131,10 +131,10 @@ class AdafruitScraper(BaseScraper):
                         "quantity": int(item_data["quantity"]),
                         "thumbnail": item_data["png"],
                         "total": self.get_value_currency(
-                            "price", item_data["price"], "USD"
+                            "price", item_data["price"], "USD",
                         ),
                         "subtotal": self.get_value_currency(
-                            "subtotal", item_data["subtotal"], "USD"
+                            "subtotal", item_data["subtotal"], "USD",
                         ),
                         "attachements": [
                             {
@@ -212,7 +212,7 @@ class AdafruitScraper(BaseScraper):
                 item["pdf"] = str(
                     Path(pdf_filename)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )
                 html_filename = self.part_to_filename(
                     PagePart.ORDER_ITEM,
@@ -223,7 +223,7 @@ class AdafruitScraper(BaseScraper):
                 item["html"] = str(
                     Path(html_filename)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )
                 png_filename = self.part_to_filename(
                     PagePart.ORDER_ITEM,
@@ -234,7 +234,7 @@ class AdafruitScraper(BaseScraper):
                 item["png"] = str(
                     Path(png_filename)
                     .relative_to(self.cache["BASE"])
-                    .as_posix()
+                    .as_posix(),
                 )
                 if (
                     self.can_read(pdf_filename)
@@ -242,7 +242,7 @@ class AdafruitScraper(BaseScraper):
                     and self.can_read(png_filename)
                 ):
                     self.log.debug(
-                        "PDF, HTML and PNG found, will not rescrape."
+                        "PDF, HTML and PNG found, will not rescrape.",
                     )
                     continue
 
@@ -281,7 +281,7 @@ class AdafruitScraper(BaseScraper):
                     counter = 0
                     while True:
                         thumb = self.find_element(
-                            By.CSS_SELECTOR, f"div#gallery-slide-{counter}"
+                            By.CSS_SELECTOR, f"div#gallery-slide-{counter}",
                         )
                         if (
                             not thumb
@@ -308,29 +308,29 @@ class AdafruitScraper(BaseScraper):
                     self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
 
                     self.move_file(
-                        self.cache["PDF_TEMP_FILENAME"], pdf_filename
+                        self.cache["PDF_TEMP_FILENAME"], pdf_filename,
                     )
 
                     self.write(
-                        html_filename, self.browser.page_source, html=True
+                        html_filename, self.browser.page_source, html=True,
                     )
 
     def browser_redesign_page(self) -> None:
         brws = self.browser
 
         guide_link: WebElement = self.find_element(
-            By.CSS_SELECTOR, "a.all-guides-link"
+            By.CSS_SELECTOR, "a.all-guides-link",
         )
-        guide_links_tuple: Dict[str, str] = {}
+        guide_links_tuple: dict[str, str] = {}
         for guide in self.find_elements(
             By.CSS_SELECTOR,
             "div.product-info-tutorial div.product-info-tutorials-text",
         ):
             title: WebElement = guide.find_element(
-                By.CSS_SELECTOR, " div.product-info-added-tutorial-title a"
+                By.CSS_SELECTOR, " div.product-info-added-tutorial-title a",
             )
             tagline: WebElement = guide.find_element(
-                By.CSS_SELECTOR, "div.product-info-tutorials-tagline"
+                By.CSS_SELECTOR, "div.product-info-tutorials-tagline",
             )
             guide_links_tuple[title.get_attribute("href")] = (
                 title.text + ". " + tagline.text
@@ -341,8 +341,8 @@ class AdafruitScraper(BaseScraper):
             href = guide_link.get_attribute("href")
             brws.switch_to.new_window()
             brws.get(href)
-            guide_links: List[WebElement] = self.find_elements(
-                By.CSS_SELECTOR, "a.title"
+            guide_links: list[WebElement] = self.find_elements(
+                By.CSS_SELECTOR, "a.title",
             )
             for link in guide_links:
                 if link.get_attribute("href") not in guide_links_tuple:
@@ -355,8 +355,8 @@ class AdafruitScraper(BaseScraper):
         ]
 
         self.log.debug("Preload slides for all images, return to first")
-        img_buttons: List[WebElement] = self.find_elements(
-            By.CSS_SELECTOR, "button.gallery-thumbnail.indicator-image"
+        img_buttons: list[WebElement] = self.find_elements(
+            By.CSS_SELECTOR, "button.gallery-thumbnail.indicator-image",
         )
         if img_buttons:
             for img_button in img_buttons:
@@ -391,7 +391,7 @@ class AdafruitScraper(BaseScraper):
                 .forEach(function(e){
                     e.style.maxWidth = "unset";
                 })
-             
+
                 document.querySelectorAll("button.gallery-thumbnail")\
                 .forEach(function(e){
                     e.style.background = "unset";
@@ -438,7 +438,7 @@ class AdafruitScraper(BaseScraper):
                     }
                     let img = document.createElement("img");
                     let p = document.createElement("p");
-                    img.src = "https://www.gstatic.com/youtube/" 
+                    img.src = "https://www.gstatic.com/youtube/"
                       + "img/branding/favicon/favicon_144x144.png";
                     img.style.height = "4em";
                     img.style.marginRight = "1em";
@@ -487,8 +487,8 @@ class AdafruitScraper(BaseScraper):
         self.ITEMS_CSV = self.cache["BASE"] / "products_history.csv"
         self.ITEM_URL_TEMPLATE = "https://www.adafruit.com/product/{item_id}"
         self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/order.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/order.{ext}"),
         )
         self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}"),
         )

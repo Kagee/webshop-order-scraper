@@ -1,7 +1,6 @@
 import re
 import time
 from pathlib import Path
-from typing import Dict
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -31,7 +30,7 @@ class PimoroniScraper(BaseScraper):
                 order_divs = self.find_elements(By.CSS_SELECTOR, "div.order")
                 self.log.debug("Found %s orders on this page", len(order_divs))
                 more_pages = self.find_elements(
-                    By.XPATH, "//a[contains(text(),'Next ')]"
+                    By.XPATH, "//a[contains(text(),'Next ')]",
                 )
                 if not more_pages:
                     self.log.debug("There are no more pages")
@@ -44,7 +43,7 @@ class PimoroniScraper(BaseScraper):
     name = "Pimoroni"
     tla = "PIM"
 
-    def __init__(self, options: Dict):
+    def __init__(self, options: dict):
         super().__init__(options, __name__)
         self.setup_cache("pimoroni")
         self.setup_templates()
@@ -88,14 +87,14 @@ class PimoroniScraper(BaseScraper):
         #    set max-sice på siste img til 250px, float => right + margin-left 2em
         # h1 unset font-size, litt vel stor
 
-        # todo:
+        # TODO:
         # url-fiks fra adafruit
         # pylint: disable=unused-import
 
     def browser_detect_handle_interrupt(self, expected_url):
         time.sleep(1)
         country_sel: WebElement = self.find_element(
-            By.XPATH, "//button[text()='Continue']"
+            By.XPATH, "//button[text()='Continue']",
         )
         if country_sel:
             self.log.debug("Accepting country")
@@ -179,13 +178,13 @@ class PimoroniScraper(BaseScraper):
         self.ITEM_URL_TEMPLATE = "https://shop.pimoroni.com/products/{item_name}?variant={item_variant}"
 
         self.ORDER_LIST_HTML_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDER_LISTS"] / Path("/order-list-{page}.html")
+            self.cache["ORDER_LISTS"] / Path("/order-list-{page}.html"),
         )
         self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{key}/order.{ext}")
+            self.cache["ORDERS"] / Path("{key}/order.{ext}"),
         )
         self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}"),
         )
 
     def part_to_filename(self, part: PagePart, **kwargs):

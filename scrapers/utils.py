@@ -1,8 +1,10 @@
 import colored
 from colored import stylize
+
 from . import settings
 
 # pylint: disable=invalid-name
+# ruff: noqa: N802
 
 
 def RED(msg):

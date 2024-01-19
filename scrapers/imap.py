@@ -6,7 +6,7 @@ import re
 from email.policy import default as default_policy
 from getpass import getpass
 from pathlib import Path
-from typing import Dict
+
 from bs4 import BeautifulSoup
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
@@ -14,8 +14,8 @@ from imapclient.exceptions import LoginError
 from . import settings
 
 
-class IMAPScraper(object):
-    def __init__(self, options: Dict) -> None:
+class IMAPScraper:
+    def __init__(self, options: dict) -> None:
         self.log = logging.getLogger(__name__)
         self.log.setLevel(options.loglevel)
 
@@ -28,7 +28,7 @@ class IMAPScraper(object):
         imap_password = (
             getpass(
                 f"Enter password for {imap_username} at"
-                f" {settings.IMAP_SERVER}: "
+                f" {settings.IMAP_SERVER}: ",
             )
             if not settings.IMAP_PASSWORD
             else settings.IMAP_PASSWORD
@@ -40,7 +40,7 @@ class IMAPScraper(object):
             settings.IMAP_PORT,
         )
         imap_client = IMAPClient(
-            host=settings.IMAP_SERVER, port=settings.IMAP_PORT
+            host=settings.IMAP_SERVER, port=settings.IMAP_PORT,
         )
         try:
             imap_client.login(imap_username, imap_password)
@@ -64,7 +64,7 @@ class IMAPScraper(object):
                             for f in settings.IMAP_FLAGS
                             if flag.decode("utf-8") == f
                         )
-                    ]
+                    ],
                 ):
                     self.log.debug(
                         "Folder '%s' has one of flags '%s'",
@@ -140,11 +140,11 @@ class IMAPScraper(object):
             imap_client.select_folder(message[0])
 
             for uid, message_data in imap_client.fetch(
-                set(message[1]), "RFC822"
+                set(message[1]), "RFC822",
             ).items():
                 email_message: email.message.EmailMessage = (
                     email.message_from_bytes(
-                        message_data[b"RFC822"], policy=default_policy
+                        message_data[b"RFC822"], policy=default_policy,
                     )
                 )
                 matches = None
@@ -164,7 +164,7 @@ class IMAPScraper(object):
                         '%s Nothing found in message with title "%s"',
                         uid,
                         email.header.decode_header(
-                            email_message.get("Subject")
+                            email_message.get("Subject"),
                         )[0][0],
                     )
 
@@ -177,6 +177,6 @@ class IMAPScraper(object):
         except FileExistsError:
             pass
         with open(
-            imap_folder / "imap-ebay.json", "w", encoding="utf-8"
+            imap_folder / "imap-ebay.json", "w", encoding="utf-8",
         ) as file:
             file.write(json.dumps(list(orders), indent=4))

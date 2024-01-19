@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-from locale import currency
-from tomlkit import item
+# ruff: noqa: T201, E402
 from bootstrap import python_checks
 
 python_checks()
 
 # pylint: disable=wrong-import-position,wrong-import-order
-from scrapers import settings
-
 import argparse
-from pathlib import Path
-from scrapers.base import BaseScraper
-from decimal import Decimal
-from datetime import datetime
-
 import logging.config
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+
+from scrapers import settings
+from scrapers.base import BaseScraper
 
 logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("shopstats")
@@ -61,7 +59,7 @@ def main():
     num_order = len(shop_json["orders"])
     num_items = 0
     max_num_items = 0
-    earliest_date = datetime.now().strftime("%Y-%m-%d")
+    earliest_date = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
     total_total = {}
     for order in shop_json["orders"]:
         if order["date"] < earliest_date:
@@ -74,7 +72,11 @@ def main():
             order["total"]["currency"]
         ] + Decimal(order["total"]["value"])
 
-    branch = "" if shop_json['metadata']['name'] == shop_json['metadata']['branch_name'] else f" ({shop_json['metadata']['branch_name']})"
+    branch = (
+        ""
+        if shop_json["metadata"]["name"] == shop_json["metadata"]["branch_name"]
+        else f" ({shop_json['metadata']['branch_name']})"
+    )
     print(f"Shop: {shop_json['metadata']['name']}{branch}")
     print(f"Number of orders: {num_order}")
     print(f"Number of items (possible duplicates): {num_items}")
@@ -83,11 +85,11 @@ def main():
     if len(total_total) > 1:
         total_string = []
         for currency in total_total:
-            total_string.append("%.2f %s" % (total_total[currency], currency))
+            total_string.append(f"{total_total[currency]:.2f} {currency}")  # noqa: PERF401
         print("Total total: ", " + ".join(total_string))
     else:
         for currency in total_total:
-            print("Total total: %.2f %s" % (total_total[currency], currency))
+            print(f"Total total: {total_total[currency]:.2f} {currency}")
 
 
 if __name__ == "__main__":

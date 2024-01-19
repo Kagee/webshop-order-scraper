@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-import os
 import argparse
 import datetime
 import logging.config
+import os
+
 from bootstrap import python_checks
 
 python_checks()
@@ -12,7 +13,7 @@ from scrapers import *  # pylint: disable=unused-wildcard-import,wildcard-import
 from scrapers import settings
 
 if settings.GH_TOKEN:
-    os.environ['GH_TOKEN'] = settings.GH_TOKEN
+    os.environ["GH_TOKEN"] = settings.GH_TOKEN
 
 logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("scraper")
@@ -192,7 +193,7 @@ def parse_args():
 
     parser_pimoroni = subparsers.add_parser("pimoroni")
     use_cached_orderlist(parser_pimoroni)
-    
+
     parser_komplett = subparsers.add_parser("komplett")
     use_cached_orderlist(parser_komplett)
     to_std_json(parser_komplett)

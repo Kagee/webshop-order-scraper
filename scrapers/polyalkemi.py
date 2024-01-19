@@ -1,43 +1,28 @@
 # pylint: disable=unused-import
-import base64
-import os
+import contextlib
+import decimal
 import re
 import time
-import decimal
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Final, List, Union
-from urllib.parse import urlparse, urlencode, parse_qs
+from typing import Final
 
-import requests
 import filetype
-
-
-from lxml.etree import tostring
-from lxml.html import HtmlElement
-from lxml.html.soupparser import fromstring
+import requests
 from selenium.common.exceptions import (
-    ElementClickInterceptedException,
     NoSuchElementException,
     NoSuchWindowException,
-    StaleElementReferenceException,
-    TimeoutException,
 )
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
 
-from . import settings
 from .base import BaseScraper
 
 # pylint: disable=unused-import
-from .utils import AMBER, BLUE, GREEN, RED
+from .utils import AMBER, RED
 
 
 class PolyalkemiScraper(BaseScraper):
+    # pylint: disable=invalid-name
     tla: Final[str] = "PAI"
     name: Final[str] = "Polyalkemi.no"
     simple_name: Final[str] = "polyalkemi.no"
@@ -61,12 +46,13 @@ class PolyalkemiScraper(BaseScraper):
 
     # Methods that use Selenium to scrape webpages in a browser
     def browser_cleanup_item_page(self):
-        self.browser.execute_script("""
+        self.browser.execute_script(
+            """
             function rx(xpath) {
                 f = document.evaluate(
-                    xpath, 
-                    document.body, 
-                    null, 
+                    xpath,
+                    document.body,
+                    null,
                     XPathResult.FIRST_ORDERED_NODE_TYPE
                     ).singleNodeValue
                 if (f) {
@@ -76,40 +62,59 @@ class PolyalkemiScraper(BaseScraper):
                 }
             }
 
-            imgs=Array.from(document.querySelectorAll(".product-thumbnail-images img"));
+            imgs=Array.from(
+                document.querySelectorAll(".product-thumbnail-images img")
+                );
             var img = document.createElement('img');
             img.src = imgs[0].src.replace('-100x100','');
             document.querySelector("h1").appendChild(img);
-            imgs.forEach((el) => { 
+            imgs.forEach((el) => {
                 var img = document.createElement('img');
                 img.src = el.src.replace('-100x100','');
                 document.querySelector("body").appendChild(img);
             })
 
             rx("//a[contains(@href,'handlekonto')]//parent::div//parent::div");
-            rx("//div[contains(@class, 'product-add-to-cart')]/parent::div/parent::div");
-            rx("//h2[contains(text(), 'Tilsvarende produkter:')]//ancestor::section");
-            rx("//div[@id='product-images']/parent::div/parent::div/parent::div/parent::div/parent::div/parent::div/parent::div")
+            rx(
+                "//div[contains(@class, 'product-add-to-cart')]" +
+                "/parent::div/parent::div"
+                );
+            rx(
+                "//h2[contains(text(), 'Tilsvarende produkter:')]" +
+                "//ancestor::section"
+                );
+            rx(
+                "//div[@id='product-images']/parent::div/parent::div/" +
+                "parent::div/parent::div/parent::div/parent::div/parent::div"
+                )
             rx("//button[text()='Legg i handlekurv']/parent::div/parent::div")
-            rx("//div[contains(@class, '_product_search')]/parent::div/parent::div")
+            rx(
+                "//div[contains(@class, '_product_search')]" +
+                "/parent::div/parent::div"
+                );
             document.querySelector("footer").parentElement.remove();
             document.querySelector(".tabs").remove();
-            document.querySelectorAll(".woocommerce-product-rating").forEach((el) => { el.remove(); })
+            document.querySelectorAll(
+                ".woocommerce-product-rating").forEach((el) => {
+                    el.remove();
+                    }
+                )
             document.querySelector(".elementor-location-header").remove();
 
             document.querySelectorAll("*").forEach(
-                (el) => { 
+                (el) => {
                     el.style.fontFamily = "unset";
-                    el.className = ""; 
+                    el.className = "";
                     }
-            ) 
-            Array.from(document.getElementsByTagName('img')).forEach((el) => { 
+            )
+            Array.from(document.getElementsByTagName('img')).forEach((el) => {
                     if (el.height > 900) {
-                    el.style.maxHeight = '900px'; 
-                    }  
-                } 
-            );            
-        """)
+                    el.style.maxHeight = '900px';
+                    }
+                }
+            );
+        """,
+        )
 
     def check_order_files(self, order_id):
         order_json = self.ORDER_JSON_TP.format(order_id=order_id)
@@ -122,39 +127,43 @@ class PolyalkemiScraper(BaseScraper):
         for item in order_dict["items"]:
             item_id = item["id"]
             if not self.skip_order_pdf and not self.can_read(
-                self.ORDER_INVOICE_TP.format(order_id=order_id)
+                self.ORDER_INVOICE_TP.format(order_id=order_id),
             ):
                 self.log.debug(
-                    "Order Invoice PDF missing for order %s", order_id
+                    "Order Invoice PDF missing for order %s",
+                    order_id,
                 )
                 if self.options.use_cached_orderlist:
                     self.log.error(
                         RED(
                             "Can not download order invoice while using cached"
-                            " orderlist"
-                        )
+                            " orderlist",
+                        ),
                     )
-                    raise NotImplementedError(
+                    msg = (
                         "Can not download order invoice while using cached"
                         " orderlist"
+                    )
+                    raise NotImplementedError(
+                        msg,
                     )
                 return False
 
             if not self.skip_order_pdf and not self.can_read(
-                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item_id)
+                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item_id),
             ):
                 self.log.debug("PDF missing for item %s", item_id)
                 return False
 
             if not self.skip_item_thumb and not self.can_read(
-                self.ITEM_THUMB_TP.format(order_id=order_id, item_id=item_id)
+                self.ITEM_THUMB_TP.format(order_id=order_id, item_id=item_id),
             ):
                 self.log.debug("Thumb missing for item %s", item_id)
                 return False
 
         return True
 
-    def browser_get_order_details(self, order):
+    def browser_get_order_details(self, order):  # noqa: PLR0915
         order_id = order["id"]
         order_dir = self.ORDER_DIR_TP.format(order_id=order_id)
         self.makedir(order_dir)
@@ -174,27 +183,28 @@ class PolyalkemiScraper(BaseScraper):
 
         self.browser_visit(order_url)
         self.log.debug("Scraping order details")
-        try:
+        with contextlib.suppress(AttributeError):
             order_details["shipper"] = self.find_element(
-                By.XPATH, '//span[@class="beklager"]//strong'
+                By.XPATH,
+                '//span[@class="beklager"]//strong',
             ).text
-        except AttributeError:
-            pass
-        try:
+        with contextlib.suppress(AttributeError):
             order_details["trackingnumber"] = self.find_element(
-                By.XPATH, '//span[@class="beklager"]//a'
+                By.XPATH,
+                '//span[@class="beklager"]//a',
             ).text
-        except AttributeError:
-            pass
         addresses = self.find_elements(By.XPATH, "//address")
         order_details["billing_address"] = addresses[0].text
         order_details["shipping_address"] = addresses[1].text
 
         order_detail_table = self.find_element(
-            By.CSS_SELECTOR, "table.order_details"
+            By.CSS_SELECTOR,
+            "table.order_details",
         )
         item_rows = self.find_elements(
-            By.CSS_SELECTOR, "tbody tr", order_detail_table
+            By.CSS_SELECTOR,
+            "tbody tr",
+            order_detail_table,
         )
         order_details["items"] = []
         for item_row in item_rows:
@@ -207,8 +217,10 @@ class PolyalkemiScraper(BaseScraper):
             item_name = a_element.text
             item_count = int(
                 self.find_element(
-                    By.CSS_SELECTOR, "strong", tds[0]
-                ).text.replace("\u00d7 ", "")
+                    By.CSS_SELECTOR,
+                    "strong",
+                    tds[0],
+                ).text.replace("\u00d7 ", ""),
             )
             order_details["items"].append(
                 {
@@ -216,14 +228,18 @@ class PolyalkemiScraper(BaseScraper):
                     "name": item_name,
                     "count": item_count,
                     "url": url,
-                }
+                },
             )
         summary_rows = self.find_elements(
-            By.CSS_SELECTOR, "tfoot tr", order_detail_table
+            By.CSS_SELECTOR,
+            "tfoot tr",
+            order_detail_table,
         )
         for summary_row in summary_rows:
             what = self.find_element(
-                By.CSS_SELECTOR, "th", summary_row
+                By.CSS_SELECTOR,
+                "th",
+                summary_row,
             ).text.lower()[:-1]
             about = self.find_element(By.CSS_SELECTOR, "td", summary_row)
             if what == "delsum":
@@ -235,7 +251,9 @@ class PolyalkemiScraper(BaseScraper):
                 span_amount = self.find_element(By.CSS_SELECTOR, "span", about)
                 order_details["total"] = span_amount.text
                 span_tax = self.find_element(
-                    By.CSS_SELECTOR, "small span", about
+                    By.CSS_SELECTOR,
+                    "small span",
+                    about,
                 )
                 order_details["tax"] = span_tax.text
             elif what == "betalingsmetode":
@@ -248,6 +266,7 @@ class PolyalkemiScraper(BaseScraper):
         self.write(order_json, order_details, to_json=True)
         self.log.debug("Saved order #%s to json", order_id)
         self.browser.switch_to.window(handle)
+        return None
 
     def browser_save_item_page_pdf_and_thumb(self, order_id, item):
         brws = self.browser_get_instance()
@@ -255,17 +274,21 @@ class PolyalkemiScraper(BaseScraper):
 
         if not self.skip_item_thumb:
             item_thumb_file = Path(
-                self.ITEM_THUMB_TP.format(order_id=order_id, item_id=item["id"])
+                self.ITEM_THUMB_TP.format(
+                    order_id=order_id,
+                    item_id=item["id"],
+                ),
             ).resolve()
             if not self.can_read(item_thumb_file):
                 brws.switch_to.new_window("tab")
                 brws.get(item["url"])
                 tab_open = True
                 thumb_element = self.find_element(
-                    By.CSS_SELECTOR, "figure a img"
+                    By.CSS_SELECTOR,
+                    "figure a img",
                 )
                 thumb_url = thumb_element.get_attribute("src")
-                large_thumb_url = re.sub("-\d*x\d*.png$", ".png", thumb_url)
+                large_thumb_url = re.sub(r"-\d*x\d*.png$", ".png", thumb_url)
                 headers = {
                     "User-Agent": (
                         "python/webshop-order-scraper (hildenae@gmail.com)"
@@ -273,7 +296,9 @@ class PolyalkemiScraper(BaseScraper):
                 }
                 self.log.debug("Downloading item thumb")
                 response = requests.get(
-                    url=large_thumb_url, headers=headers, timeout=10
+                    url=large_thumb_url,
+                    headers=headers,
+                    timeout=10,
                 )
                 self.remove(item_thumb_file)
                 self.write(
@@ -291,12 +316,12 @@ class PolyalkemiScraper(BaseScraper):
                         kind.mime,
                         kind.extension,
                     )
-                    raise NotImplementedError()
+                    raise NotImplementedError
                 self.move_file(self.cache["IMG_TEMP_FILENAME"], item_thumb_file)
 
         if not self.skip_item_pdf:
             item_pdf_file = Path(
-                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item["id"])
+                self.ITEM_PDF_TP.format(order_id=order_id, item_id=item["id"]),
             ).resolve()
             if not self.can_read(item_pdf_file):
                 self.log.debug("Making PDF for item %s", item["id"])
@@ -306,7 +331,7 @@ class PolyalkemiScraper(BaseScraper):
                 self.browser_cleanup_item_page()
                 self.log.debug("Printing page to PDF")
                 for pdf in self.cache["TEMP"].glob("*.pdf"):
-                    os.remove(pdf)
+                    pdf.unlink()
                 brws.execute_script("window.print();")
                 self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
                 self.move_file(self.cache["PDF_TEMP_FILENAME"], item_pdf_file)
@@ -319,10 +344,11 @@ class PolyalkemiScraper(BaseScraper):
         try:
             self.log.debug("Looking for login form")
             brws.find_element(
-                By.CSS_SELECTOR, "form.login"
+                By.CSS_SELECTOR,
+                "form.login",
             )  # No ned to put in variable
             self.log.error(
-                RED("You need to login manually. Press enter when completed.")
+                RED("You need to login manually. Press enter when completed."),
             )
             input()
             brws.get(expected_url)
@@ -334,9 +360,8 @@ class PolyalkemiScraper(BaseScraper):
             if self.can_read(self.ORDER_LIST_FN):
                 self.log.info("Using cached orderlist.")
                 return self.read(self.ORDER_LIST_FN, from_json=True)
-            else:
-                self.log.info("Could not find cached orderlist.")
-                self.options.use_cached_orderlist = False
+            self.log.info("Could not find cached orderlist.")
+            self.options.use_cached_orderlist = False
         else:
             self.log.info("Not using cached orderlist.")
             self.options.use_cached_orderlist = False
@@ -344,7 +369,8 @@ class PolyalkemiScraper(BaseScraper):
         self.browser_visit(self.ORDER_LIST_URL)
         brws = self.browser_get_instance()
         orders_table = brws.find_element(
-            By.CSS_SELECTOR, "table.woocommerce-orders-table"
+            By.CSS_SELECTOR,
+            "table.woocommerce-orders-table",
         )
         order_rows = orders_table.find_elements(By.CSS_SELECTOR, "tbody tr")
         orders = []
@@ -361,14 +387,15 @@ class PolyalkemiScraper(BaseScraper):
                 if not self.can_read(order_pdf_path):
                     self.log.debug("Order invoice missing")
                     order_faktura = order_cols[4].find_element(
-                        By.XPATH, "//a[contains(text(),'Faktura')]"
+                        By.XPATH,
+                        "//a[contains(text(),'Faktura')]",
                     )
 
                     for pdf in self.cache["TEMP"].glob("*.pdf"):
                         # Remove old/random PDFs
-                        os.remove(pdf)
+                        pdf.unlink()
                     self.log.debug(
-                        "Opening PDF, waiting for it to download in background"
+                        "Opening PDF, waiting for it to download in background",
                     )
                     order_faktura.click()
                     time.sleep(2)
@@ -379,7 +406,9 @@ class PolyalkemiScraper(BaseScraper):
                     self.wait_for_stable_file(pdf[0])
                     self.move_file(pdf[0], order_pdf_path)
 
-            order_date = datetime.strptime(order_cols[1].text, "%d/%m/%Y")
+            order_date = datetime.strptime(
+                order_cols[1].text, "%d/%m/%Y",
+            ).astimezone()
             order_status = order_cols[2].text
 
             total_re = r"(-?)kr (\d*.*\.\d*) for (-?)(\d*) produkt(?:er|)"
@@ -401,7 +430,7 @@ class PolyalkemiScraper(BaseScraper):
                     "status": order_status,
                     "total": str(order_total),
                     "item_count": item_count,
-                }
+                },
             )
         self.write(self.ORDER_LIST_FN, orders, to_json=True)
         self.browser_visit(self.ORDER_LIST_URL)
@@ -416,12 +445,12 @@ class PolyalkemiScraper(BaseScraper):
             orders = self.browser_get_order_list_and_faktura()
             for order in orders:
                 self.browser_get_order_details(order)
-        except NoSuchWindowException as nswe:
-            self.log.error("Closed browser because of %s", nswe)
+        except NoSuchWindowException:
+            self.log.exception("Closed browser because exception")
         self.log.info("Scrape complete")
         self.browser_safe_quit()
 
-    def command_to_std_json(self):
+    def command_to_std_json(self):  # noqa: C901
         """
         Convert all data we have to a JSON that validates with schema,
          and a .zip with all attachements
@@ -455,22 +484,30 @@ class PolyalkemiScraper(BaseScraper):
                 "id": order_orig["id"],
                 "date": (
                     datetime.strptime(order_orig["date"], "%Y-%m-%d %H:%M:%S")
+                    .astimezone()
                     .date()
                     .isoformat()
                 ),
                 "total": self.get_value_currency(
-                    "total", order_details_dict["total"], "NOK"
+                    "total",
+                    order_details_dict["total"],
+                    "NOK",
                 ),
                 "subtotal": self.get_value_currency(
-                    "subtotal", order_details_dict["subtotal"], "NOK"
+                    "subtotal",
+                    order_details_dict["subtotal"],
+                    "NOK",
                 ),
                 "tax": self.get_value_currency(
-                    "tax", order_details_dict["tax"], "NOK"
+                    "tax",
+                    order_details_dict["tax"],
+                    "NOK",
                 ),
             }
             if order_orig["item_count"] < 0:
                 # The price parser does not currently support negative values.
-                # We force the values to negative anywhere the item count is negative.
+                # We force the values to negative anywhere the item count
+                # is negative.
                 for value_name in ["total", "subtotal", "tax"]:
                     if order[value_name]["value"][0] != "-":
                         order[value_name]["value"] = (
@@ -485,8 +522,10 @@ class PolyalkemiScraper(BaseScraper):
 
             # Not part of negative orders
             if "shipping" in order_details_dict:
-                order["shipping"]: self.get_value_currency(
-                    "shipping", order_details_dict["shipping"], "NOK"
+                order["shipping"] = self.get_value_currency(
+                    "shipping",
+                    order_details_dict["shipping"],
+                    "NOK",
                 )
 
             order["items"] = []
@@ -505,9 +544,10 @@ class PolyalkemiScraper(BaseScraper):
                             "path": str(
                                 Path(
                                     self.ITEM_PDF_TP.format(
-                                        order_id=order["id"], item_id=item["id"]
-                                    )
-                                ).relative_to(self.cache["BASE"])
+                                        order_id=order["id"],
+                                        item_id=item["id"],
+                                    ),
+                                ).relative_to(self.cache["BASE"]),
                             ),
                             "comment": "PDF print of item page",
                         },
@@ -517,9 +557,10 @@ class PolyalkemiScraper(BaseScraper):
                     item_dict["thumbnail"] = str(
                         Path(
                             self.ITEM_THUMB_TP.format(
-                                order_id=order["id"], item_id=item["id"]
-                            )
-                        ).relative_to(self.cache["BASE"])
+                                order_id=order["id"],
+                                item_id=item["id"],
+                            ),
+                        ).relative_to(self.cache["BASE"]),
                     )
 
                 order["items"].append(item_dict)
@@ -531,9 +572,9 @@ class PolyalkemiScraper(BaseScraper):
                         "path": str(
                             Path(
                                 self.ORDER_INVOICE_TP.format(
-                                    order_id=order["id"]
-                                )
-                            ).relative_to(self.cache["BASE"])
+                                    order_id=order["id"],
+                                ),
+                            ).relative_to(self.cache["BASE"]),
                         ),
                         "comment": "PDF print of item page",
                     },
@@ -558,7 +599,7 @@ class PolyalkemiScraper(BaseScraper):
         self.output_schema_json(structure)
 
     # Class init
-    def __init__(self, options: Dict):
+    def __init__(self, options: dict):
         super().__init__(options, __name__)
         # pylint: disable=invalid-name
         self.simple_name = "polyalkemi.no"

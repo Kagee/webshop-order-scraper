@@ -1,7 +1,6 @@
 import re
 import time
 from pathlib import Path
-from typing import Dict
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -9,8 +8,8 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from .base import BaseScraper, PagePart
 from . import settings
+from .base import BaseScraper, PagePart
 from .utils import *
 
 
@@ -37,7 +36,7 @@ class EbayScraper(BaseScraper):
             if isinstance(order_id, list):
                 # Old style transid, itemid order data
                 order_url = self.ORDER_URL_TEMPLATE_TRANS.format(
-                    order_trans_id=order_id[0], order_item_id=order_id[1]
+                    order_trans_id=order_id[0], order_item_id=order_id[1],
                 )
                 key = f"{order_id[0]}-{order_id[1]}"
             elif isinstance(order_id, str):
@@ -47,10 +46,10 @@ class EbayScraper(BaseScraper):
                 key = order_id
 
             order_html_filename = self.ORDER_FILENAME_TEMPLATE.format(
-                key=key, ext="html"
+                key=key, ext="html",
             )
             order_json_filename = self.ORDER_FILENAME_TEMPLATE.format(
-                key=key, ext="json"
+                key=key, ext="json",
             )
 
             if settings.EBY_ORDERS and key not in settings.EBY_ORDERS:
@@ -72,13 +71,13 @@ class EbayScraper(BaseScraper):
             self.log.debug("Visiting %s", order_url)
             self.browser_visit_page_v2(order_url)
             for order_box in self.find_elements(
-                By.CSS_SELECTOR, "div.order-box"
+                By.CSS_SELECTOR, "div.order-box",
             ):
                 section_data_items = order_box.find_element(
-                    By.CSS_SELECTOR, "div.order-info div.section-data-items"
+                    By.CSS_SELECTOR, "div.order-info div.section-data-items",
                 )
                 shipment_info = order_box.find_element(
-                    By.CSS_SELECTOR, "div.shipment-info"
+                    By.CSS_SELECTOR, "div.shipment-info",
                 )
                 # div.delivery-address-text => text
                 # div.payment-instruments
@@ -90,18 +89,18 @@ class EbayScraper(BaseScraper):
                 # div.order-foot-notes -> p -> text (not "Learn more")
                 order_info_items = {}
                 for value_line in section_data_items.find_elements(
-                    By.CSS_SELECTOR, "div.eui-label-value-line"
+                    By.CSS_SELECTOR, "div.eui-label-value-line",
                 ):
                     value_name = value_line.find_element(
-                        By.CSS_SELECTOR, "dt span.SECONDARY"
+                        By.CSS_SELECTOR, "dt span.SECONDARY",
                     ).text.strip()
                     if value_name == "Sold by":
                         value = value_line.find_element(
-                            By.CSS_SELECTOR, "dd span.PSEUDOLINK"
+                            By.CSS_SELECTOR, "dd span.PSEUDOLINK",
                         ).text.strip()
                     else:
                         value = value_line.find_element(
-                            By.CSS_SELECTOR, "dd span.eui-text-span span"
+                            By.CSS_SELECTOR, "dd span.eui-text-span span",
                         ).text.strip()
                     order_info_items[value_name] = value
                 # TODO: Bail out early if order id exists
@@ -116,18 +115,18 @@ class EbayScraper(BaseScraper):
                 ):
                     # TODO: Order can have multiple items with same id, uniuqe sku
                     item_a: WebElement = item.find_element(
-                        By.CSS_SELECTOR, "div.item-description a"
+                        By.CSS_SELECTOR, "div.item-description a",
                     ).get_attribute("href")
                     item_id = re.match(r".*itm/([0-9]+).*", item_a).group(1)
                     thumbnail: WebElement = item.find_element(
-                        By.CSS_SELECTOR, "div.card-content-image-box img"
+                        By.CSS_SELECTOR, "div.card-content-image-box img",
                     )
                     thumbnail_src: str = thumbnail.get_attribute("src")
                     name: str = item.find_element(
-                        By.CSS_SELECTOR, "p.item-title span.eui-text-span"
+                        By.CSS_SELECTOR, "p.item-title span.eui-text-span",
                     ).text.strip()
                     price: str = item.find_element(
-                        By.CSS_SELECTOR, "p.item-price span.clipped"
+                        By.CSS_SELECTOR, "p.item-price span.clipped",
                     ).text.strip()
                     # order_data[order_number]["items"]["yellow color"]
                     # order_data[order_number]["items"][""] = no sku
@@ -156,7 +155,7 @@ class EbayScraper(BaseScraper):
 
         # self.pprint(order_ids)
 
-    def __init__(self, options: Dict):
+    def __init__(self, options: dict):
         super().__init__(options, __name__)
         self.setup_cache("ebay")
         self.setup_templates()
@@ -175,7 +174,7 @@ class EbayScraper(BaseScraper):
         order_ids = []
         json_filename = self.cache["ORDER_LISTS"] / "order-list.json"
         if not self.options.use_cached_orderlist or not self.can_read(
-            json_filename
+            json_filename,
         ):
             # We do not want to use cached orderlist
             # Or there is no cached orderlist
@@ -186,7 +185,7 @@ class EbayScraper(BaseScraper):
             while True:
                 order_ids += self.browser_scrape_individual_order_list()
                 next_link = self.find_element(
-                    By.CSS_SELECTOR, "a.m-pagination-simple-next"
+                    By.CSS_SELECTOR, "a.m-pagination-simple-next",
                 )
                 if next_link.get_attribute("aria-disabled") == "true":
                     self.log.debug("No more orders")
@@ -194,7 +193,7 @@ class EbayScraper(BaseScraper):
                 next_link.click()
                 self.rand_sleep(2, 4)
             self.log.info(
-                "Loaded %s new style order ids from eBay.com", len(order_ids)
+                "Loaded %s new style order ids from eBay.com", len(order_ids),
             )
             self.log.debug(
                 "Writing order list to %s/%s",
@@ -210,7 +209,7 @@ class EbayScraper(BaseScraper):
             )
             order_ids = self.read(json_filename, from_json=True)
             self.log.info(
-                "Loaded %s new style order ids from json", len(order_ids)
+                "Loaded %s new style order ids from json", len(order_ids),
             )
 
         order_ids += self.IMAP_DATA
@@ -229,11 +228,11 @@ class EbayScraper(BaseScraper):
                     " AppleWebKit/537.36 (KHTML, like Gecko)"
                     " SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile"
                     " Safari/537.36"
-                )
+                ),
             }
         if settings.EBY_MANUAL_LOGIN:
             self.log.debug(
-                RED("Please log in to eBay and press enter when ready.")
+                RED("Please log in to eBay and press enter when ready."),
             )
             input()
             brws = self.browser_get_instance(**browser_kwargs)
@@ -249,13 +248,13 @@ class EbayScraper(BaseScraper):
     def browser_scrape_individual_order_list(self):
         order_ids = []
         for item_container in self.find_elements(
-            By.CSS_SELECTOR, "div.m-mweb-item-container"
+            By.CSS_SELECTOR, "div.m-mweb-item-container",
         ):
             order_href = self.find_element(
-                By.CSS_SELECTOR, "a.m-mweb-item-link", item_container
+                By.CSS_SELECTOR, "a.m-mweb-item-link", item_container,
             ).get_attribute("href")
             re_matches = re.match(
-                r".*\?orderId=(?P<order_id>[0-9-]*).*", order_href
+                r".*\?orderId=(?P<order_id>[0-9-]*).*", order_href,
             )
             order_id = re_matches.group("order_id")
             self.log.debug("Found order id %s", order_id)
@@ -265,7 +264,7 @@ class EbayScraper(BaseScraper):
     def browser_detect_handle_interrupt(self, expected_url):
         time.sleep(2)
         gdpr_accept = self.find_element(
-            By.CSS_SELECTOR, "button#gdpr-banner-accept"
+            By.CSS_SELECTOR, "button#gdpr-banner-accept",
         )
         if gdpr_accept:
             self.log.debug("Accepting GDPR/cookies")
@@ -275,7 +274,7 @@ class EbayScraper(BaseScraper):
         if re.match(r".*captcha.*", self.browser.current_url):
             if self.find_element(By.CSS_SELECTOR, "div#captcha_loading"):
                 self.log.info(
-                    AMBER("Please complete captcha and press enter: ...")
+                    AMBER("Please complete captcha and press enter: ..."),
                 )
                 input()
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
@@ -312,7 +311,7 @@ class EbayScraper(BaseScraper):
                 css_sel = "button#signin-continue-btn"
                 self.log.debug("Looking for %s", css_sel)
                 wait.until(
-                    EC.element_to_be_clickable(((By.CSS_SELECTOR, css_sel))),
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, css_sel)),
                     "Could not find " + css_sel,
                 ).click()
                 self.rand_sleep(0, 2)
@@ -343,18 +342,18 @@ class EbayScraper(BaseScraper):
                 # self.browser_safe_quit()
                 raise RuntimeError(
                     "Login to eBay was not successful "
-                    "because we could not find a expected element.."
+                    "because we could not find a expected element..",
                 ) from toe
         if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
             self.log.debug(
                 "Login to eBay was not successful. If you want continue,"
-                " complete login, and then press enter. Press Ctrl-Z to cancel."
+                " complete login, and then press enter. Press Ctrl-Z to cancel.",
             )
             input()
         self.log.info(GREEN("Login to eBay was successful."))
 
     def browser_website_switch_mode(self, switch_to_mode=None):
-        if self.WEBSITE_MODE == switch_to_mode:
+        if switch_to_mode == self.WEBSITE_MODE:
             return
 
         if self.browser.current_url != self.HOMEPAGE:
@@ -362,7 +361,7 @@ class EbayScraper(BaseScraper):
             self.browser.get(self.HOMEPAGE)
         to_mobile_link = self.find_element(By.CSS_SELECTOR, "a#mobileCTALink")
         to_classic_link = self.find_element(
-            By.CSS_SELECTOR, "div.gh-mwebfooter__siteswitch a"
+            By.CSS_SELECTOR, "div.gh-mwebfooter__siteswitch a",
         )
         changed = False
         if switch_to_mode == "mobile" and to_mobile_link:
@@ -401,10 +400,10 @@ class EbayScraper(BaseScraper):
         )
 
         self.ORDER_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{key}/order.{ext}")
+            self.cache["ORDERS"] / Path("{key}/order.{ext}"),
         )
         self.ORDER_ITEM_FILENAME_TEMPLATE: Path = str(
-            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}")
+            self.cache["ORDERS"] / Path("{order_id}/item-{item_id}.{ext}"),
         )
 
     def part_to_filename(self, part: PagePart, **kwargs):

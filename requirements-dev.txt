@@ -5,3 +5,4 @@ types-lxml
 pylint
 black
 ruff
+djlint

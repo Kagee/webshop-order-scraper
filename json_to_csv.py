@@ -3,20 +3,18 @@ from bootstrap import python_checks
 
 python_checks()
 # ruff: noqa: E402
-from scrapers import settings
-
-import csv
-import sys
 import argparse
+import csv
+import datetime as dt
 import decimal
+import logging.config
+import sys
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+
+from scrapers import settings
 from scrapers.base import BaseScraper
-import datetime as dt
-from datetime import datetime
-
-
-import logging.config
 
 logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("json_to_csv")
@@ -96,26 +94,26 @@ def main():
             if mult == "0":
                 return str(
                     (value * conv).quantize(
-                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP
-                    )
+                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP,
+                    ),
                 )
             elif mult == "2":
                 return str(
                     ((value * conv) / 100).quantize(
-                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP
-                    )
+                        decimal.Decimal(".00"), decimal.ROUND_HALF_UP,
+                    ),
                 )
             raise ValueError(f"Unexpected mult: {mult}")
 
         def curr_to_nok(curr):
-            return str("NOK")
+            return "NOK"
 
         if not Path("EXR.csv").is_file():
             log.error(
                 'Download "Alle valutakurser - Daglige kurser - Siste 10 år"'
                 " from"
                 " https://www.norges-bank.no/tema/Statistikk/Valutakurser/?tab=api"
-                " and save as EXR.csv"
+                " and save as EXR.csv",
             )
             sys.exit(1)
         log.info("Loading EXR.csv, this may take some time...")
@@ -253,7 +251,7 @@ def main():
                     "",
                     "",
                     "",
-                ]
+                ],
             )
             for item in order["items"]:
                 output[order["date"]].append(
@@ -289,7 +287,7 @@ def main():
                             if "total" in item
                             else ""
                         ),
-                    ]
+                    ],
                 )
 
     with open(
@@ -320,7 +318,7 @@ def main():
                 "item_quantity",
                 "item_value",
                 "item_currency",
-            ]
+            ],
         )
         for sorted_date in dict(sorted(output.items())).values():
             for order in sorted_date:

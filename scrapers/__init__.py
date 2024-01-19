@@ -1,13 +1,31 @@
-from .settings import settings
 from .adafruit import AdafruitScraper
 from .aliexpress import AliExpressScraper
 from .amazon import AmazonScraper
 from .base import BaseScraper, PagePart
 from .distrelec import DistrelecScraper
-from .imap import IMAPScraper
-from .pimoroni import PimoroniScraper
 from .ebay import EbayScraper
+from .imap import IMAPScraper
 from .kjell import KjellScraper
-from .polyalkemi import PolyalkemiScraper
 from .komplett import KomplettScraper
-from .utils import RED, BLUE, AMBER, GREEN
+from .pimoroni import PimoroniScraper
+from .polyalkemi import PolyalkemiScraper
+from .utils import AMBER, BLUE, GREEN, RED
+
+__all__ = [
+    "AdafruitScraper",
+    "AliExpressScraper",
+    "AmazonScraper",
+    "BaseScraper",
+    "PagePart",
+    "DistrelecScraper",
+    "IMAPScraper",
+    "PimoroniScraper",
+    "EbayScraper",
+    "KjellScraper",
+    "PolyalkemiScraper",
+    "KomplettScraper",
+    "RED",
+    "BLUE",
+    "AMBER",
+    "GREEN",
+]

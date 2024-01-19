@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+# ruff: noqa: E402, S603
 from bootstrap import python_checks
 
 python_checks()

@@ -16,11 +16,11 @@
     "search.exclude": {
         "scraper-cache/": true
     },
-    "python.linting.enabled": true,
-    "python.linting.pylintEnabled": true,
-    "git.enabled": false,
-    "editor.formatOnSave": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.indexing": true,
-    "workbench.tree.indent": 25
+    "workbench.tree.indent": 25,
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    }
 }

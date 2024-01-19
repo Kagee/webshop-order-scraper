@@ -1,6 +1,5 @@
 import re
 import time
-from typing import Dict, List
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -9,14 +8,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 # pylint: disable=unused-import
-from . import settings
 from .base import BaseScraper, PagePart
-from .utils import RED, BLUE, GREEN, AMBER
+from .utils import AMBER, GREEN
 
 
 # Scraper for trying out code for other scrapers
 class DistrelecScraper(BaseScraper):
-    def __init__(self, options: Dict):
+    def __init__(self, options: dict):
         super().__init__(options, __name__)
         # pylint: disable=invalid-name
         self.DOMAIN = options.domain
@@ -51,7 +49,7 @@ class DistrelecScraper(BaseScraper):
 
         if self.find_element(By.CSS_SELECTOR, "iframe#main-iframe"):
             self.log.error(
-                AMBER("Please complete captcha and press enter: ...")
+                AMBER("Please complete captcha and press enter: ..."),
             )
             input()
         ens = self.find_element(By.CSS_SELECTOR, "button#ensCloseBanner")
@@ -79,7 +77,7 @@ class DistrelecScraper(BaseScraper):
     def browser_cleanup_item_page(self):
         brws = self.browser
         self.log.debug("Hide fluff, ads, etc")
-        elemets_to_hide: List[WebElement] = []
+        elemets_to_hide: list[WebElement] = []
         for element in []:
             elemets_to_hide += brws.find_elements(element[0], element[1])
         brws.execute_script(
@@ -106,25 +104,25 @@ class DistrelecScraper(BaseScraper):
 
         # button type submit, class either of ...
         submit = brws.find_element(
-            By.CSS_SELECTOR, "button.b-login.js-login-button"
+            By.CSS_SELECTOR, "button.b-login.js-login-button",
         )
         self.rand_sleep()
         submit.click()
         try:
             WebDriverWait(brws, 10).until_not(
-                EC.url_matches(self.LOGIN_PAGE_RE)
+                EC.url_matches(self.LOGIN_PAGE_RE),
             )
         except TimeoutException:
             self.log.error("Login to %s was not successful.", self.DOMAIN)
             self.log.error(
-                "If you want to continue, fix the login, and then press enter."
+                "If you want to continue, fix the login, and then press enter.",
             )
             input()
             if re.match(self.LOGIN_PAGE_RE, self.browser.current_url):
                 # pylint: disable=raise-missing-from
                 raise RuntimeError(
                     f"Login to {self.DOMAIN} was not successful, "
-                    "even after user interaction."
+                    "even after user interaction.",
                 )
         self.log.info(GREEN("Login to %s was successful."), self.DOMAIN)
 
