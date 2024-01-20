@@ -330,7 +330,7 @@ class AliExpressScraper(BaseScraper):
             if "snapshot" not in order["items"][
                 item_sku_id
             ] and not self.can_read(
-                self.ORDER_FOLDER.format(order_id=order_id)
+                Path(self.ORDER_FOLDER.format(order_id=order_id))
                 / "snapshot.missing",
             ):
                 order["items"][item_sku_id]["snapshot"] = {
@@ -870,7 +870,8 @@ class AliExpressScraper(BaseScraper):
         current item id+item sku to PDF.
         """
         if "snapshot" not in order["items"][item_sku_id] and not self.can_read(
-            self.ORDER_FOLDER.format(order_id=order["id"]) / "snapshot.missing",
+            Path(self.ORDER_FOLDER.format(order_id=order["id"]))
+            / "snapshot.missing",
         ):
             order["items"][item_sku_id]["snapshot"] = {
                 "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
@@ -893,11 +894,12 @@ class AliExpressScraper(BaseScraper):
             )
             return False
         if self.can_read(
-            self.ORDER_FOLDER.format(order_id=order["id"]) / "snapshot.missing",
+            Path(self.ORDER_FOLDER.format(order_id=order["id"]))
+            / "snapshot.missing",
         ):
             self.log.info(
                 "Not opening snapshot, already defined as missing: %s",
-                self.ORDER_FOLDER.format(order_id=order["id"])
+                Path(self.ORDER_FOLDER.format(order_id=order["id"]))
                 / "snapshot.missing",
             )
             return False
@@ -964,7 +966,7 @@ class AliExpressScraper(BaseScraper):
             order["items"][item_sku_id]["snapshot"]["pdf"] = None
             order["items"][item_sku_id]["snapshot"]["html"] = None
             self.write(
-                self.ORDER_FOLDER.format(order_id=order["id"])
+                Path(self.ORDER_FOLDER.format(order_id=order["id"]))
                 / "snapshot.missing",
                 "1",
             )
