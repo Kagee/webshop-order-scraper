@@ -359,7 +359,7 @@ def main():  # noqa: PLR0915, C901
                         "",
                         item["name"],
                         (item["variation"] if "variation" in item else ""),
-                        item["quantity"],
+                        force_separator(item["quantity"]),
                         (
                             convert_to_nok(
                                 item["total"]["value"],

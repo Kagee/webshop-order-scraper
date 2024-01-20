@@ -688,7 +688,9 @@ class KjellScraper(BaseScraper):
                 item_dict = {
                     "id": item_id,
                     "name": item["displayName"],
-                    "quantity": item["quantity"],
+                    "quantity": int(item["quantity"])
+                    if item["quantity"].is_integer()
+                    else item["quantity"],
                     "subtotal": self.get_value_currency(
                         "subtotal",
                         str(item["price"]["currentExclVat"]),
