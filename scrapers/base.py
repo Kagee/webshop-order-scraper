@@ -22,6 +22,7 @@ from logging import Logger
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from attr.validators import instance_of
 
 import filetype
 import requests
@@ -667,6 +668,8 @@ class BaseScraper:
     ):
         kwargs = {"encoding": "utf-8"}
         write_mode = "w"
+        if not isinstance(path, Path):
+            path = Path(path)
         if from_base64:
             content = base64.b64decode(content, validate=True)
         if to_json:

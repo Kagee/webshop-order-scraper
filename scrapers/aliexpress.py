@@ -465,7 +465,7 @@ class AliExpressScraper(BaseScraper):
             # We do this after all "online" scraping is complete
             self.log.info("Writing order details page to cache")
             self.write(
-                order["cache_file"],
+                Path(order["cache_file"]),
                 tostring(order_html).decode("utf-8"),
             )
 
@@ -859,7 +859,7 @@ class AliExpressScraper(BaseScraper):
             item_sku_id,
         )
         self.write(
-            order["items"][item_sku_id]["thumbnail"],
+            Path(order["items"][item_sku_id]["thumbnail"]),
             base64.b64decode(thumb_data),
             binary=True,
         )
@@ -947,7 +947,7 @@ class AliExpressScraper(BaseScraper):
                     order["items"][item_sku_id]["snapshot"]["pdf"],
                 )
                 self.write(
-                    order["items"][item_sku_id]["snapshot"]["html"],
+                    Path(order["items"][item_sku_id]["snapshot"]["html"]),
                     self.browser.page_source,
                     html=True,
                 )
