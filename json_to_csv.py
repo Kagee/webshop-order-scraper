@@ -60,6 +60,11 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--no-order-totals",
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--before",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
         help="only export order before this date (default 3070-01-01)",
@@ -267,84 +272,85 @@ def main():  # noqa: PLR0915, C901
                 sys.exit(1)
             if order["date"] not in output:
                 output[order["date"]] = []
-            # convert_to_nok(value, curr, date) curr_to_nok
-            output[order["date"]].append(
-                [
-                    order["date"],
-                    order["id"],
-                    (
-                        convert_to_nok(
-                            order["subtotal"]["value"],
-                            (
-                                order["subtotal"]["currency"]
-                                if "currency" in order["subtotal"]
-                                else ""
-                            ),
-                            order["date"],
-                        )
-                        if "subtotal" in order
-                        else ""
-                    ),
-                    (
-                        curr_to_nok(order["subtotal"]["currency"])
-                        if "subtotal" in order
-                        and "currency" in order["subtotal"]
-                        else ""
-                    ),
-                    (
-                        convert_to_nok(
-                            order["shipping"]["value"],
-                            (
-                                order["shipping"]["currency"]
-                                if "currency" in order["shipping"]
-                                else ""
-                            ),
-                            order["date"],
-                        )
-                        if "shipping" in order
-                        else ""
-                    ),
-                    (
-                        curr_to_nok(order["shipping"]["currency"])
-                        if "shipping" in order
-                        and "currency" in order["shipping"]
-                        else ""
-                    ),
-                    (
-                        convert_to_nok(
-                            order["tax"]["value"],
-                            (
-                                order["tax"]["currency"]
-                                if "currency" in order["tax"]
-                                else ""
-                            ),
-                            order["date"],
-                        )
-                        if "tax" in order
-                        else ""
-                    ),
-                    (
-                        curr_to_nok(order["tax"]["currency"])
-                        if "tax" in order and "currency" in order["tax"]
-                        else ""
-                    ),
-                    convert_to_nok(
-                        order["total"]["value"],
+            if not args.no_order_totals:
+                output[order["date"]].append(
+                    [
+                        order["date"],
+                        order["id"],
                         (
-                            order["total"]["currency"]
-                            if "currency" in order["total"]
+                            convert_to_nok(
+                                order["subtotal"]["value"],
+                                (
+                                    order["subtotal"]["currency"]
+                                    if "currency" in order["subtotal"]
+                                    else ""
+                                ),
+                                order["date"],
+                            )
+                            if "subtotal" in order
                             else ""
                         ),
-                        order["date"],
-                    ),
-                    curr_to_nok(order["total"]["currency"]),
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                ],
-            )
+                        (
+                            curr_to_nok(order["subtotal"]["currency"])
+                            if "subtotal" in order
+                            and "currency" in order["subtotal"]
+                            else ""
+                        ),
+                        (
+                            convert_to_nok(
+                                order["shipping"]["value"],
+                                (
+                                    order["shipping"]["currency"]
+                                    if "currency" in order["shipping"]
+                                    else ""
+                                ),
+                                order["date"],
+                            )
+                            if "shipping" in order
+                            else ""
+                        ),
+                        (
+                            curr_to_nok(order["shipping"]["currency"])
+                            if "shipping" in order
+                            and "currency" in order["shipping"]
+                            else ""
+                        ),
+                        (
+                            convert_to_nok(
+                                order["tax"]["value"],
+                                (
+                                    order["tax"]["currency"]
+                                    if "currency" in order["tax"]
+                                    else ""
+                                ),
+                                order["date"],
+                            )
+                            if "tax" in order
+                            else ""
+                        ),
+                        (
+                            curr_to_nok(order["tax"]["currency"])
+                            if "tax" in order and "currency" in order["tax"]
+                            else ""
+                        ),
+                        convert_to_nok(
+                            order["total"]["value"],
+                            (
+                                order["total"]["currency"]
+                                if "currency" in order["total"]
+                                else ""
+                            ),
+                            order["date"],
+                        ),
+                        curr_to_nok(order["total"]["currency"]),
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                    ],
+                )
             for item in order["items"]:
                 output[order["date"]].append(
                     [
@@ -379,6 +385,7 @@ def main():  # noqa: PLR0915, C901
                             if "total" in item
                             else ""
                         ),
+                        ("1" if "tax" in order else "0"),
                     ],
                 )
 
@@ -412,6 +419,7 @@ def main():  # noqa: PLR0915, C901
                 "item_quantity",
                 "item_value",
                 "item_currency",
+                "order_has_tax",
             ],
         )
         for sorted_date in dict(sorted(output.items())).values():
