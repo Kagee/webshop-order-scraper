@@ -806,7 +806,7 @@ class AliExpressScraper(BaseScraper):
                 order,
                 thumb_element,
                 item_sku_id,
-                move_mouse,
+                move_mouse=move_mouse,
             )
 
         return fromstring(brws.page_source)
