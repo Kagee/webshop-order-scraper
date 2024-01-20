@@ -329,7 +329,10 @@ class AliExpressScraper(BaseScraper):
                 )
             if "snapshot" not in order["items"][
                 item_sku_id
-            ] and not self.can_read(self.ORDER_FOLDER / "snapshot.missing"):
+            ] and not self.can_read(
+                self.ORDER_FOLDER.format(order_id=order_id)
+                / "snapshot.missing",
+            ):
                 order["items"][item_sku_id]["snapshot"] = {
                     "pdf": (
                         Path(
@@ -867,7 +870,7 @@ class AliExpressScraper(BaseScraper):
         current item id+item sku to PDF.
         """
         if "snapshot" not in order["items"][item_sku_id] and not self.can_read(
-            self.ORDER_FOLDER / "snapshot.missing",
+            self.ORDER_FOLDER.format(order["id"]) / "snapshot.missing",
         ):
             order["items"][item_sku_id]["snapshot"] = {
                 "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
@@ -889,10 +892,13 @@ class AliExpressScraper(BaseScraper):
                 item_sku_id,
             )
             return False
-        if self.can_read(self.ORDER_FOLDER / "snapshot.missing"):
+        if self.can_read(
+            self.ORDER_FOLDER.format(order_id=order["id"]) / "snapshot.missing",
+        ):
             self.log.info(
                 "Not opening snapshot, already defined as missing: %s",
-                self.ORDER_FOLDER / "snapshot.missing",
+                self.ORDER_FOLDER.format(order_id=order["id"])
+                / "snapshot.missing",
             )
             return False
 
@@ -957,7 +963,11 @@ class AliExpressScraper(BaseScraper):
             )
             order["items"][item_sku_id]["snapshot"]["pdf"] = None
             order["items"][item_sku_id]["snapshot"]["html"] = None
-            self.write(self.ORDER_FOLDER / "snapshot.missing", "1")
+            self.write(
+                self.ORDER_FOLDER.format(order_id=order["id"])
+                / "snapshot.missing",
+                "1",
+            )
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
         return True
