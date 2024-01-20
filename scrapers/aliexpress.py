@@ -233,6 +233,9 @@ class AliExpressScraper(BaseScraper):
         self.ORDER_FILENAME_TEMPLATE = str(
             self.cache["ORDERS"] / "{order_id}/order.{ext}",
         )
+        self.ORDER_FOLDER = str(
+            self.cache["ORDERS"] / "{order_id}/",
+        )
         self.TRACKING_HTML_FILENAME_TEMPLATE = str(
             self.cache["ORDERS"] / "{order_id}/tracking.html",
         )
@@ -324,7 +327,9 @@ class AliExpressScraper(BaseScraper):
                     order_id=order_id,
                     item_id=item_sku_id,
                 )
-            if "snapshot" not in order["items"][item_sku_id]:
+            if "snapshot" not in order["items"][
+                item_sku_id
+            ] and not self.can_read(self.ORDER_FOLDER / "snapshot.missing"):
                 order["items"][item_sku_id]["snapshot"] = {
                     "pdf": (
                         Path(
@@ -861,7 +866,9 @@ class AliExpressScraper(BaseScraper):
         Uses Selenium to save the AliExpress snapshot of the
         current item id+item sku to PDF.
         """
-        if "snapshot" not in order["items"][item_sku_id]:
+        if "snapshot" not in order["items"][item_sku_id] and not self.can_read(
+            self.ORDER_FOLDER / "snapshot.missing",
+        ):
             order["items"][item_sku_id]["snapshot"] = {
                 "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
                     order_id=order["id"],
@@ -882,6 +889,13 @@ class AliExpressScraper(BaseScraper):
                 item_sku_id,
             )
             return False
+        if self.can_read(self.ORDER_FOLDER / "snapshot.missing"):
+            self.log.info(
+                "Not opening snapshot, already defined as missing: %s",
+                self.ORDER_FOLDER / "snapshot.missing",
+            )
+            return False
+
         order_details_page_handle = self.browser.current_window_handle
         self.log.debug(
             "Order details page handle is %s",
@@ -943,6 +957,7 @@ class AliExpressScraper(BaseScraper):
             )
             order["items"][item_sku_id]["snapshot"]["pdf"] = None
             order["items"][item_sku_id]["snapshot"]["html"] = None
+            self.write(self.ORDER_FOLDER / "snapshot.missing", "1")
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
         return True
