@@ -495,14 +495,14 @@ class KjellScraper(BaseScraper):
 
         # view-source:
         self.browser_visit_page(
-            r"https://www.kjell.com/resolvedynamicdata?d=[{t:%22Avensia.Common.Features.Account.MyPages.MyTransactions.UserTransactions,Avensia.Common%22}]",
+            r"view-source:https://www.kjell.com/resolvedynamicdata?d=[{t:%22Avensia.Common.Features.Account.MyPages.MyTransactions.UserTransactions,Avensia.Common%22}]",
         )
 
         # transactions = self.browser.execute_script("""
         #    return window.CURRENT_PAGE.transactions;
         #    """)
         # content = self.browser.find_element_by_tag_name('pre').text
-        content = self.browser.find_element(By.XPATH, "//div[@id='json']").text
+        content = self.browser.find_element(By.XPATH, "//pre").text
         shop_data = json.loads(content)
         self.write(self.ORDER_LIST_JSON_FILENAME, shop_data, to_json=True)
         return shop_data
@@ -542,7 +542,7 @@ class KjellScraper(BaseScraper):
         Scrapes your Kjell orders.
         """
         try:
-            orders = self.browser_load_order_list()
+            orders = self.browser_load_order_list()[0]
             products = {}
             code_len_max = 0
             code_len_min = 9999
@@ -562,7 +562,7 @@ class KjellScraper(BaseScraper):
                 code_len_max,
             )
             order_dict = {}
-            for order in orders["items"]:
+            for order in orders["completed"]["items"]:
                 order_dict[order["transactionNumber"]] = order
 
             for order_id, order in order_dict.items():

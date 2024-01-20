@@ -516,7 +516,7 @@ class BaseScraper:
         if folder is None:
             folder = self.cache["TEMP"]
         for filename in folder.glob("*"):
-            os.remove(filename)
+            filename.unlink()
 
     def external_download_image(
         self, glob: str, url: str, folder: Path | None = None
