@@ -37,7 +37,16 @@ def parse_args():
     parser.add_argument(
         "--delimiter",
         type=str,
-        help="delimiter in csv. Default is based on excel dialect.",
+        help=(
+            "delimiter in csv. Default is based on excel "
+            "dialect. Magic value TAB is supported."
+        ),
+    )
+
+    parser.add_argument(
+        "--separator",
+        type=str,
+        help="decimal separator. Default is ???",
     )
 
     parser.add_argument(
@@ -79,10 +88,21 @@ def main():  # noqa: PLR0915, C901
 
     conv_data = {}
 
+    if args.separator:
+
+        def force_separator(value):
+            if "." in value:
+                return value.replace(".", args.separator)
+            return value.replace(",", args.separator)
+    else:
+
+        def force_separator(value):
+            return value
+
     if not args.nok:
 
         def convert_to_nok(value, _conv, _mult):
-            return str(value)
+            return force_separator(str(value))
 
         def curr_to_nok(curr):
             return str(curr)
@@ -91,25 +111,29 @@ def main():  # noqa: PLR0915, C901
 
         def convert_to_nok(value, curr, date):
             if value == "" or curr in ["", "NOK"]:
-                return str(value)
+                return force_separator(str(value))
 
             value = Decimal(value.replace(",", "."))
             conv = Decimal(conv_data[curr][date]["value"].replace(",", "."))
             mult = conv_data[curr][date]["mult"]
 
             if mult == "0":
-                return str(
-                    (value * conv).quantize(
-                        decimal.Decimal(".00"),
-                        decimal.ROUND_HALF_UP,
-                    ),
+                return force_separator(
+                    str(
+                        (value * conv).quantize(
+                            decimal.Decimal(".00"),
+                            decimal.ROUND_HALF_UP,
+                        ),
+                    )
                 )
             if mult == "2":
-                return str(
-                    ((value * conv) / 100).quantize(
-                        decimal.Decimal(".00"),
-                        decimal.ROUND_HALF_UP,
-                    ),
+                return force_separator(
+                    str(
+                        ((value * conv) / 100).quantize(
+                            decimal.Decimal(".00"),
+                            decimal.ROUND_HALF_UP,
+                        ),
+                    )
                 )
             msg = f"Unexpected mult: {mult}"
             raise ValueError(msg)
@@ -365,7 +389,10 @@ def main():  # noqa: PLR0915, C901
         out = sys.stdout if args.stdout else csvfile
         options = {}
         if args.delimiter:
-            options["delimiter"] = args.delimiter
+            if args.delimiter == "TAB":
+                options["delimiter"] = "\t"
+            else:
+                options["delimiter"] = args.delimiter
         writer = csv.writer(out, dialect=csv.excel, **options)
         writer.writerow(
             [
