@@ -693,17 +693,17 @@ class KjellScraper(BaseScraper):
                     else item["quantity"],
                     "subtotal": self.get_value_currency(
                         "subtotal",
-                        str(item["price"]["currentExclVat"]),
+                        item["price"]["currentExclVat"],
                         "NOK",
                     ),
                     "vat": self.get_value_currency(
                         "vat",
-                        str(item["price"]["vatAmount"]),
+                        item["price"]["vatAmount"],
                         "NOK",
                     ),
                     "total": self.get_value_currency(
                         "total",
-                        str(item["price"]["currentInclVat"]),
+                        item["price"]["currentInclVat"],
                         "NOK",
                     ),
                 }
