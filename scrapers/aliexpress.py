@@ -870,7 +870,7 @@ class AliExpressScraper(BaseScraper):
         current item id+item sku to PDF.
         """
         if "snapshot" not in order["items"][item_sku_id] and not self.can_read(
-            self.ORDER_FOLDER.format(order["id"]) / "snapshot.missing",
+            self.ORDER_FOLDER.format(order_id=order["id"]) / "snapshot.missing",
         ):
             order["items"][item_sku_id]["snapshot"] = {
                 "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
