@@ -3,6 +3,7 @@ import base64
 import contextlib
 import csv
 import datetime
+import decimal
 import json
 import logging
 import math
@@ -108,7 +109,14 @@ class BaseScraper:
     # @classmethod
     def get_value_currency(self, name, value, force_currency=None):
         """Will assume $ is USD and € is EUR, we can do better"""
-        guess_price = Price.fromstring(value)
+        if isinstance(value, str):
+            guess_price = Price.fromstring(value)
+        else:
+            guess_price = Price(
+                amount=Decimal(value),
+                currency=None,
+                amount_text=str(value),
+            )
         if not guess_price.amount:
             self.log.warning(
                 AMBER("name: %s, value: %s, force_currency: %s"),
@@ -117,44 +125,51 @@ class BaseScraper:
                 force_currency,
             )
             guess_price.amount = 0
-        amount = guess_price.amount + Decimal("0.00")
-        value_curr_dict = {"value": str(amount)}
+        amount = guess_price.amount
+        if isinstance(amount, Decimal):
+            amount = amount.quantize(
+                decimal.Decimal(".00"),
+                decimal.ROUND_HALF_UP,
+            ) + Decimal("0.00")
+        amount_str = str(amount)
+        if amount_str == "0":
+            amount_str = "0.00"
+        value_curr_dict = {"value": amount_str}
 
         if force_currency:
             curr_dict = {"currency": force_currency}
+        elif guess_price.currency in ["$", "USD"]:
+            curr_dict = {"currency": "USD"}
+        elif guess_price.currency in ["€", "EUR"]:
+            curr_dict = {"currency": "EUR"}
+        elif guess_price.currency in ["￥", "JPY"]:
+            curr_dict = {"currency": "JPY"}
+        elif guess_price.currency in ["£", "GBP"]:
+            curr_dict = {"currency": "GBP"}
+        elif guess_price.currency in ["NOK"]:
+            curr_dict = {"currency": "NOK"}
+        elif value == "Free shipping":
+            curr_dict = {}
         else:
-            if guess_price.currency in ["$", "USD"]:
-                curr_dict = {"currency": "USD"}
-            elif guess_price.currency in ["€", "EUR"]:
-                curr_dict = {"currency": "EUR"}
-            elif guess_price.currency in ["￥", "JPY"]:
-                curr_dict = {"currency": "JPY"}
-            elif guess_price.currency in ["£", "GBP"]:
-                curr_dict = {"currency": "GBP"}
-            elif guess_price.currency in ["NOK"]:
-                curr_dict = {"currency": "NOK"}
-            elif value == "Free shipping":
-                curr_dict = {}
-            else:
-                self.log.warning(
-                    AMBER("name: %s, value: %s, force_currency: %s"),
-                    name,
-                    value,
-                    force_currency,
-                )
-                self.log.warning(
-                    AMBER("Unexpected value/currency: %s/%s/%s"),
-                    name,
-                    value,
-                    guess_price.currency,
-                )
-                msg = (
-                    "Unexpected value/currency:"
-                    f" {name}/{value}/{guess_price.currency}"
-                )
-                raise NotImplementedError(
-                    msg,
-                )
+            self.log.warning(
+                AMBER("name: %s, value: %s, force_currency: %s"),
+                name,
+                value,
+                force_currency,
+            )
+            self.log.warning(
+                AMBER("Unexpected value/currency: %s/%s/%s"),
+                name,
+                value,
+                guess_price.currency,
+            )
+            msg = (
+                "Unexpected value/currency:"
+                f" {name}/{value}/{guess_price.currency}"
+            )
+            raise NotImplementedError(
+                msg,
+            )
 
         value_curr_dict.update(curr_dict)
         return value_curr_dict

@@ -639,17 +639,17 @@ class KjellScraper(BaseScraper):
                 "items": [],
                 "total": self.get_value_currency(
                     "total",
-                    str(orig_order["total"]),
+                    orig_order["total"],
                     "NOK",
                 ),
                 "tax": self.get_value_currency(
                     "tax",
-                    str(orig_order["vatAmount"]),
+                    orig_order["vatAmount"],
                     "NOK",
                 ),
                 "shipping": self.get_value_currency(
                     "shipping",
-                    str(orig_order["shippingFee"]["exclVat"]),
+                    orig_order["shippingFee"]["exclVat"],
                     "NOK",
                 ),
             }

@@ -66,11 +66,17 @@ def main():
             earliest_date = order["date"]
         max_num_items = max(max_num_items, len(order["items"]))
         num_items = num_items + len(order["items"])
+        log.debug(
+            "%s: %s %s",
+            order["id"],
+            order["total"]["value"],
+            order["total"]["currency"],
+        )
         if order["total"]["currency"] not in total_total:
             total_total[order["total"]["currency"]] = Decimal(0)
         total_total[order["total"]["currency"]] = total_total[
             order["total"]["currency"]
-        ] + Decimal(order["total"]["value"])
+        ] + Decimal(order["total"]["value"].replace(",", "."))
 
     branch = (
         ""
