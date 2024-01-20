@@ -48,6 +48,15 @@ class KjellScraper(BaseScraper):
 
         if line_item["url"] != "":
             url = "https://kjell.com" + line_item["url"]
+
+            if self.can_read(item_pdf_file) or self.can_read(
+                item_pdf_missing,
+            ):
+                self.log.debug(
+                    "Item %s has probably been scraped before, found page PDF.",
+                    item_id,
+                )
+                return
             brws = self.browser_visit_page_v2(url)
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(2)
