@@ -81,12 +81,12 @@ class BaseScraper:
         self.log.debug("Init complete: %s/%s", __name__, logname)
 
     def valid_json(self, structure):
-        with open(settings.JSON_SCHEMA, encoding="utf-8") as schema_file:
+        with settings.JSON_SCHEMA.open(encoding="utf-8") as schema_file:
             schema = json.load(schema_file)
             try:
                 validate(instance=structure, schema=schema)
             except ValidationError as vde:
-                self.log.error(
+                self.log.exception(
                     RED("JSON failed validation: %s at %s"),
                     vde.message,
                     vde.json_path,
@@ -173,10 +173,6 @@ class BaseScraper:
 
         value_curr_dict.update(curr_dict)
         return value_curr_dict
-
-    # @classmethod
-    # def get_iso_code(cls, currency, name, value):
-    #    return curr_dict
 
     def output_schema_json(self, structure):
         # Validate json structure
@@ -279,7 +275,7 @@ class BaseScraper:
     ) -> WebElement:
         try:
             if not element:
-                element = element = self.browser_get_instance()
+                element = self.browser_get_instance()
             return element.find_element(by_obj, value)
         except NoSuchElementException:
             return None
