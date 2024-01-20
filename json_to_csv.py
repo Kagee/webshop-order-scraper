@@ -84,7 +84,7 @@ def main():  # noqa: PLR0915, C901
     else:
 
         def convert_to_nok(value, curr, date):
-            if value == "" or curr == "":
+            if value == "" or curr in ["", "NOK"]:
                 return str(value)
 
             value = Decimal(value.replace(",", "."))
@@ -108,18 +108,39 @@ def main():  # noqa: PLR0915, C901
             msg = f"Unexpected mult: {mult}"
             raise ValueError(msg)
 
-        def curr_to_nok(_curr):
+        def curr_to_nok(_):
             return "NOK"
 
+        exr_msg = (
+            'Download "Alle valutakurser - Daglige kurser - Siste 10 år"'
+            " from"
+            " https://www.norges-bank.no/tema/Statistikk/Valutakurser/?tab=api"
+            " and save as EXR.csv"
+        )
         if not Path("EXR.csv").is_file():
-            log.error(
-                'Download "Alle valutakurser - Daglige kurser - Siste 10 år"'
-                " from"
-                " https://www.norges-bank.no/tema/Statistikk/Valutakurser/?tab=api"
-                " and save as EXR.csv",
-            )
+            log.error(exr_msg)
             sys.exit(1)
         log.info("Loading EXR.csv, this may take some time...")
+        with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
+            oldest_date_in_exr = datetime.strptime(
+                "1970-01-01",
+                "%Y-%m-%d",
+            ).astimezone()
+            reader = csv.DictReader(csvfile, delimiter=";")
+            for row in reader:
+                date = datetime.strptime(
+                    row["TIME_PERIOD"],
+                    "%Y-%m-%d",
+                ).astimezone()
+                if date > oldest_date_in_exr:
+                    oldest_date_in_exr = date
+            today = datetime.now().astimezone()
+            days_old = (today - oldest_date_in_exr).days
+            log.debug(
+                "Oldest date in EXR.csv is %s, %s days old",
+                oldest_date_in_exr,
+                days_old,
+            )
         with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
             prev_base = None
             prev_mult = None
@@ -128,6 +149,8 @@ def main():  # noqa: PLR0915, C901
             reader = csv.DictReader(csvfile, delimiter=";")
             for row in reader:
                 if prev_base and prev_base != row["BASE_CUR"]:
+                    # We have switched to a new currency
+                    # Reset all previous values
                     prev_mult = None
                     prev_date = None
                     prev_value = None
@@ -136,12 +159,37 @@ def main():  # noqa: PLR0915, C901
                     "%Y-%m-%d",
                 ).astimezone()
                 if prev_date:
+                    # We are only here if prev_base = base
                     exp_date = prev_date + dt.timedelta(days=1)
                     if date != exp_date:
+                        # We got date, but expected exp_date
                         while True:
-                            prev_date += dt.timedelta(days=1)
+                            try:
+                                prev_date += dt.timedelta(days=1)
+                            except OverflowError:
+                                msg = (
+                                    "This should not happen, we overflowed "
+                                    "while generating intermediate "
+                                    "exchange rates: %s %s %s"
+                                )
+                                log.exception(
+                                    msg,
+                                    prev_date,
+                                    exp_date,
+                                    oldest_date_in_exr,
+                                )
+                                raise
+
                             if date == prev_date:
+                                # The current prev_date is the date we
+                                # read in this row, do not generate anymore
                                 break
+
+                            if prev_date > oldest_date_in_exr:
+                                # The generated date is higher than the highest
+                                # overall date from the input file
+                                break
+
                             if row["BASE_CUR"] not in conv_data:
                                 conv_data[row["BASE_CUR"]] = {}
                             conv_data[row["BASE_CUR"]][
@@ -176,6 +224,16 @@ def main():  # noqa: PLR0915, C901
     for order in shop_json["orders"]:
         date = datetime.strptime(order["date"], "%Y-%m-%d").astimezone()
         if date > args.after and date < args.before:
+            if args.nok and date > oldest_date_in_exr:
+                log.error(
+                    (
+                        "Order with date %s is older than latest"
+                        " date in EXR.csv %s, can not calculate"
+                    ),
+                    date,
+                    oldest_date_in_exr,
+                )
+                sys.exit(1)
             if order["date"] not in output:
                 output[order["date"]] = []
             # convert_to_nok(value, curr, date) curr_to_nok
@@ -293,7 +351,7 @@ def main():  # noqa: PLR0915, C901
                     ],
                 )
 
-    with Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv").open(
+    with (Path(settings.OUTPUT_FOLDER) / Path(args.source + ".csv")).open(
         "w",
         newline="",
         encoding="utf-8",
