@@ -123,8 +123,12 @@ class AliExpressScraper(BaseScraper):
                         item_obj["sku"],
                         item_obj["thumbnail"],
                     )
-                if item_obj["snapshot"]["html"] and not self.can_read(
-                    filename_base / item_obj["snapshot"]["html"],
+                if (
+                    "snapshot" in item_obj
+                    and item_obj["snapshot"]["html"]
+                    and not self.can_read(
+                        filename_base / item_obj["snapshot"]["html"],
+                    )
                 ):
                     self.log.error(
                         (
@@ -136,10 +140,17 @@ class AliExpressScraper(BaseScraper):
                         item_obj["title"],
                         item_obj["sku"],
                     )
-                    msg = "Could not find html snapshot for order {order_obj['id']}"
+                    msg = (
+                        "Could not find html snapshot "
+                        f"for order {order_obj['id']}"
+                    )
                     raise RuntimeError(msg)
-                if item_obj["snapshot"]["pdf"] and not self.can_read(
-                    filename_base / item_obj["snapshot"]["pdf"],
+                if (
+                    "snapshot" in item_obj
+                    and item_obj["snapshot"]["pdf"]
+                    and not self.can_read(
+                        filename_base / item_obj["snapshot"]["pdf"],
+                    )
                 ):
                     self.log.error(
                         (
@@ -151,7 +162,10 @@ class AliExpressScraper(BaseScraper):
                         item_obj["title"],
                         item_obj["sku"],
                     )
-                    msg = f"Could not find pdf snapshot for order {order_obj['id']}"
+                    msg = (
+                        "Could not find pdf snapshot "
+                        "for order {order_obj['id']}"
+                    )
                     raise RuntimeError(msg)
                 if "price" in item_obj:
                     price = item_obj["price"]
@@ -171,7 +185,7 @@ class AliExpressScraper(BaseScraper):
                     ),
                     "attachements": [],
                 }
-                if item_obj["snapshot"]["pdf"]:
+                if "snapshot" in item_obj and item_obj["snapshot"]["pdf"]:
                     item_obj_out["attachements"].append(
                         {
                             "name": "Item PDF",
@@ -179,7 +193,7 @@ class AliExpressScraper(BaseScraper):
                             "comment": "PDF print of item snapshot page",
                         },
                     )
-                if item_obj["snapshot"]["html"]:
+                if "snapshot" in item_obj and item_obj["snapshot"]["html"]:
                     item_obj_out["attachements"].append(
                         {
                             "name": "Item HTML",
@@ -193,7 +207,8 @@ class AliExpressScraper(BaseScraper):
                 del oob["items"][item_sku_id]["sku"]
                 del oob["items"][item_sku_id]["count"]
                 del oob["items"][item_sku_id]["title"]
-                del oob["items"][item_sku_id]["snapshot"]
+                if "snapshot" in item_obj:
+                    del oob["items"][item_sku_id]["snapshot"]
                 del oob["items"][item_sku_id]["thumbnail"]
 
                 if oob["items"][item_sku_id] != {}:
