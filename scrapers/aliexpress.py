@@ -1054,7 +1054,7 @@ class AliExpressScraper(BaseScraper):
             "tracking_cache_file"
         ] = self.TRACKING_HTML_FILENAME_TEMPLATE.format(order_id=order["id"])
         if os.access(order["tracking_cache_file"], os.R_OK):
-            with order["tracking_cache_file"].open(
+            with Path(order["tracking_cache_file"]).open(
                 encoding="utf-8",
             ) as ali_ordre:
                 self.log.debug(
@@ -1085,7 +1085,7 @@ class AliExpressScraper(BaseScraper):
         )
         time.sleep(10)
 
-        with order["tracking_cache_file"].open(
+        with Path(order["tracking_cache_file"]).open(
             "w",
             encoding="utf-8",
         ) as ali_ordre:
@@ -1203,7 +1203,7 @@ class AliExpressScraper(BaseScraper):
                 break
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.info("All completed orders loaded (hopefully)")
-        with self.ORDER_LIST_FILENAME.open("w", encoding="utf-8") as ali:
+        with Path(self.ORDER_LIST_FILENAME).open("w", encoding="utf-8") as ali:
             html = fromstring(brws.page_source)
             ali.write(tostring(html).decode("utf-8"))
         return brws.page_source
