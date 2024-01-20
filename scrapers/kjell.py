@@ -620,7 +620,7 @@ class KjellScraper(BaseScraper):
 
         orders = []
 
-        for orig_order in kjell_json["items"]:
+        for orig_order in kjell_json["completed"]["items"]:
             order_id = orig_order["transactionNumber"]
             try:
                 purchase_datetime = datetime.strptime(
