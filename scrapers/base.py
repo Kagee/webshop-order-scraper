@@ -240,7 +240,7 @@ class BaseScraper:
             else:
                 self.log.warning(AMBER("No files to add to zip, not creating"))
             self.log.debug("Writing JSON to %s", json_file_path)
-            with open(json_file_path, "w", encoding="utf-8") as json_file:
+            with json_file_path.open("w", encoding="utf-8") as json_file:
                 json_file.write(json.dumps(structure, indent=4))
 
             self.log.info("Export successful")
@@ -303,26 +303,25 @@ class BaseScraper:
             )
             input()
             return self.browser_get_instance(change_ua), None, None
-        else:
-            # We (optionally) ask for this here and not earlier, since we
-            # may not need to go live
-            username_data = (
-                input(f"Enter {self.name} username:")
-                if not getattr(settings, f"{self.tla}_USERNAME")
-                else getattr(settings, f"{self.tla}_USERNAME")
-            )
-            password_data = (
-                getpass(f"Enter {self.name} password:")
-                if not getattr(settings, f"{self.tla}_PASSWORD")
-                else getattr(settings, f"{self.tla}_PASSWORD")
-            )
+        # We (optionally) ask for this here and not earlier, since we
+        # may not need to go live
+        username_data = (
+            input(f"Enter {self.name} username:")
+            if not getattr(settings, f"{self.tla}_USERNAME")
+            else getattr(settings, f"{self.tla}_USERNAME")
+        )
+        password_data = (
+            getpass(f"Enter {self.name} password:")
+            if not getattr(settings, f"{self.tla}_PASSWORD")
+            else getattr(settings, f"{self.tla}_PASSWORD")
+        )
 
-            self.log.info(AMBER(f"Trying to log in to {self.name}"))
-            return (
-                self.browser_get_instance(change_ua),
-                username_data,
-                password_data,
-            )
+        self.log.info(AMBER(f"Trying to log in to {self.name}"))
+        return (
+            self.browser_get_instance(change_ua),
+            username_data,
+            password_data,
+        )
 
     def browser_get_instance(self, change_ua=None) -> webdriver.Firefox:
         """
@@ -350,13 +349,13 @@ class BaseScraper:
             options.add_argument("-profile")
             options.add_argument(str(settings.FF_PROFILE_PATH))
             options.set_preference("profile", str(settings.FF_PROFILE_PATH))
-            options.set_preference("print.always_print_silent", True)
+            options.set_preference("print.always_print_silent", value=True)
             options.set_preference("print_printer", settings.PDF_PRINTER)
             self.log.debug("Printer set to %s", settings.PDF_PRINTER)
             printer_name = settings.PDF_PRINTER.replace(" ", "_")
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_file",
-                True,
+                value=True,
             )
             # Hide all printing metadata so it is easier to use
             # pdf2text
@@ -369,16 +368,19 @@ class BaseScraper:
             options.set_preference("print.print_footerleft", "")
             options.set_preference("print.print_footerright", "")
 
-            options.set_preference("browser.download.folderList", 2)
+            options.set_preference("browser.download.folderList", value=2)
             options.set_preference(
                 "browser.download.manager.showWhenStarting",
-                False,
+                value=False,
             )
             options.set_preference(
                 "browser.download.alwaysOpenInSystemViewerContextMenuItem",
-                False,
+                value=False,
             )
-            options.set_preference("browser.download.alwaysOpenPanel", False)
+            options.set_preference(
+                "browser.download.alwaysOpenPanel",
+                value=False,
+            )
             options.set_preference(
                 "browser.download.dir",
                 str(self.cache["TEMP"]),
@@ -387,21 +389,24 @@ class BaseScraper:
                 "browser.helperApps.neverAsk.saveToDisk",
                 "application/pdf",
             )
-            options.set_preference("pdfjs.disabled", True)
+            options.set_preference(
+                "pdfjs.disabled",
+                value=True,
+            )
             options.set_preference(
                 f"print.printer_{ printer_name }.print_to_filename",
                 str(self.cache["PDF_TEMP_FILENAME"]),
             )
             options.set_preference(
                 f"print.printer_{ printer_name }.show_print_progress",
-                True,
+                value=True,
             )
             if change_ua:
                 options.set_preference(
                     "general.useragent.override",
                     change_ua,
                 )
-            options.set_preference("detach", True)
+            options.set_preference("detach", value=True)
             self.log.info("Starting browser")
             self.browser = webdriver.Firefox(options=options, service=service)
 
@@ -440,6 +445,7 @@ class BaseScraper:
     def browser_visit_page(
         self,
         url: str,
+        *,
         goto_url_after_login: bool = True,
         do_login: bool = True,
         default_login_detect: bool = True,
@@ -504,7 +510,7 @@ class BaseScraper:
                 msg,
             )
 
-    def part_to_filename(self, part: PagePart, **kwargs):
+    def part_to_filename(self, _part: PagePart, **_kwargs):
         if True:
             msg = "Child does not implement _part_to_filename(...)"
             raise NotImplementedError(
@@ -530,7 +536,10 @@ class BaseScraper:
             filename.unlink()
 
     def external_download_image(
-        self, glob: str, url: str, folder: Path | None = None
+        self,
+        glob: str,
+        url: str,
+        folder: Path | None = None,
     ):
         """
         Downloads image from url if no file matching glob in folder was found
@@ -578,7 +587,9 @@ class BaseScraper:
         return None
 
     def wait_for_files(
-        self, glob: str, folder: Path | None = None
+        self,
+        glob: str,
+        folder: Path | None = None,
     ) -> list[Path]:
         if folder is None:
             folder = self.cache["TEMP"]
@@ -588,7 +599,7 @@ class BaseScraper:
             files = list(folder.glob(glob))
             time.sleep(3)
             wait_count += 1
-            if wait_count > 60:
+            if wait_count > 60:  # noqa: PLR2004
                 self.log.error(
                     RED(
                         "We have been waiting for a file for 3 minutes,"
@@ -603,9 +614,15 @@ class BaseScraper:
         """
         Wait rand(min_seconds(0), max_seconds(5)), so we don't spam Amazon.
         """
-        time.sleep(random.randint(min_seconds, max_seconds))
+        time.sleep(random.randint(min_seconds, max_seconds))  # noqa: S311
 
-    def move_file(self, old_path: Path, new_path: Path, overwrite: bool = True):
+    def move_file(
+        self,
+        old_path: Path,
+        new_path: Path,
+        *,
+        overwrite: bool = True,
+    ):
         if not overwrite and self.can_read(new_path):
             self.log.info(
                 "Not overriding existing file: %s",
@@ -616,7 +633,7 @@ class BaseScraper:
             try:
                 if overwrite:
                     self.remove(new_path)
-                os.rename(old_path, new_path)
+                old_path.rename(new_path)
             except PermissionError as permerr:
                 self.log.debug(permerr)
                 time.sleep(3)
@@ -625,14 +642,15 @@ class BaseScraper:
 
     def makedir(self, path: Path | str) -> None:
         with contextlib.suppress(FileExistsError):
-            os.makedirs(path)
+            path.mkdir(parents=True)
 
     def remove(self, path: Path | str) -> bool:
         try:
-            os.remove(path)
-            return True
+            path.unlink()
         except FileNotFoundError:
             return False
+        else:
+            return True
 
     def can_read(self, path: Path | str):
         return os.access(path, os.R_OK)
@@ -641,6 +659,7 @@ class BaseScraper:
         self,
         path: Path | str,
         content: Any,
+        *,
         to_json=False,
         binary=False,
         html=False,
@@ -658,8 +677,7 @@ class BaseScraper:
         if binary:
             write_mode += "b"
             kwargs = {}
-        with open(  # pylint: disable=unspecified-encoding
-            path,
+        with path.open(
             write_mode,
             **kwargs,
         ) as file:
@@ -672,12 +690,13 @@ class BaseScraper:
     def read(
         cls,
         path: Path | str,
+        *,
         from_json=False,
         from_html=False,
         from_csv=False,
         **kwargs,
     ) -> Any:
-        with open(path, encoding="utf-8-sig") as file:
+        with path.open(encoding="utf-8-sig") as file:
             if from_csv:
                 return list(csv.DictReader(file, **kwargs))
             contents: str = file.read()
@@ -685,7 +704,7 @@ class BaseScraper:
                 try:
                     contents = json.loads(contents)
                 except json.decoder.JSONDecodeError as jde:
-                    cls.log.error("Encountered error when reading %s", path)
+                    cls.log.exception("Encountered error when reading %s", path)
                     msg = f"Encountered error when reading {path}"
                     raise OSError(
                         msg,
@@ -702,11 +721,11 @@ class BaseScraper:
         size_stable = False
         counter = 10
         while not size_stable:
-            sz1 = os.stat(filename).st_size
+            sz1 = filename.stat().st_size
             time.sleep(2)
-            sz2 = os.stat(filename).st_size
+            sz2 = filename.stat().st_size
             time.sleep(2)
-            sz3 = os.stat(filename).st_size
+            sz3 = filename.stat().st_size
             size_stable = (sz1 == sz2 == sz3) and sz1 + sz2 + sz3 > 0
             self.log.debug(
                 "Watching for stable file size larger than 0 bytes: %s %s"
@@ -822,10 +841,11 @@ class BaseScraper:
             prev_date = date_index
 
         last_day = sorted_data_dict[len(sorted_data_dict) - 1]
-        if last_day < date.today():
-            for created_date_index in daterange(last_day, date.today()):
+        today = datetime.datetime.now().astimezone().date()
+        if last_day < today:
+            for created_date_index in daterange(last_day, today):
                 data_dict[str(created_date_index)] = data_dict[last_day]
-            data_dict[str(date.today())] = data_dict[last_day]
+            data_dict[str(today)] = data_dict[last_day]
         return {str(key): value for (key, value) in data_dict.items()}
 
 

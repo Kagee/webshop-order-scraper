@@ -123,12 +123,12 @@ class AliExpressScraper(BaseScraper):
                         item_obj["sku"],
                         item_obj["thumbnail"],
                     )
-                if not self.can_read(
+                if item_obj["snapshot"]["html"] and not self.can_read(
                     filename_base / item_obj["snapshot"]["html"],
                 ):
                     self.log.error(
                         (
-                            "Could not find thumbnail for order %s,"
+                            "Could not find html snapshot for order %s,"
                             " item %s/%s/%s)"
                         ),
                         order_obj["id"],
@@ -136,12 +136,14 @@ class AliExpressScraper(BaseScraper):
                         item_obj["title"],
                         item_obj["sku"],
                     )
-                if not self.can_read(
+                    msg = "Could not find html snapshot for order {order_obj['id']}"
+                    raise RuntimeError(msg)
+                if item_obj["snapshot"]["pdf"] and not self.can_read(
                     filename_base / item_obj["snapshot"]["pdf"],
                 ):
                     self.log.error(
                         (
-                            "Could not find thumbnail for order %s,"
+                            "Could not find pdf snapshot for order %s,"
                             " item %s/%s/%s)"
                         ),
                         order_obj["id"],
@@ -149,6 +151,8 @@ class AliExpressScraper(BaseScraper):
                         item_obj["title"],
                         item_obj["sku"],
                     )
+                    msg = f"Could not find pdf snapshot for order {order_obj['id']}"
+                    raise RuntimeError(msg)
                 if "price" in item_obj:
                     price = item_obj["price"]
                     del oob["items"][item_sku_id]["price"]
@@ -165,19 +169,24 @@ class AliExpressScraper(BaseScraper):
                         "price",
                         price,
                     ),
-                    "attachements": [
+                    "attachements": [],
+                }
+                if item_obj["snapshot"]["pdf"]:
+                    item_obj_out["attachements"].append(
                         {
                             "name": "Item PDF",
                             "path": item_obj["snapshot"]["pdf"],
                             "comment": "PDF print of item snapshot page",
                         },
+                    )
+                if item_obj["snapshot"]["html"]:
+                    item_obj_out["attachements"].append(
                         {
                             "name": "Item HTML",
                             "path": item_obj["snapshot"]["html"],
                             "comment": "HTML Scrape of item snapshot page",
                         },
-                    ],
-                }
+                    )
 
                 order_obj["items"].append(item_obj_out)
 
@@ -498,7 +507,8 @@ class AliExpressScraper(BaseScraper):
         html: HtmlElement,
     ) -> dict[str, Any]:
         """
-        Uses LXML to extract useful info from the HTML this order's tracking page
+        Uses LXML to extract useful info
+        from the HTML this order's tracking page
 
             Returns:
                 tracking (Dict[str, Any]): Dict with tracking info
@@ -650,7 +660,8 @@ class AliExpressScraper(BaseScraper):
         of the item's snapshots, since this must be done live.
 
             Returns:
-                order_html (HtmlElement): The HTML from this order['id'] details page
+                order_html (HtmlElement): The HTML from
+                this order['id'] details page
         """
         url = self.ORDER_DETAIL_URL.format(order["id"])
         self.log.info("Visiting %s", url)
@@ -783,7 +794,8 @@ class AliExpressScraper(BaseScraper):
                 item_sku_id,
             )
 
-            # Thumbnail MUST happen after snapshot, as we hide the snapshot button
+            # Thumbnail MUST happen after snapshot,
+            # as we hide the snapshot button
             # before saving thumbnail
             self.browser_save_item_thumbnail(
                 order,
@@ -927,11 +939,10 @@ class AliExpressScraper(BaseScraper):
             self.browser.close()
         if not debug_found_snapshot:
             self.log.debug(
-                RED(
-                    "Failed to find snapshot, sleeping 100000 seconds for debug",
-                ),
+                RED("Failed to find snapshot"),
             )
-            time.sleep(100000)
+            order["items"][item_sku_id]["snapshot"]["pdf"] = None
+            order["items"][item_sku_id]["snapshot"]["html"] = None
         self.log.debug("Switching to order details page")
         self.browser.switch_to.window(order_details_page_handle)
         return True
@@ -1007,7 +1018,8 @@ class AliExpressScraper(BaseScraper):
         and then save the HTML from the tracking page of an individual order
 
             Returns:
-                tracking_html (HtmlElement): The HTML from this order['id'] tracking page
+                tracking_html (HtmlElement): The HTML from
+                this order['id'] tracking page
         """
         order[
             "tracking_cache_file"
@@ -1179,7 +1191,10 @@ class AliExpressScraper(BaseScraper):
         self.log.info(AMBER("We need to log in to Aliexpress"))
         self.log.error(RED("Manual profile update required, terminating."))
         self.browser_safe_quit()
-        msg = "Automatic loging for newer Aliexpress not implemented."
+        msg = (
+            "Automatic loging for newer Aliexpress not implemented. "
+            "Please read README.md for instructions."
+        )
         raise NotImplementedError(
             msg,
         )

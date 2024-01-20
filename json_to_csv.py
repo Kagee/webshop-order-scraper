@@ -125,7 +125,7 @@ def main():  # noqa: PLR0915, C901
                             decimal.Decimal(".00"),
                             decimal.ROUND_HALF_UP,
                         ),
-                    )
+                    ),
                 )
             if mult == "2":
                 return force_separator(
@@ -134,7 +134,7 @@ def main():  # noqa: PLR0915, C901
                             decimal.Decimal(".00"),
                             decimal.ROUND_HALF_UP,
                         ),
-                    )
+                    ),
                 )
             msg = f"Unexpected mult: {mult}"
             raise ValueError(msg)
