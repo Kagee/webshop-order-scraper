@@ -885,14 +885,7 @@ class AliExpressScraper(BaseScraper):
                     ext="html",
                 ),
             }
-        if self.can_read(
-            order["items"][item_sku_id]["snapshot"]["pdf"],
-        ) and self.can_read(order["items"][item_sku_id]["snapshot"]["html"]):
-            self.log.info(
-                "Not opening snapshot, already saved: %s",
-                item_sku_id,
-            )
-            return False
+
         if self.can_read(
             Path(self.ORDER_FOLDER.format(order_id=order["id"]))
             / "snapshot.missing",
@@ -901,6 +894,15 @@ class AliExpressScraper(BaseScraper):
                 "Not opening snapshot, already defined as missing: %s",
                 Path(self.ORDER_FOLDER.format(order_id=order["id"]))
                 / "snapshot.missing",
+            )
+            return False
+
+        if self.can_read(
+            order["items"][item_sku_id]["snapshot"]["pdf"],
+        ) and self.can_read(order["items"][item_sku_id]["snapshot"]["html"]):
+            self.log.info(
+                "Not opening snapshot, already saved: %s",
+                item_sku_id,
             )
             return False
 
