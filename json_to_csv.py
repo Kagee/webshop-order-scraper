@@ -91,6 +91,7 @@ def main():  # noqa: PLR0915, C901
     if args.separator:
 
         def force_separator(value):
+            value = str(value)
             if "." in value:
                 return value.replace(".", args.separator)
             return value.replace(",", args.separator)
