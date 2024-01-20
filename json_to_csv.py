@@ -35,6 +35,12 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--delimiter",
+        type=str,
+        help="delimiter in csv. Default is based on excel dialect.",
+    )
+
+    parser.add_argument(
         "--stdout",
         action="store_true",
     )
@@ -357,7 +363,10 @@ def main():  # noqa: PLR0915, C901
         encoding="utf-8",
     ) as csvfile:
         out = sys.stdout if args.stdout else csvfile
-        writer = csv.writer(out, dialect=csv.excel)
+        options = {}
+        if args.delimiter:
+            options["delimiter"] = args.delimiter
+        writer = csv.writer(out, dialect=csv.excel, **options)
         writer.writerow(
             [
                 "order_date",
