@@ -18,7 +18,7 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 from . import settings
@@ -49,9 +49,6 @@ class AliExpressScraper(BaseScraper):
         )
         filename_base = self.cache["BASE"]
         for json_order_file in self.cache["ORDERS"].glob("**/*.json"):
-            # if json_order_file.parent.name != "8134930031914043":
-            #    continue
-
             oob = self.read(json_order_file, from_json=True)
             self.log.debug(
                 "Processing %s/%s",
@@ -59,8 +56,12 @@ class AliExpressScraper(BaseScraper):
                 json_order_file.name,
             )
 
-            assert self.can_read(filename_base / oob["tracking_cache_file"])
-            assert self.can_read(filename_base / oob["cache_file"])
+            if not self.can_read(filename_base / oob["tracking_cache_file"]):
+                msg = f"Could not read {filename_base / oob['tracking_cache_file']}"
+                raise RuntimeError(msg)
+            if not self.can_read(filename_base / oob["cache_file"]):
+                msg = f"Could not read {filename_base / oob['cache_file']}"
+                raise RuntimeError(msg)
             order_obj = {
                 "id": oob["id"],
                 "date": (
@@ -89,7 +90,8 @@ class AliExpressScraper(BaseScraper):
                 ]:
                     del oob["price_items"][price_name]
                     order_obj[price_name.lower()] = self.get_value_currency(
-                        price_name, price_value,
+                        price_name,
+                        price_value,
                     )
 
             if not oob["price_items"]:
@@ -104,45 +106,64 @@ class AliExpressScraper(BaseScraper):
             del oob["id"]
             del oob["contact_info"]
             # We do not delete date, since it in theory is a timestamp
-            # del oob["date"]
+
             del oob["tracking_cache_file"]
             del oob["cache_file"]
 
             for item_sku_id, item_obj in oob["items"].items():
-                assert self.can_read(filename_base / item_obj["thumbnail"]), (
-                    f"Could not find thumbnail for order {order_obj['id']},"
-                    " item"
-                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']}),"
-                    f" {item_obj['thumbnail']}"
-                )
-                assert self.can_read(
+                if not self.can_read(filename_base / item_obj["thumbnail"]):
+                    self.log.error(
+                        (
+                            "Could not find thumbnail for "
+                            "order %s, item %s/%s/%s), %s"
+                        ),
+                        order_obj["id"],
+                        item_sku_id.split("-")[0],
+                        item_obj["title"],
+                        item_obj["sku"],
+                        item_obj["thumbnail"],
+                    )
+                if not self.can_read(
                     filename_base / item_obj["snapshot"]["html"],
-                ), (
-                    f"Could not find thumbnail for order {order_obj['id']},"
-                    " item"
-                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']})"
-                )
-                assert self.can_read(
+                ):
+                    self.log.error(
+                        (
+                            "Could not find thumbnail for order %s,"
+                            " item %s/%s/%s)"
+                        ),
+                        order_obj["id"],
+                        item_sku_id.split("-")[0],
+                        item_obj["title"],
+                        item_obj["sku"],
+                    )
+                if not self.can_read(
                     filename_base / item_obj["snapshot"]["pdf"],
-                ), (
-                    f"Could not find thumbnail for order {order_obj['id']},"
-                    " item"
-                    f" {item_sku_id.split('-')[0]}/{item_obj['title']}/{item_obj['sku']})"
-                )
+                ):
+                    self.log.error(
+                        (
+                            "Could not find thumbnail for order %s,"
+                            " item %s/%s/%s)"
+                        ),
+                        order_obj["id"],
+                        item_sku_id.split("-")[0],
+                        item_obj["title"],
+                        item_obj["sku"],
+                    )
                 if "price" in item_obj:
                     price = item_obj["price"]
                     del oob["items"][item_sku_id]["price"]
                 else:
                     price = item_obj["total"]
                     del oob["items"][item_sku_id]["total"]
-                item_obj = {
+                item_obj_out = {
                     "id": item_sku_id.split("-")[0],
                     "name": item_obj["title"],
                     "variation": item_obj["sku"],
                     "quantity": item_obj["count"],
                     "thumbnail": item_obj["thumbnail"],
                     "total": self.get_value_currency(
-                        "price", price,
+                        "price",
+                        price,
                     ),
                     "attachements": [
                         {
@@ -158,7 +179,7 @@ class AliExpressScraper(BaseScraper):
                     ],
                 }
 
-                order_obj["items"].append(item_obj)
+                order_obj["items"].append(item_obj_out)
 
                 del oob["items"][item_sku_id]["sku"]
                 del oob["items"][item_sku_id]["count"]
@@ -166,7 +187,13 @@ class AliExpressScraper(BaseScraper):
                 del oob["items"][item_sku_id]["snapshot"]
                 del oob["items"][item_sku_id]["thumbnail"]
 
-                assert oob["items"][item_sku_id] == {}
+                if oob["items"][item_sku_id] != {}:
+                    msg = (
+                        "Item dict not empty: "
+                        f"{item_sku_id.split('-')[0]}, "
+                        f"{oob['items'][item_sku_id]}"
+                    )
+                    raise ValueError(msg)
 
             del oob["items"]
             structure["orders"].append(order_obj)
@@ -282,10 +309,11 @@ class AliExpressScraper(BaseScraper):
                 order["items"][item_sku_id] = {}
 
             if "thumbnail" not in order["items"]:
-                order["items"][item_sku_id]["thumbnail"] = (
-                    self.THUMB_FILENAME_TEMPLATE.format(
-                        order_id=order_id, item_id=item_sku_id,
-                    )
+                order["items"][item_sku_id][
+                    "thumbnail"
+                ] = self.THUMB_FILENAME_TEMPLATE.format(
+                    order_id=order_id,
+                    item_id=item_sku_id,
                 )
             if "snapshot" not in order["items"][item_sku_id]:
                 order["items"][item_sku_id]["snapshot"] = {
@@ -331,7 +359,9 @@ class AliExpressScraper(BaseScraper):
     @classmethod
     def make_make_sku_hash(cls, sku_text):
         sku = re.sub(
-            " {2,}", " ", "".join(sku_text).strip().replace("\xa0", " "),
+            " {2,}",
+            " ",
+            "".join(sku_text).strip().replace("\xa0", " "),
         )
         return base64.urlsafe_b64encode(sku.encode("utf-8")).decode("utf-8")
 
@@ -363,15 +393,17 @@ class AliExpressScraper(BaseScraper):
         counter = 0
         max_orders_reached = False
         for order in orders:
-            if settings.ALI_ORDERS_MAX > 0:
-                if counter >= settings.ALI_ORDERS_MAX:
-                    if not max_orders_reached:
-                        self.log.info(
-                            "Scraped %s order, stopping scraping",
-                            settings.ALI_ORDERS_MAX,
-                        )
-                        max_orders_reached = True
-                    continue
+            if (
+                settings.ALI_ORDERS_MAX > 0
+                and counter >= settings.ALI_ORDERS_MAX
+            ):
+                if not max_orders_reached:
+                    self.log.info(
+                        "Scraped %s order, stopping scraping",
+                        settings.ALI_ORDERS_MAX,
+                    )
+                    max_orders_reached = True
+                continue
             if (
                 len(settings.ALI_ORDERS)
                 and order["id"] not in settings.ALI_ORDERS
@@ -382,17 +414,19 @@ class AliExpressScraper(BaseScraper):
             order_cache_dir = self.cache["ORDERS"] / order["id"]
             self.makedir(order_cache_dir)
             json_filename = self.ORDER_FILENAME_TEMPLATE.format(
-                order_id=order["id"], ext="json",
+                order_id=order["id"],
+                ext="json",
             )
             if self.can_read(Path(json_filename)):
                 self.log.info("Json for order %s found, skipping", order["id"])
                 continue
             self.log.debug("#" * 30)
             self.log.debug("Scraping order ID %s", order["id"])
-            order_html: HtmlElement = HtmlElement()  # type: ignore
+            order_html: HtmlElement = HtmlElement()
 
             order["cache_file"] = self.ORDER_FILENAME_TEMPLATE.format(
-                order_id=order["id"], ext="html",
+                order_id=order["id"],
+                ext="html",
             )
             if self.can_read(order["cache_file"]):
                 order_html = fromstring(self.read(order["cache_file"]))
@@ -400,19 +434,22 @@ class AliExpressScraper(BaseScraper):
                 order_html = self.browser_scrape_order_details(order)
 
             order_data = self.lxml_parse_individual_order(
-                order_html, order["id"],
+                order_html,
+                order["id"],
             )
             order.update(order_data)
 
             tracking = self.lxml_parse_tracking_html(
-                order, self.get_scrape_tracking_page_html(order),
+                order,
+                self.get_scrape_tracking_page_html(order),
             )
             order["tracking"] = tracking
 
             # We do this after all "online" scraping is complete
             self.log.info("Writing order details page to cache")
             self.write(
-                order["cache_file"], tostring(order_html).decode("utf-8"),
+                order["cache_file"],
+                tostring(order_html).decode("utf-8"),
             )
 
             # Make Paths relative before json
@@ -439,24 +476,26 @@ class AliExpressScraper(BaseScraper):
                 order_list_html (str): The HTML from the order list page
         """
         if self.options.use_cached_orderlist and os.access(
-            self.ORDER_LIST_FILENAME, os.R_OK,
+            self.ORDER_LIST_FILENAME,
+            os.R_OK,
         ):
             self.log.info(
                 "Loading order list from cache: %s",
                 self.ORDER_LIST_FILENAME,
             )
             return self.read(self.ORDER_LIST_FILENAME)
-        else:
-            self.log.info(
-                "Tried to use order list cache (%s), but found none",
-                self.ORDER_LIST_FILENAME,
-            )
+        self.log.info(
+            "Tried to use order list cache (%s), but found none",
+            self.ORDER_LIST_FILENAME,
+        )
         return self.browser_scrape_order_list_html()
 
     # Methods that use LXML to extract info from HTML
 
     def lxml_parse_tracking_html(
-        self, order: dict, html: HtmlElement,
+        self,
+        order: dict,
+        html: HtmlElement,
     ) -> dict[str, Any]:
         """
         Uses LXML to extract useful info from the HTML this order's tracking page
@@ -521,7 +560,7 @@ class AliExpressScraper(BaseScraper):
                     "head": head,
                     "text": text,
                 },
-            )  # type: ignore
+            )
         return tracking
 
     def lxml_parse_orderlist_html(self, order_list_html) -> list[dict]:
@@ -555,8 +594,9 @@ class AliExpressScraper(BaseScraper):
                 if info:
                     if info.group("order_date"):
                         order_date = datetime.strptime(
-                            info.group("order_date"), "%b %d, %Y",
-                        )
+                            info.group("order_date"),
+                            "%b %d, %Y",
+                        ).astimezone()
                     else:
                         order_id = info.group("order_id")
             if not all([order_date, order_id]):
@@ -577,7 +617,8 @@ class AliExpressScraper(BaseScraper):
                 './/span[@class="order-item-store-name"]/a',
             )
             info = re.match(
-                r".+/store/(?P<order_store_id>\d+)", order_store_id.get("href"),
+                r".+/store/(?P<order_store_id>\d+)",
+                order_store_id.get("href"),
             )
             order_store_id = info.group("order_store_id") if info else "0"
 
@@ -613,7 +654,7 @@ class AliExpressScraper(BaseScraper):
         """
         url = self.ORDER_DETAIL_URL.format(order["id"])
         self.log.info("Visiting %s", url)
-        brws = self.browser_visit_page(url, False)
+        brws = self.browser_visit_page(url, goto_url_after_login=False)
 
         self.log.info("Waiting for page load")
         time.sleep(3)
@@ -621,7 +662,7 @@ class AliExpressScraper(BaseScraper):
 
         try:
             wait10.until(
-                EC.element_to_be_clickable(
+                expected_conditions.element_to_be_clickable(
                     (By.XPATH, "//span[contains(@class, 'switch-icon')]"),
                 ),
                 "Timeout waiting for switch buttons",
@@ -638,11 +679,12 @@ class AliExpressScraper(BaseScraper):
                 self.log.debug("Fant ingen robot å skjule")
             # Expand address and payment info
             for element in brws.find_elements(
-                By.XPATH, "//span[contains(@class, 'switch-icon')]",
+                By.XPATH,
+                "//span[contains(@class, 'switch-icon')]",
             ):
                 time.sleep(1)
                 WebDriverWait(brws, 30).until_not(
-                    EC.presence_of_element_located(
+                    expected_conditions.presence_of_element_located(
                         (
                             By.XPATH,
                             "//div[contains(@class, 'comet-loading-wrap')]",
@@ -650,19 +692,22 @@ class AliExpressScraper(BaseScraper):
                     ),
                 )
                 # selenium.common.exceptions.ElementClickInterceptedException:
-                # Message: Element
+                # Message: Element  # noqa: ERA001
                 # <span class="comet-icon comet-icon-arrowdown switch-icon">
                 # is not clickable at point (762,405) because another
                 # element <div class="comet-loading-wrap"> obscures it
                 try:
-                    wait10.until(EC.element_to_be_clickable(element)).click()
+                    wait10.until(
+                        expected_conditions.element_to_be_clickable(element),
+                    ).click()
                     time.sleep(1)
                 except ElementClickInterceptedException:
                     try:
                         time.sleep(1)
                         # Hide the good damn robot
                         god_damn_robot = brws.find_element(
-                            By.ID, "J_xiaomi_dialog",
+                            By.ID,
+                            "J_xiaomi_dialog",
                         )
                         brws.execute_script(
                             "arguments[0].setAttribute('style', 'display:"
@@ -697,7 +742,8 @@ class AliExpressScraper(BaseScraper):
             self.log.debug("Current item id is %s", item_id)
 
             sku_element = item_content.find_elements(
-                By.XPATH, './/div[contains(@class, "item-sku-attr")]',
+                By.XPATH,
+                './/div[contains(@class, "item-sku-attr")]',
             )
 
             # URL and filename-safe base64, so we can
@@ -732,38 +778,48 @@ class AliExpressScraper(BaseScraper):
 
             # Get snapshot of order page from Ali's archives
             move_mouse = self.browser_save_item_sku_snapshot(
-                order, thumb_element, item_sku_id,
+                order,
+                thumb_element,
+                item_sku_id,
             )
 
             # Thumbnail MUST happen after snapshot, as we hide the snapshot button
             # before saving thumbnail
             self.browser_save_item_thumbnail(
-                order, thumb_element, item_sku_id, move_mouse,
+                order,
+                thumb_element,
+                item_sku_id,
+                move_mouse,
             )
 
         return fromstring(brws.page_source)
 
     def browser_save_item_thumbnail(
-        self, order, thumb, item_sku_id, move_mouse=False,
+        self,
+        order,
+        thumb,
+        item_sku_id,
+        *,
+        move_mouse=False,
     ):
         # Find and hide the snapshot "camera" graphic that
         # overlays the thumbnail
         snapshot_parent = thumb.find_element(
-            By.XPATH, './/div[@class="order-detail-item-snapshot"]',
+            By.XPATH,
+            './/div[@class="order-detail-item-snapshot"]',
         )
         self.browser.execute_script(
             "arguments[0].setAttribute('style', 'display: none;')",
             snapshot_parent,
         )
 
-        # move the "mouse" off the element so we do not get
-        # a floating text box
-        # random = thumb.find_element(By.XPATH, './/parent::*')
         # If we try to move the mouse without having "clicked" on
         # anything on "this" page, selenium gets a brain aneurysm
         if move_mouse:
             ActionChains(self.browser).move_to_element_with_offset(
-                thumb, 130, 0,
+                thumb,
+                130,
+                0,
             ).perform()
 
         # Save copy of item thumbnail (without snapshot that
@@ -771,10 +827,11 @@ class AliExpressScraper(BaseScraper):
         # This is 100000x easier than extracting the actual
         # image via some js trickery
         thumb_data = thumb.screenshot_as_base64
-        order["items"][item_sku_id]["thumbnail"] = (
-            self.THUMB_FILENAME_TEMPLATE.format(
-                order_id=order["id"], item_id=item_sku_id,
-            )
+        order["items"][item_sku_id][
+            "thumbnail"
+        ] = self.THUMB_FILENAME_TEMPLATE.format(
+            order_id=order["id"],
+            item_id=item_sku_id,
         )
         self.log.debug(
             "Writing thumbnail to %s for item_sku_id %s",
@@ -795,26 +852,31 @@ class AliExpressScraper(BaseScraper):
         if "snapshot" not in order["items"][item_sku_id]:
             order["items"][item_sku_id]["snapshot"] = {
                 "pdf": self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                    order_id=order["id"], item_id=item_sku_id, ext="pdf",
+                    order_id=order["id"],
+                    item_id=item_sku_id,
+                    ext="pdf",
                 ),
                 "html": self.SNAPSHOT_FILENAME_TEMPLATE.format(
-                    order_id=order["id"], item_id=item_sku_id, ext="html",
+                    order_id=order["id"],
+                    item_id=item_sku_id,
+                    ext="html",
                 ),
             }
         if self.can_read(
             order["items"][item_sku_id]["snapshot"]["pdf"],
         ) and self.can_read(order["items"][item_sku_id]["snapshot"]["html"]):
             self.log.info(
-                "Not opening snapshot, already saved: %s", item_sku_id,
+                "Not opening snapshot, already saved: %s",
+                item_sku_id,
             )
             return False
         order_details_page_handle = self.browser.current_window_handle
         self.log.debug(
-            "Order details page handle is %s", order_details_page_handle,
+            "Order details page handle is %s",
+            order_details_page_handle,
         )
         snapshot = thumb.find_element(
             By.XPATH,
-            #'.//div[contains(@class, "order-detail-item-snapshot")]//*[local-name()="svg"]'
             './/div[contains(@class, "order-detail-item-snapshot")]',
         )
         snapshot.click()
@@ -898,7 +960,8 @@ class AliExpressScraper(BaseScraper):
 
         page = brws.find_element(By.ID, "page")
         preview_images: list[WebElement] = brws.find_elements(
-            By.CSS_SELECTOR, "li.image-nav-item img",
+            By.CSS_SELECTOR,
+            "li.image-nav-item img",
         )
 
         brws.execute_script(
@@ -946,12 +1009,12 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 tracking_html (HtmlElement): The HTML from this order['id'] tracking page
         """
-        order["tracking_cache_file"] = (
-            self.TRACKING_HTML_FILENAME_TEMPLATE.format(order_id=order["id"])
-        )
+        order[
+            "tracking_cache_file"
+        ] = self.TRACKING_HTML_FILENAME_TEMPLATE.format(order_id=order["id"])
         if os.access(order["tracking_cache_file"], os.R_OK):
-            with open(
-                order["tracking_cache_file"], encoding="utf-8",
+            with order["tracking_cache_file"].open(
+                encoding="utf-8",
             ) as ali_ordre:
                 self.log.debug(
                     "Loading individual order tracking data cache: %s",
@@ -959,7 +1022,8 @@ class AliExpressScraper(BaseScraper):
                 )
                 return fromstring(ali_ordre.read())
         self.browser_visit_page(
-            self.ORDER_TRACKING_URL.format(order["id"]), False,
+            self.ORDER_TRACKING_URL.format(order["id"]),
+            goto_url_after_login=False,
         )
         time.sleep(1)
         self.browser.execute_script(
@@ -968,7 +1032,8 @@ class AliExpressScraper(BaseScraper):
         self.log.debug("Waiting 10 seconds for tracking page load")
         try:
             self.browser.find_element(
-                By.XPATH, "//div[contains(@class, 'benifit-cancel')]",
+                By.XPATH,
+                "//div[contains(@class, 'benifit-cancel')]",
             ).click()
             self.log.debug("Hiding message about shipping benefits")
         except NoSuchElementException:
@@ -979,8 +1044,9 @@ class AliExpressScraper(BaseScraper):
         )
         time.sleep(10)
 
-        with open(
-            order["tracking_cache_file"], "w", encoding="utf-8",
+        with order["tracking_cache_file"].open(
+            "w",
+            encoding="utf-8",
         ) as ali_ordre:
             tracking_html = fromstring(self.browser.page_source)
             ali_ordre.write(tostring(tracking_html).decode("utf-8"))
@@ -994,13 +1060,16 @@ class AliExpressScraper(BaseScraper):
             Returns:
                 order_list_html (str): The HTML from the order list page
         """
-        brws = self.browser_visit_page(self.ORDER_LIST_URL, False)
+        brws = self.browser_visit_page(
+            self.ORDER_LIST_URL,
+            goto_url_after_login=False,
+        )
         wait10 = WebDriverWait(brws, 10)
         # Find and click the tab for completed orders
         self.log.debug("Waiting for 'Processed' link")
         try:
             wait10.until(
-                EC.element_to_be_clickable(
+                expected_conditions.element_to_be_clickable(
                     (
                         By.XPATH,
                         (
@@ -1015,7 +1084,7 @@ class AliExpressScraper(BaseScraper):
             # vi venter litt til før vi klikker
             time.sleep(5)
             wait10.until(
-                EC.element_to_be_clickable(
+                expected_conditions.element_to_be_clickable(
                     (
                         By.XPATH,
                         (
@@ -1028,7 +1097,7 @@ class AliExpressScraper(BaseScraper):
 
         # Wait until the tab for completed orders are complete
         wait10.until(
-            EC.presence_of_element_located(
+            expected_conditions.presence_of_element_located(
                 (
                     By.XPATH,
                     (
@@ -1055,7 +1124,8 @@ class AliExpressScraper(BaseScraper):
         time.sleep(3)
         try:
             god_damn_go_to_top = brws.find_element(
-                By.CSS_SELECTOR, "div.comet-back-top",
+                By.CSS_SELECTOR,
+                "div.comet-back-top",
             )
             brws.execute_script(
                 "arguments[0].setAttribute('style', 'display: none;')",
@@ -1069,7 +1139,7 @@ class AliExpressScraper(BaseScraper):
             time.sleep(3)
             try:
                 element = wait10.until(
-                    EC.presence_of_element_located(
+                    expected_conditions.presence_of_element_located(
                         (
                             By.XPATH,
                             (
@@ -1092,13 +1162,13 @@ class AliExpressScraper(BaseScraper):
                 break
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
         self.log.info("All completed orders loaded (hopefully)")
-        with open(self.ORDER_LIST_FILENAME, "w", encoding="utf-8") as ali:
+        with self.ORDER_LIST_FILENAME.open("w", encoding="utf-8") as ali:
             html = fromstring(brws.page_source)
             ali.write(tostring(html).decode("utf-8"))
         return brws.page_source
 
     # Browser util methods
-    def browser_login(self, expected_url):
+    def browser_login(self, _expected_url):
         """
         Uses Selenium to log in AliExpress.
         Returns when the browser is at url, after login.
@@ -1126,7 +1196,7 @@ class AliExpressScraper(BaseScraper):
             orders = self.lxml_parse_orderlist_html(order_list_html)
             self.get_individual_order_details(orders)
         except NoSuchWindowException:
-            self.log.error(
+            self.log.exception(
                 RED(
                     "Login to Aliexpress was not successful. "
                     "Please do not close the browser window.",
