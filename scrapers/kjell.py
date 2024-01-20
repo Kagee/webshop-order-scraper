@@ -616,7 +616,7 @@ class KjellScraper(BaseScraper):
             "https://www.kjell.com/-p{item_id}",
         )
 
-        kjell_json = self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
+        kjell_json = self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)[0]
 
         orders = []
 
