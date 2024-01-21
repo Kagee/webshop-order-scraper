@@ -22,6 +22,16 @@ class EbayScraper(BaseScraper):
         order_ids = self.browser_load_order_list()
         self.log.debug("Processing %s order ids", len(order_ids))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
+        orders = {}
+        for order_id in sorted(order_ids):
+            if order_id in orders:
+                # Order pages may contain multiple order ids,
+                # and may already have been scraped
+                continue
+            self.browser_scrape_order_id(order_id)
+
+    def browser_scrape_order_id(self, order_id) -> dict:
+        return {}
 
     def browser_load_order_list(self) -> list:
         if self.options.use_cached_orderlist:
@@ -42,6 +52,8 @@ class EbayScraper(BaseScraper):
             self.log.debug("We need to scrape order list for %s", year)
             url = f"https://www.ebay.com/mye/myebay/purchase?filter=year_filter:{keyword}"
             self.log.debug(url)
+            if not self.browser:
+                self.browser_visit_page_v2(self.ORDER_LIST_START)
             self.browser_visit_page_v2(url)
             # Find all order numbers
             xpath = "//span[text()='Order number:']/following-sibling::span"
@@ -92,8 +104,7 @@ class EbayScraper(BaseScraper):
         ]
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
-        brws = self.browser_get_instance()
-        if "login" in brws.current_url:
+        if "login" in self.b.current_url:
             self.log.error(
                 AMBER(
                     "Please manyally login to eBay, "
@@ -101,7 +112,7 @@ class EbayScraper(BaseScraper):
                 ),
             )
             input()
-            if brws.current_url != expected_url:
+            if self.b.current_url != expected_url:
                 self.browser_visit_page_v2(
                     expected_url,
                 )

@@ -416,6 +416,10 @@ class BaseScraper:
             self.log.debug("Returning browser")
         return self.browser
 
+    @property
+    def b(self):
+        return self.browser_get_instance()
+
     def _browser_post_init(self):
         # Stuff we should do before returning the first browser session
         return
