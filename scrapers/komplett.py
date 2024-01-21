@@ -62,7 +62,8 @@ class KomplettScraper(BaseScraper):
                 assert len(order_infos) == 2, "Found !2 order info tables"
                 for order_info in order_infos:
                     order_info_type = order_info.find_element(
-                        By.CSS_SELECTOR, "caption",
+                        By.CSS_SELECTOR,
+                        "caption",
                     ).text.strip()
                     assert order_info_type in [
                         "Ordredetaljer",
@@ -70,13 +71,16 @@ class KomplettScraper(BaseScraper):
                     ], f"Unknown order_info_type: '{order_info_type}'"
                     order_dict[order_info_type] = {}
                     rows: list[WebElement] = order_info.find_elements(
-                        By.CSS_SELECTOR, "tbody tr",
+                        By.CSS_SELECTOR,
+                        "tbody tr",
                     )
                     for row in rows:
                         label = row.find_element(By.TAG_NAME, "th").text.strip()
                         value = row.find_element(By.TAG_NAME, "td")
                         if anchor_element := self.find_element(
-                            By.TAG_NAME, "a", value,
+                            By.TAG_NAME,
+                            "a",
+                            value,
                         ):
                             # td contains a anhor element, it is a link to a file
                             value = anchor_element.text.strip()
@@ -156,50 +160,61 @@ class KomplettScraper(BaseScraper):
                         skip_thumb = True
 
                     description_td = item_row.find_element(
-                        By.CSS_SELECTOR, "td.description-col",
+                        By.CSS_SELECTOR,
+                        "td.description-col",
                     )
                     name_element = description_td.find_element(
-                        By.CSS_SELECTOR, "p.webtext1",
+                        By.CSS_SELECTOR,
+                        "p.webtext1",
                     )
                     name = name_element.text.strip()
                     if name == "Gavekort":
                         item_id = "giftcard"
                     else:
                         anchor_element = name_element.find_element(
-                            By.XPATH, ".//ancestor::a",
+                            By.XPATH,
+                            ".//ancestor::a",
                         )
                         href = anchor_element.get_attribute("href")
                         item_id = re.match(r".*/product/(\d*).*", href).group(1)
                         self.log.debug("Item ID: %s", item_id)
                     try:
                         description = description_td.find_element(
-                            By.CSS_SELECTOR, "p.webtext2",
+                            By.CSS_SELECTOR,
+                            "p.webtext2",
                         ).text.strip()
                     except NoSuchElementException:
                         description = ""
                     try:
                         int_ext_sku = description_td.find_element(
-                            By.CSS_SELECTOR, "p.sku-text",
+                            By.CSS_SELECTOR,
+                            "p.sku-text",
                         ).text.strip()
                         ext_sku = re.sub(
-                            r"Varenr: .* / Prodnr:", "", int_ext_sku,
+                            r"Varenr: .* / Prodnr:",
+                            "",
+                            int_ext_sku,
                         ).strip()
                     except NoSuchElementException:
                         ext_sku = ""
                     if quantity is None:
                         quantity = item_row.find_element(
-                            By.CSS_SELECTOR, "td.quantity-container",
+                            By.CSS_SELECTOR,
+                            "td.quantity-container",
                         ).text.strip()
                         price = item_row.find_element(
-                            By.CSS_SELECTOR, "td.price",
+                            By.CSS_SELECTOR,
+                            "td.price",
                         ).text.strip()
                         total = item_row.find_element(
-                            By.CSS_SELECTOR, "td.total",
+                            By.CSS_SELECTOR,
+                            "td.total",
                         ).text.strip()
 
                     if item_id != "giftcard" and not skip_thumb:
                         thumb_element_src: str = item_row.find_element(
-                            By.CSS_SELECTOR, "td.image-col img",
+                            By.CSS_SELECTOR,
+                            "td.image-col img",
                         ).get_attribute("src")
                         self.browser_get_item_thumb(
                             order_dir,
@@ -269,7 +284,8 @@ class KomplettScraper(BaseScraper):
             brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
             time.sleep(2)
             show_more: WebElement = self.find_element(
-                By.XPATH, "//span[normalize-space(text())='Vis mer']",
+                By.XPATH,
+                "//span[normalize-space(text())='Vis mer']",
             )
             while show_more and show_more.is_displayed():
                 show_more.click()
@@ -282,7 +298,8 @@ class KomplettScraper(BaseScraper):
                     "window.scrollTo(0,document.body.scrollHeight)",
                 )
                 show_more: WebElement = self.find_element(
-                    By.XPATH, "//span[normalize-space(text())='Vis mer']",
+                    By.XPATH,
+                    "//span[normalize-space(text())='Vis mer']",
                 )
 
             order_element: WebElement
@@ -291,10 +308,12 @@ class KomplettScraper(BaseScraper):
                 "//section[contains(@class,'tidy-orders-list')]/article/table/tbody/tr",
             ):
                 order_id = order_element.find_element(
-                    By.CSS_SELECTOR, "td.order-number",
+                    By.CSS_SELECTOR,
+                    "td.order-number",
                 ).text.strip()
                 order_status = order_element.find_element(
-                    By.CSS_SELECTOR, "td.status",
+                    By.CSS_SELECTOR,
+                    "td.status",
                 ).text.strip()
                 order_dict[order_id] = {"status": order_status}
 
@@ -312,7 +331,8 @@ class KomplettScraper(BaseScraper):
             f"https://www.komplett.no/product/{item_id}?noredirect=true",
         )
         thumbs = self.find_elements(
-            By.CSS_SELECTOR, "div.product-images__thumb-carousel img",
+            By.CSS_SELECTOR,
+            "div.product-images__thumb-carousel img",
         )
         if len(thumbs) > 0:
             thumb_src = thumbs[0].get_attribute("src")
@@ -364,9 +384,16 @@ class KomplettScraper(BaseScraper):
             while True:
                 self.log.debug("Waiting for image to download")
                 time.sleep(2)
-                if int(self.browser.execute_script("""
+                if (
+                    int(
+                        self.browser.execute_script(
+                            """
                                 return document.querySelector('#image-to-download').naturalWidth
-                            """)) > 0:
+                            """
+                        )
+                    )
+                    > 0
+                ):
                     # .complete does not work in Firefox sometimes?
                     break
                 wait_count += 1
@@ -379,7 +406,8 @@ class KomplettScraper(BaseScraper):
                     )
                     msg = f"{thumb_url}"
                     raise NotImplementedError(msg)
-            image_dataurl: str = self.browser.execute_script("""
+            image_dataurl: str = self.browser.execute_script(
+                """
                             const canvas = document.createElement('canvas');
                             dwimg = document.querySelector('#image-to-download');
                             canvas.width = dwimg.naturalWidth;
@@ -390,7 +418,8 @@ class KomplettScraper(BaseScraper):
                             dwimg.remove()
                             canvas.remove()
                             return img_data
-                        """)
+                        """
+            )
 
             # data:image/jpeg;base64,
             assert len(image_dataurl) > 23
@@ -406,7 +435,8 @@ class KomplettScraper(BaseScraper):
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
 
         time.sleep(2)
-        brws.execute_script(r"""
+        brws.execute_script(
+            r"""
             // shuffle some stuff
             mc = document.querySelector('main#MainContent');
             bdy = document.querySelector('body');
@@ -548,17 +578,22 @@ class KomplettScraper(BaseScraper):
             }
             parent.parentElement.appendChild(p);
             })
-        """)
+        """
+        )
         time.sleep(2)
-        brws.execute_script("""
+        brws.execute_script(
+            """
             [
             'videoly-tape'
             ].forEach((e) => {f=document.querySelector(e); if(f){f.remove()}});
-        """)
+        """
+        )
         time.sleep(1)
-        brws.execute_script("""
+        brws.execute_script(
+            """
             document.querySelectorAll("button.read-more-toggle").forEach(function(e){e.scrollIntoView();e.click();})
-        """)
+        """
+        )
 
     def _browser_post_init(self):
         # Visit the front page first, so we can make sure we are logged in
@@ -568,47 +603,13 @@ class KomplettScraper(BaseScraper):
     def browser_detect_handle_interrupt(self, expected_url):
         brws = self.browser_get_instance()
         if "login" in brws.current_url:
-            # Somehow we have ended up on the login page
             self.log.error(
-                RED(
-                    "Please open the browser profile manually and clear all"
-                    " history. Then restart the browser and log into Komplett."
-                    " Lastly, close the browser and restart the script",
+                AMBER(
+                    "Please manyally login to eBay, "
+                    "and press ENTER when finished.",
                 ),
             )
-            raise NotImplementedError
-
-        if cookie_consent := self.find_element(
-            By.CSS_SELECTOR, ".cookie-consent-popup",
-        ):
-            for cookie_button in cookie_consent.find_elements(
-                By.CSS_SELECTOR, "button",
-            ):
-                if re.search(
-                    r"godta alle", cookie_button.text.strip(), re.IGNORECASE,
-                ):
-                    cookie_button.click()
-                    break
-        if user_profile_span := self.find_element(
-            By.CSS_SELECTOR,
-            ".user-profile__wrapper .user-profile__container span",
-        ):
-            if re.search(
-                r"logg inn", user_profile_span.text.strip(), re.IGNORECASE,
-            ):
-                self.log.error(
-                    RED(
-                        "Please open the browser profile manually and clear all"
-                        " history. Then restart the browser and log into"
-                        " Komplett. Lastly, close the browser and restart the"
-                        " script",
-                    ),
-                )
-                raise NotImplementedError
-        else:
-            self.log.warning(
-                AMBER("User profile element not found. Login check failed."),
-            )
+        input()
 
     def setup_templates(self):
         # pylint: disable=invalid-name
@@ -630,7 +631,8 @@ class KomplettScraper(BaseScraper):
         for status in statuses:
             if status not in known_statuses:
                 self.log.error(
-                    "Unknown status '%s', code update required.", status,
+                    "Unknown status '%s', code update required.",
+                    status,
                 )
                 raise NotImplementedError
         structure["orders"] = []
@@ -642,14 +644,16 @@ class KomplettScraper(BaseScraper):
             self.log.debug("Processing order %s", order_id)
             order_dir = Path(self.ORDER_FOLDER_TP.format(order_id=order_id))
             orig_order = self.read(
-                order_dir / f"{order_id}.json", from_json=True,
+                order_dir / f"{order_id}.json",
+                from_json=True,
             )
 
             order_dict = {
                 "id": order_id,
                 "date": (
                     datetime.strptime(
-                        orig_order["Ordredetaljer"]["Bestilt"], "%d/%m/%Y %H:%M",
+                        orig_order["Ordredetaljer"]["Bestilt"],
+                        "%d/%m/%Y %H:%M",
                     )
                     .date()
                     .isoformat()
@@ -657,16 +661,22 @@ class KomplettScraper(BaseScraper):
                 "items": [],
                 "extra_data": {},
                 "total": self.get_value_currency(
-                    "total", orig_order["pricing"]["Totalt"], "NOK",
+                    "total",
+                    orig_order["pricing"]["Totalt"],
+                    "NOK",
                 ),
                 "shipping": self.get_value_currency(
-                    "total", orig_order["pricing"]["Frakt"], "NOK",
+                    "total",
+                    orig_order["pricing"]["Frakt"],
+                    "NOK",
                 ),
             }
             for attachement in order_dir.glob("attachement-*.pdf"):
                 if "attachements" not in order_dict:
                     order_dict["attachements"] = []
-                name = base64.urlsafe_b64decode(attachement.stem.split("-")[1]).decode("utf-8")
+                name = base64.urlsafe_b64decode(
+                    attachement.stem.split("-")[1]
+                ).decode("utf-8")
                 attachement_dict = {
                     "name": name,
                     "path": attachement.relative_to(
@@ -690,7 +700,9 @@ class KomplettScraper(BaseScraper):
                     "quantity": int(item["quantity"]),
                     "extra_data": {},
                     "total": self.get_value_currency(
-                        "total", str(item["total"]), "NOK",
+                        "total",
+                        str(item["total"]),
+                        "NOK",
                     ),
                 }
                 del item["id"]
@@ -699,7 +711,9 @@ class KomplettScraper(BaseScraper):
                 del item["total"]
                 if "price" in item:
                     item["price"] = self.get_value_currency(
-                        "total", str(item["price"]), "NOK",
+                        "total",
+                        str(item["price"]),
+                        "NOK",
                     )
                 item_dict["extra_data"].update(item)
                 if item_id != "giftcard":
@@ -732,5 +746,5 @@ class KomplettScraper(BaseScraper):
             order_dict["extra_data"].update(orig_order)
             # self.pprint(order_dict)
             structure["orders"].append(order_dict)
-        #self.pprint(structure)
+        # self.pprint(structure)
         self.output_schema_json(structure)

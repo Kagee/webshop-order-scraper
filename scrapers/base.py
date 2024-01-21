@@ -87,7 +87,7 @@ class BaseScraper:
             try:
                 validate(instance=structure, schema=schema)
             except ValidationError as vde:
-                self.log.exception(
+                self.log.error(  # noqa: TRY400
                     RED("JSON failed validation: %s at %s"),
                     vde.message,
                     vde.json_path,

@@ -4,6 +4,7 @@ from .amazon import AmazonScraper
 from .base import BaseScraper, PagePart
 from .distrelec import DistrelecScraper
 from .ebay import EbayScraper
+from .ebay_old import EbayOldScraper
 from .imap import IMAPScraper
 from .kjell import KjellScraper
 from .komplett import KomplettScraper
@@ -21,6 +22,7 @@ __all__ = [
     "IMAPScraper",
     "PimoroniScraper",
     "EbayScraper",
+    "EbayOldScraper",
     "KjellScraper",
     "PolyalkemiScraper",
     "KomplettScraper",
