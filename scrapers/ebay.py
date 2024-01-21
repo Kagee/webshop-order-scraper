@@ -1,8 +1,12 @@
 import datetime
+from multiprocessing import Value
+import pprint
+import sys
 import time
 from pathlib import Path
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 
 from . import settings  # noqa: F401
 from .base import BaseScraper
@@ -20,40 +24,196 @@ class EbayScraper(BaseScraper):
         Scrapes your eBay orders.
         """
         order_ids = self.browser_load_order_list()
-        self.log.debug("Processing %s order ids", len(order_ids))
+        self.log.debug("Processing %s order ids...", len(order_ids))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
         for order_id in sorted(order_ids):
+            # if order_id not in ["11-06736-46406", "03-06607-27879"]:
+            # while developing, only parse one order
+            # continue
             if order_id in orders:
                 # Order pages may contain multiple order ids,
                 # and may already have been scraped
                 continue
-            self.browser_scrape_order_id(order_id)
+            page_orders = self.browser_scrape_order_id(order_id)
+            for page_order_id, order in page_orders.items():
+                orders[page_order_id] = order
+        pp = pprint.PrettyPrinter(depth=6)
+        self.log.debug(pp.pformat(orders))
 
     def browser_scrape_order_id(self, order_id) -> dict:
-        return {}
+        order_url = self.order_page_url(order_id)
+        json_file = self.file_order_id_json(order_id)
+        if self.can_read(json_file):
+            self.log.debug("Skipping order id %s as it is cached")
+        self.browser_visit_page_v2(order_url)
+
+        csss = ".summary-region .delivery-address-content p"
+        order_delivery_address = "\n".join(
+            [p.text for p in self.b.find_elements(By.CSS_SELECTOR, csss)]
+        )
+        self.log.debug("Delivery address: %s", order_delivery_address)
+        csss = ".summary-region .order-summary-total dd"
+        order_total = self.b.find_element(By.CSS_SELECTOR, csss).text
+        self.log.debug("Order total: %s", order_total)
+
+        csss = ".summary-region .payment-line-item dl"
+        order_payment_lines = []
+        for dl in self.b.find_elements(By.CSS_SELECTOR, csss):
+            dt = dl.find_element(By.CSS_SELECTOR, "dt").text
+            dd = dl.find_element(By.CSS_SELECTOR, "dd").text
+            order_payment_lines.append((dt, dd))
+        self.log.debug("Order payment lines: %s", order_payment_lines)
+
+        orders = {}
+        orderbox: WebElement
+        for orderbox in self.b.find_elements(
+            By.CSS_SELECTOR,
+            ".order-box",
+        ):
+            order_id = None
+            order_date = None
+            orderinfo = {}
+            order_info_dl: WebElement
+            for order_info_dl in orderbox.find_elements(
+                By.CSS_SELECTOR,
+                ".order-info dl",
+            ):
+                dt = order_info_dl.find_element(By.CSS_SELECTOR, "dt").text
+                dd = order_info_dl.find_element(By.CSS_SELECTOR, "dd").text
+                self.log.debug("%s: %s", dt, dd)
+                if dt == "Order number":
+                    self.log.debug("Order ID: %s", dd)
+                    order_id = dd
+                    continue
+                if dt == "Time placed":
+                    order_date = (
+                        datetime.datetime.strptime(  # noqa: DTZ007 (unknown timezone)
+                            dd,
+                            # Mar 14, 2021 at 3:17 PM
+                            "%b %d, %Y at %I:%M %p",
+                        ),
+                    )
+                orderinfo[dt] = dd
+            self.log.debug("Order info: %s", orderinfo)
+
+            if not order_id or not order_date:
+                msg = (
+                    "Failed to find expected order id "
+                    f"or order date on {order_url}"
+                )
+                raise ValueError(msg)
+            if order_id in orders:
+                msg = f"Order ID {order_id} parsed twice on {order_url}?"
+                raise ValueError(msg)
+
+            orders[order_id] = {
+                "id": order_id,
+                "total": order_total,
+                "date": order_date,
+                "orderinfo": orderinfo,
+                "payment_lines": order_payment_lines,
+                "deliver_address": order_delivery_address,
+            }
+            si = orderbox.find_element(By.CSS_SELECTOR, ".shipment-info")
+            status = "Unknown"
+            status_title = si.find_element(
+                By.CSS_SELECTOR, ".shipment-card-sub-title"
+            )
+            if status_title and status_title.text != "":
+                status = status_title.text
+            orders[order_id]["status"] = status
+            tracking_info = si.find_elements(
+                By.CSS_SELECTOR,
+                ".shipment-card-content .tracking-box .tracking-info dl",
+            )
+            if len(tracking_info) > 1:
+                msg = f"Unexpected numder of lines (1/{len(tracking_info)})"
+                raise ValueError(msg)
+            tracking_info = tracking_info[0]
+            dt = tracking_info.find_element(By.CSS_SELECTOR, "dt").text
+            dd = tracking_info.find_element(By.CSS_SELECTOR, "dd").text
+
+            if dt != "Number":
+                msg = f"Tracking number not found, found '{dt}'"
+                raise ValueError(msg)
+            orders[order_id]["tracking_number"] = dd
+
+            if "extra_data" not in orders[order_id]:
+                orders[order_id]["extra_data"] = {}
+            orders[order_id]["extra_data"]["status"] = [
+                item.get_attribute("aria-label")
+                for item in si.find_elements(
+                    By.CSS_SELECTOR,
+                    ".shipment-card-content .progress-stepper__item",
+                )
+            ]
+            orders[order_id]["items"] = []
+            item_element: WebElement
+            for item_element in si.find_elements(
+                By.CSS_SELECTOR,
+                ".item-container .item-card",
+            ):
+                item = {}
+                desc: WebElement = item_element.find_element(
+                    By.CSS_SELECTOR,
+                    ".card-content-description .item-description a",
+                )
+                item["name"] = desc.text
+                id = desc.get_attribute("href").split("/")
+                item["id"] = id[len(id) - 1]
+                orders[order_id]["items"].append(item)
+        # .order-box (N)
+        #     .shipment-info
+        #        .item-container
+        #               .item-card-container
+        #                    .item-card (N)
+        #                        .card-content-image-box
+        #                            <img["src"]->
+        #                               replace /s-l200.webp -> /s-l1600.jpeg
+        #                        .card-content-description
+        #                            .item-description
+        #                                 .item-price -> TOTAL!
+        #                            .item-aspect-values-list
+        #                                  .item-aspect-value (N) ->
+        #                                   if 2 itemnum + return,
+        #                                   1: item numder
+        #                                   2: SKU?
+        #                                   3: return window?
+        return orders
 
     def browser_load_order_list(self) -> list:
-        if self.options.use_cached_orderlist:
-            if self.can_read(self.ORDER_LIST_JSON_FILENAME):
-                self.log.info("Using cached orderlist.")
-                return self.read(self.ORDER_LIST_JSON_FILENAME, from_json=True)
-            self.log.info("Could not find cached orderlist.")
-
         order_ids = []
+        if self.options.use_cached_orderlist:
+            files = list(
+                self.cache["ORDER_LISTS"].glob(
+                    "[0-9][0-9][0-9][0-9].json",
+                ),
+            )
+            if not files:
+                self.log.error(
+                    "No cached order lists found, "
+                    "try witout --use-cached-orderlists",
+                )
+                sys.exit(1)
+            else:
+                for path in sorted(files):
+                    # We load based on a glob so we in theory can find files that
+                    # are older than the oldest in self.file_order_list_year
+                    self.log.debug(
+                        "Found order list for %s", path.name.split(".")[0]
+                    )
+                    order_ids += self.read(path, from_json=True)
+
+                return order_ids
+
         for keyword, year in self.filter_keyword_list():
             json_file = self.file_order_list_year(year)
-            if self.can_read(json_file):
-                self.log.debug("Found order list for %s", year)
-                order_ids += self.read(json_file, from_json=True)
-                continue
             # %253A -> %3A -> :
             # https://www.ebay.com/mye/myebay/purchase?filter=year_filter%253ATWO_YEARS_AGO
             self.log.debug("We need to scrape order list for %s", year)
             url = f"https://www.ebay.com/mye/myebay/purchase?filter=year_filter:{keyword}"
-            self.log.debug(url)
-            if not self.browser:
-                self.browser_visit_page_v2(self.ORDER_LIST_START)
+            self.log.debug("Scraping order ids from %s", url)
             self.browser_visit_page_v2(url)
             # Find all order numbers
             xpath = "//span[text()='Order number:']/following-sibling::span"
@@ -144,14 +304,20 @@ class EbayScraper(BaseScraper):
         # TEMP / PDF_TEMP_FILENAME / IMG_TEMP_FILENAME
         super().setup_cache(base_folder)
 
-    def setup_templates(self):
+    def setup_templates(self) -> None:
         self.ORDER_LIST_START = "https://www.ebay.com/mye/myebay/purchase"
         self.ORDER_LIST_JSON_FILENAME = (
             self.cache["ORDER_LISTS"] / "order_list.json"
         )
 
-    def dir_order_id(self, order_id):
+    def order_page_url(self, order_id: str) -> str:
+        return f"https://www.ebay.com/vod/FetchOrderDetails?orderId={order_id}"
+
+    def file_order_id_json(self, order_id: str) -> Path:
+        return self.dir_order_id(order_id) / "order.json"
+
+    def dir_order_id(self, order_id: str) -> Path:
         return self.cache["ORDERS"] / f"{order_id}/"
 
-    def file_order_list_year(self, year):
+    def file_order_list_year(self, year: int) -> Path:
         return self.cache["ORDER_LISTS"] / f"{year}.json"
