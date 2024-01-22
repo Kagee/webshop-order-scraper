@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from tomlkit.api import boolean
 from bootstrap import python_checks
 
 python_checks()
@@ -8,7 +9,9 @@ import csv
 import datetime as dt
 import decimal
 import logging.config
+import shutil
 import sys
+import urllib.request
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -19,6 +22,9 @@ from scrapers.base import BaseScraper
 logging.config.dictConfig(settings.LOGGING)
 log = logging.getLogger("json_to_csv")
 log.debug("Base logging configured")
+
+AFTER_YEAR_DEFAULT = 1970
+BEFORE_YEAR_DEFAULT = 3070
 
 
 def parse_args():
@@ -31,7 +37,14 @@ def parse_args():
         "--after",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
         help="only export order after this date (default 1970-01-01)",
-        default="1970-01-01",
+        default=f"{AFTER_YEAR_DEFAULT}-01-01",
+    )
+
+    parser.add_argument(
+        "--before",
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
+        help="only export order before this date (default 3070-01-01)",
+        default=f"{BEFORE_YEAR_DEFAULT}-01-01",
     )
 
     parser.add_argument(
@@ -64,13 +77,6 @@ def parse_args():
         action="store_true",
     )
 
-    parser.add_argument(
-        "--before",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d").astimezone(),
-        help="only export order before this date (default 3070-01-01)",
-        default="3070-01-01",
-    )
-
     subparsers = parser.add_subparsers(
         title="sources",
         description="valid sources",
@@ -88,10 +94,88 @@ def parse_args():
     return args
 
 
+def check_or_download_exr(syear: int, eyear: int) -> list[Path]:
+    eyear += 1
+    url = (
+        "https://data.norges-bank.no/api/data/EXR/B..NOK.SP?"
+        "startPeriod={year}-01-22&"
+        "endPeriod={year}-12-31&"
+        "format=csv&bom=include&locale=no"
+    )
+    now = datetime.now().astimezone()
+    curr_year = int(now.strftime("%Y"))
+    last_year = curr_year - 1
+
+    files = []
+    for exr_year in range(syear, eyear):
+        csv_file = settings.CACHE_BASE / f"EXR-{exr_year}.csv"
+        files.append(csv_file)
+        if not csv_file.is_file() or exr_year in [curr_year, last_year]:
+            if exr_year == last_year and csv_file.is_file():
+                last_year_modified = datetime.fromtimestamp(
+                    csv_file.stat().st_mtime,
+                ).astimezone()
+                if last_year_modified.year == curr_year:
+                    log.debug("Rates for %s found", exr_year)
+                    continue
+            log.debug("Downloading rate date for %s", exr_year)
+            with urllib.request.urlopen(  # noqa: S310
+                url.format(year=exr_year),
+            ) as response, csv_file.open(
+                "wb",
+            ) as csv_handle:
+                shutil.copyfileobj(response, csv_handle)
+        else:
+            log.debug("Rates for %s found", exr_year)
+    return files
+
+
+def calculate_year_range_currencies(args, orders) -> list[int, int, set[str]]:
+    ystart: int = None
+    yend: int = None
+    currencies = set()
+    if args.after and args.after.year != AFTER_YEAR_DEFAULT:
+        ystart = args.after.year
+    if args.before and args.before.year != BEFORE_YEAR_DEFAULT:
+        yend = args.before.year
+    if not ystart or not yend:
+        for order in orders:
+            for value in ["subtotal", "shipping", "tax", "total"]:
+                if value in order and "currency" in order[value]:
+                    currencies.add(order[value]["currency"])
+            date = datetime.strptime(order["date"], "%Y-%m-%d").astimezone()
+            if date > args.after and date < args.before:
+                ystart = min(date.year, ystart if ystart else date.year)
+                yend = max(date.year, yend if yend else date.year)
+            for item in order["items"]:
+                if "currency" in item["total"]:
+                    currencies.add(item["total"]["currency"])
+    return ystart, yend, currencies
+
+
 def main():  # noqa: PLR0915, C901
     args = parse_args()
 
-    conv_data = {}
+    if args.after > args.before:
+        msg = (
+            f"Argument --after ({args.after}) must "
+            "be earlier than --before ({args.before})"
+        )
+        raise ValueError(msg)
+
+    rate_data = {}
+
+    shop_json = BaseScraper.read(
+        Path(settings.OUTPUT_FOLDER) / Path(args.source + ".json"),
+        from_json=True,
+    )
+    shop = (
+        shop_json["metadata"]["name"]
+        if shop_json["metadata"]["name"] == shop_json["metadata"]["branch_name"]
+        else shop_json["metadata"]["branch_name"]
+    )
+    log.info("Shop: %s", shop)
+    output = {}
 
     if args.separator:
 
@@ -120,8 +204,8 @@ def main():  # noqa: PLR0915, C901
                 return force_separator(str(value))
 
             value = Decimal(value.replace(",", "."))
-            conv = Decimal(conv_data[curr][date]["value"].replace(",", "."))
-            mult = conv_data[curr][date]["mult"]
+            conv = Decimal(rate_data[curr][date]["value"].replace(",", "."))
+            mult = rate_data[curr][date]["mult"]
 
             if mult == "0":
                 return force_separator(
@@ -147,129 +231,85 @@ def main():  # noqa: PLR0915, C901
         def curr_to_nok(_):
             return "NOK"
 
-        exr_msg = (
-            'Download "Alle valutakurser - Daglige kurser - Siste 10 år"'
-            " from"
-            " https://www.norges-bank.no/tema/Statistikk/Valutakurser/?tab=api"
-            " and save as EXR.csv"
+        ystart, yend, currencies = calculate_year_range_currencies(
+            args,
+            shop_json["orders"],
         )
-        if not Path("EXR.csv").is_file():
-            log.error(exr_msg)
-            sys.exit(1)
-        log.info("Loading EXR.csv, this may take some time...")
-        with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
-            oldest_date_in_exr = datetime.strptime(
-                "1970-01-01",
-                "%Y-%m-%d",
-            ).astimezone()
-            reader = csv.DictReader(csvfile, delimiter=";")
-            for row in reader:
-                date = datetime.strptime(
-                    row["TIME_PERIOD"],
-                    "%Y-%m-%d",
-                ).astimezone()
-                if date > oldest_date_in_exr:
-                    oldest_date_in_exr = date
-            today = datetime.now().astimezone()
-            days_old = (today - oldest_date_in_exr).days
-            log.debug(
-                "Oldest date in EXR.csv is %s, %s days old",
-                oldest_date_in_exr,
-                days_old,
-            )
-        with Path("EXR.csv").open(newline="", encoding="utf-8-sig") as csvfile:
-            prev_base = None
+        log.debug(
+            "Year range (%s,%s), currencies: %s",
+            ystart,
+            yend,
+            ",".join(currencies),
+        )
+
+        exr_files = check_or_download_exr(ystart, yend)
+
+        log.info("Loading EXR CSVs, this may take some time...")
+
+        for exr in exr_files:
+            with exr.open(newline="", encoding="utf-8-sig") as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=";")
+                for row in reader:
+                    if row["BASE_CUR"] in currencies:
+                        if row["BASE_CUR"] not in rate_data:
+                            rate_data[row["BASE_CUR"]] = {}
+                        rate_data[row["BASE_CUR"]][row["TIME_PERIOD"]] = {
+                            "mult": row["UNIT_MULT"],
+                            "value": row["OBS_VALUE"],
+                        }
+
+        cur: dict
+
+        dend = min(
+            datetime(yend, 12, 31).astimezone(),
+            datetime.now().astimezone(),
+        )
+
+        # Loop over currencies in dict
+        for cur in rate_data.copy():
             prev_mult = None
             prev_date = None
             prev_value = None
-            reader = csv.DictReader(csvfile, delimiter=";")
-            for row in reader:
-                if prev_base and prev_base != row["BASE_CUR"]:
-                    # We have switched to a new currency
-                    # Reset all previous values
-                    prev_mult = None
-                    prev_date = None
-                    prev_value = None
+            log.debug("Processing %s", cur)
+            # Loop over dates for currency
+            for date_str in sorted(rate_data[cur].copy().keys()):
                 date = datetime.strptime(
-                    row["TIME_PERIOD"],
+                    date_str,
                     "%Y-%m-%d",
                 ).astimezone()
+                if date > dend:
+                    # Stop processing currency if date is after
+                    # last required year
+                    break
                 if prev_date:
-                    # We are only here if prev_base = base
                     exp_date = prev_date + dt.timedelta(days=1)
+                    # Look for "missing" dates
                     if date != exp_date:
                         # We got date, but expected exp_date
                         while True:
-                            try:
-                                prev_date += dt.timedelta(days=1)
-                            except OverflowError:
-                                msg = (
-                                    "This should not happen, we overflowed "
-                                    "while generating intermediate "
-                                    "exchange rates: %s %s %s"
-                                )
-                                log.exception(
-                                    msg,
-                                    prev_date,
-                                    exp_date,
-                                    oldest_date_in_exr,
-                                )
-                                raise
+                            prev_date += dt.timedelta(days=1)
+                            if prev_date > dend:
+                                # Stop processing currency if date is after
+                                # last required year
+                                break
 
-                            if date == prev_date:
+                            if date_str == prev_date:
                                 # The current prev_date is the date we
                                 # read in this row, do not generate anymore
                                 break
 
-                            if prev_date > oldest_date_in_exr:
-                                # The generated date is higher than the highest
-                                # overall date from the input file
-                                break
-
-                            if row["BASE_CUR"] not in conv_data:
-                                conv_data[row["BASE_CUR"]] = {}
-                            conv_data[row["BASE_CUR"]][
-                                prev_date.strftime("%Y-%m-%d")
-                            ] = {
+                            # Add missing dates to original dict
+                            rate_data[cur][prev_date.strftime("%Y-%m-%d")] = {
                                 "mult": prev_mult,
                                 "value": prev_value,
                             }
-                if row["BASE_CUR"] not in conv_data:
-                    conv_data[row["BASE_CUR"]] = {}
-                conv_data[row["BASE_CUR"]][date.strftime("%Y-%m-%d")] = {
-                    "mult": row["UNIT_MULT"],
-                    "value": row["OBS_VALUE"],
-                }
-                prev_base = row["BASE_CUR"]
-                prev_mult = row["UNIT_MULT"]
+                prev_mult = rate_data[cur][date_str]["mult"]
                 prev_date = date
-                prev_value = row["OBS_VALUE"]
-
-    shop_json = BaseScraper.read(
-        Path(settings.OUTPUT_FOLDER) / Path(args.source + ".json"),
-        from_json=True,
-    )
-    shop = (
-        shop_json["metadata"]["name"]
-        if shop_json["metadata"]["name"] == shop_json["metadata"]["branch_name"]
-        else shop_json["metadata"]["branch_name"]
-    )
-    log.info("Shop: %s", shop)
-    output = {}
+                prev_value = rate_data[cur][date_str]["value"]
 
     for order in shop_json["orders"]:
-        date = datetime.strptime(order["date"], "%Y-%m-%d").astimezone()
-        if date > args.after and date < args.before:
-            if args.nok and date > oldest_date_in_exr:
-                log.error(
-                    (
-                        "Order with date %s is older than latest"
-                        " date in EXR.csv %s, can not calculate"
-                    ),
-                    date,
-                    oldest_date_in_exr,
-                )
-                sys.exit(1)
+        date_str = datetime.strptime(order["date"], "%Y-%m-%d").astimezone()
+        if date_str > args.after and date_str < args.before:
             if order["date"] not in output:
                 output[order["date"]] = []
             if not args.no_order_totals:
