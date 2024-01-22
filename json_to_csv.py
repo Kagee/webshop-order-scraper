@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from tomlkit.api import boolean
 from bootstrap import python_checks
 
 python_checks()

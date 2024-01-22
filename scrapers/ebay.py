@@ -1,9 +1,11 @@
 import datetime
 from multiprocessing import Value
 import pprint
+import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -27,22 +29,25 @@ class EbayScraper(BaseScraper):
         self.log.debug("Processing %s order ids...", len(order_ids))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
-        for order_id in sorted(order_ids):
-            # if order_id not in ["11-06736-46406", "03-06607-27879"]:
-            # while developing, only parse one order
-            # continue
+        for order_id, order_url in sorted(order_ids):
+            if order_id not in ["11-06736-46406", "03-06607-27879"]:
+                # while developing, only parse one order
+                # return, might fail #/
+                continue
+            # if order_id not in ["230443738010"]:  # ["10-06606-54233"]:
+            #    continue
+
             if order_id in orders:
                 # Order pages may contain multiple order ids,
                 # and may already have been scraped
                 continue
-            page_orders = self.browser_scrape_order_id(order_id)
+            page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
         pp = pprint.PrettyPrinter(depth=6)
         self.log.debug(pp.pformat(orders))
 
-    def browser_scrape_order_id(self, order_id) -> dict:
-        order_url = self.order_page_url(order_id)
+    def browser_scrape_order_id(self, order_id: str, order_url: str) -> dict:
         json_file = self.file_order_id_json(order_id)
         if self.can_read(json_file):
             self.log.debug("Skipping order id %s as it is cached")
@@ -123,24 +128,22 @@ class EbayScraper(BaseScraper):
             if status_title and status_title.text != "":
                 status = status_title.text
             orders[order_id]["status"] = status
-            tracking_info = si.find_elements(
+            tracking_infos = si.find_elements(
                 By.CSS_SELECTOR,
                 ".shipment-card-content .tracking-box .tracking-info dl",
             )
-            if len(tracking_info) > 1:
-                msg = f"Unexpected numder of lines (1/{len(tracking_info)})"
-                raise ValueError(msg)
-            tracking_info = tracking_info[0]
-            dt = tracking_info.find_element(By.CSS_SELECTOR, "dt").text
-            dd = tracking_info.find_element(By.CSS_SELECTOR, "dd").text
-
-            if dt != "Number":
-                msg = f"Tracking number not found, found '{dt}'"
-                raise ValueError(msg)
-            orders[order_id]["tracking_number"] = dd
 
             if "extra_data" not in orders[order_id]:
                 orders[order_id]["extra_data"] = {}
+
+            # Number, Shipping Service, Carrier
+            for tracking_info in tracking_infos:
+                if "shipping" not in orders[order_id]["extra_data"]:
+                    orders[order_id]["extra_data"]["shipping"] = {}
+                orders[order_id]["extra_data"]["shipping"][
+                    tracking_info.find_element(By.CSS_SELECTOR, "dt").text
+                ] = tracking_info.find_element(By.CSS_SELECTOR, "dd").text
+
             orders[order_id]["extra_data"]["status"] = [
                 item.get_attribute("aria-label")
                 for item in si.find_elements(
@@ -160,17 +163,52 @@ class EbayScraper(BaseScraper):
                     ".card-content-description .item-description a",
                 )
                 item["name"] = desc.text
-                id = desc.get_attribute("href").split("/")
-                item["id"] = id[len(id) - 1]
+                item_id = desc.get_attribute("href").split("/")
+                item["id"] = item_id = item_id[len(item_id) - 1]
+
+                thumb_file = self.file_item_thumb(order_id, item_id)
+                if self.can_read(thumb_file):
+                    self.log.debug(
+                        "Found thumbnail for item %s: %s",
+                        item_id,
+                        thumb_file.name,
+                    )
+                    item["thumbnail"] = thumb_file
+                else:
+                    image_element = item_element.find_element(
+                        By.CSS_SELECTOR,
+                        ".card-content-image-box img",
+                    )
+                    thumb_url = image_element.get_attribute("src")
+                    # Ebay "missing" images
+                    # https://i.ebayimg.com/images/g/unknown
+                    # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
+                    if (
+                        "unknown" in thumb_url
+                        or "JuIAAOSwXj5XG5VC" in thumb_url
+                    ):
+                        self.log.debug("No thumnail for item %s", item_id)
+                    else:
+                        # Download image
+                        if ".webp" not in thumb_url:
+                            msg = f"Thumnail for {item_id} is not webp"
+                            raise ValueError(msg)
+                        thumb_url = re.sub(
+                            r"l\d*\.webp", "l1600.webp", thumb_url
+                        )
+                        self.log.debug("Thumbnail url: %s", thumb_url)
+                        self.download_url_to_file(
+                            thumb_url,
+                            thumb_file,
+                        )
+                        item["thumbnail"] = thumb_file
+
                 orders[order_id]["items"].append(item)
         # .order-box (N)
         #     .shipment-info
         #        .item-container
         #               .item-card-container
         #                    .item-card (N)
-        #                        .card-content-image-box
-        #                            <img["src"]->
-        #                               replace /s-l200.webp -> /s-l1600.jpeg
         #                        .card-content-description
         #                            .item-description
         #                                 .item-price -> TOTAL!
@@ -216,10 +254,18 @@ class EbayScraper(BaseScraper):
             self.log.debug("Scraping order ids from %s", url)
             self.browser_visit_page_v2(url)
             # Find all order numbers
-            xpath = "//span[text()='Order number:']/following-sibling::span"
+            xpath = "//a[text()='View order details']"
             span_elements = self.browser.find_elements(By.XPATH, xpath)
             year_order_ids = [
-                span_element.text for span_element in span_elements
+                (
+                    parse_qs(
+                        urlparse(span_element.get_attribute("href")).query,
+                    )
+                    .pop("orderId")[0]
+                    .split("!")[0],
+                    span_element.get_attribute("href"),
+                )
+                for span_element in span_elements
             ]
             self.write(json_file, year_order_ids, to_json=True)
             order_ids += year_order_ids
@@ -315,6 +361,11 @@ class EbayScraper(BaseScraper):
 
     def file_order_id_json(self, order_id: str) -> Path:
         return self.dir_order_id(order_id) / "order.json"
+
+    def file_item_thumb(
+        self, order_id: str, item_id: str, ext: str = "jpg"
+    ) -> Path:
+        return self.dir_order_id(order_id) / f"item-thumb-{item_id}.{ext}"
 
     def dir_order_id(self, order_id: str) -> Path:
         return self.cache["ORDERS"] / f"{order_id}/"

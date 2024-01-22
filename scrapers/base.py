@@ -11,7 +11,9 @@ import os
 import pprint
 import random
 import re
+import shutil
 import time
+import urllib.request
 import zipfile
 from datetime import date
 from decimal import Decimal
@@ -22,7 +24,6 @@ from logging import Logger
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from attr.validators import instance_of
 
 import filetype
 import requests
@@ -539,6 +540,14 @@ class BaseScraper:
             folder = self.cache["TEMP"]
         for filename in folder.glob("*"):
             filename.unlink()
+
+    def download_url_to_file(self, url: str, output: Path):
+        with urllib.request.urlopen(  # noqa: S310
+            url,
+        ) as response, output.open(
+            "wb",
+        ) as output_handle:
+            shutil.copyfileobj(response, output_handle)
 
     def external_download_image(
         self,
