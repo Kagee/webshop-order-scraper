@@ -3,14 +3,17 @@ import pprint
 import re
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 
 from . import settings  # noqa: F401
 from .base import BaseScraper
 from .utils import AMBER
+
+if TYPE_CHECKING:
+    from selenium.webdriver.remote.webelement import WebElement
 
 
 class EbayScraper(BaseScraper):
@@ -28,17 +31,14 @@ class EbayScraper(BaseScraper):
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
         for order_id, order_url in sorted(order_ids):
-            if order_id not in ["11-06736-46406", "03-06607-27879"]:
-                # while developing, only parse one order
-                # return, might fail #/
+            if order_id not in [
+                # "11-06736-46406",
+                # "03-06607-27879",
+                # "230443738010",
+                "10-06606-54233",
+            ]:
                 continue
-            # if order_id not in ["230443738010"]:  # ["10-06606-54233"]:
-            #    continue
 
-            if order_id in orders:
-                # Order pages may contain multiple order ids,
-                # and may already have been scraped
-                continue
             page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
@@ -227,6 +227,21 @@ class EbayScraper(BaseScraper):
                     ].text
                     item["sku"] = None
 
+                def download_item_page(item_id, item_url):
+                    self.browser_visit_page_v2(item_url)
+                    missing = False
+                    if "Error Page" in self.b.title:
+                        # save missing
+                        pass
+                    else:
+                        # cleanup page
+                        # save pdf
+                        pass
+                    return file, missing
+
+                item_url = f"https://www.ebay.com/itm/{item_id}"
+
+                result = download_item_page(item_id, item_url)
                 #                    .item-card (N)
                 #                        .card-content-description
                 #                            .item-description
