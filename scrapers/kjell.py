@@ -507,10 +507,6 @@ class KjellScraper(BaseScraper):
             r"view-source:https://www.kjell.com/resolvedynamicdata?d=[{t:%22Avensia.Common.Features.Account.MyPages.MyTransactions.UserTransactions,Avensia.Common%22}]",
         )
 
-        # transactions = self.browser.execute_script("""
-        #    return window.CURRENT_PAGE.transactions;
-        #    """)
-        # content = self.browser.find_element_by_tag_name('pre').text
         content = self.browser.find_element(By.XPATH, "//pre").text
         shop_data = json.loads(content)
         self.write(self.ORDER_LIST_JSON_FILENAME, shop_data, to_json=True)
@@ -535,9 +531,6 @@ class KjellScraper(BaseScraper):
         self.LOGIN_PAGE_RE: str = r"https://www.kjell.com.*login=required.*"
 
         # pylint: disable=invalid-name
-        # self.THUMB_FILENAME_TEMPLATE = str(
-        #    self.cache["ORDERS"] / "{order_id}/item-thumb-{item_id}.png"
-        # )
         self.ORDER_LIST_JSON_FILENAME = (
             self.cache["ORDER_LISTS"] / f"kjell-{self.COUNTRY}-orders.json"
         )
@@ -575,16 +568,13 @@ class KjellScraper(BaseScraper):
                 order_dict[order["transactionNumber"]] = order
 
             for order_id, order in order_dict.items():
-                # if order_id != "1320153652":
-                #   continue
                 order_cache_dir = self.cache["ORDERS"] / Path(order_id)
                 self.makedir(order_cache_dir)
                 for line_item in order["lineItems"]:
                     # Item codes are in general 5 numbers.
                     # Below that is bags etc.
                     item_id = line_item["code"]
-                    # if item_id != "36159":
-                    #   continue
+
                     if len(item_id) > 4:  # noqa: PLR2004
                         self.log.debug("Order: %s, item: %s", order_id, item_id)
                         self.browser_save_item_thumbnail(
