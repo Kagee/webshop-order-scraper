@@ -9,7 +9,7 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 from .base import BaseScraper, PagePart
-from .utils import AMBER, BLUE, GREEN, RED
+from .utils import GREEN
 
 if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
@@ -123,7 +123,7 @@ class PimoroniScraper(BaseScraper):
                 self.log.debug("Looking for %s", xpath_sel)
                 username = wait.until(
                     expected_conditions.presence_of_element_located(
-                        (By.XPATH, xpath_sel)
+                        (By.XPATH, xpath_sel),
                     ),
                     "Could not find " + xpath_sel,
                 )
@@ -137,7 +137,7 @@ class PimoroniScraper(BaseScraper):
                 self.log.debug("Looking for %s", xpath_sel)
                 password = wait.until(
                     expected_conditions.presence_of_element_located(
-                        (By.XPATH, xpath_sel)
+                        (By.XPATH, xpath_sel),
                     ),
                     "Could not find " + xpath_sel,
                 )

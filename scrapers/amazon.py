@@ -1579,7 +1579,7 @@ class AmazonScraper(BaseScraper):
                 range(
                     start_year,
                     datetime.datetime.now().astimezone().date().year + 1,
-                )
+                ),
             )
         else:
             years = [datetime.datetime.now().astimezone().date().year]

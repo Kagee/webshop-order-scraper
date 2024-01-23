@@ -389,8 +389,8 @@ class KomplettScraper(BaseScraper):
                         self.browser.execute_script(
                             """
                                 return document.querySelector('#image-to-download').naturalWidth
-                            """
-                        )
+                            """,
+                        ),
                     )
                     > 0
                 ):
@@ -418,7 +418,7 @@ class KomplettScraper(BaseScraper):
                             dwimg.remove()
                             canvas.remove()
                             return img_data
-                        """
+                        """,
             )
 
             # data:image/jpeg;base64,
@@ -578,7 +578,7 @@ class KomplettScraper(BaseScraper):
             }
             parent.parentElement.appendChild(p);
             })
-        """
+        """,
         )
         time.sleep(2)
         brws.execute_script(
@@ -586,13 +586,13 @@ class KomplettScraper(BaseScraper):
             [
             'videoly-tape'
             ].forEach((e) => {f=document.querySelector(e); if(f){f.remove()}});
-        """
+        """,
         )
         time.sleep(1)
         brws.execute_script(
             """
             document.querySelectorAll("button.read-more-toggle").forEach(function(e){e.scrollIntoView();e.click();})
-        """
+        """,
         )
 
     def _browser_post_init(self):
@@ -675,7 +675,7 @@ class KomplettScraper(BaseScraper):
                 if "attachements" not in order_dict:
                     order_dict["attachements"] = []
                 name = base64.urlsafe_b64decode(
-                    attachement.stem.split("-")[1]
+                    attachement.stem.split("-")[1],
                 ).decode("utf-8")
                 attachement_dict = {
                     "name": name,
