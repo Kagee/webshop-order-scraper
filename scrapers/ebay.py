@@ -310,7 +310,7 @@ class EbayScraper(BaseScraper):
         ]
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
-        if "login" in self.b.current_url:
+        if "login" in self.b.current_url or "signin" in self.b.current_url:
             self.log.error(
                 AMBER(
                     "Please manyally login to eBay, "

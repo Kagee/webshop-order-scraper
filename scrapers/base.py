@@ -542,6 +542,7 @@ class BaseScraper:
             filename.unlink()
 
     def download_url_to_file(self, url: str, output: Path):
+        output.parent.mkdir(exist_ok=True)
         with urllib.request.urlopen(  # noqa: S310
             url,
         ) as response, output.open(
