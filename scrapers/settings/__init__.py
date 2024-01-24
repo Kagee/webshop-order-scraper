@@ -5,6 +5,8 @@ from pathlib import Path
 
 from environs import Env
 
+from .log_formatter import LogFormatter
+
 env = Env()
 with env.prefixed("WS_"):
     env.read_env()
@@ -16,11 +18,12 @@ with env.prefixed("WS_"):
                 "format": "{asctime} [{levelname}] {module}: {message}",
                 "style": "{",
             },
+            "logformatter": {"()": lambda: LogFormatter()},
         },
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "formatter": "verbose",
+                "formatter": "logformatter",
             },
             "file": {
                 "class": "logging.FileHandler",
