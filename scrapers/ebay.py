@@ -32,10 +32,10 @@ class EbayScraper(BaseScraper):
         orders = {}
         for order_id, order_url in sorted(order_ids):
             if order_id not in [
-                # "11-06736-46406",
+                "11-06736-46406",
                 # "03-06607-27879",
                 # "230443738010",
-                "10-06606-54233",
+                # "10-06606-54233",
             ]:
                 continue
 
@@ -97,6 +97,7 @@ class EbayScraper(BaseScraper):
                             "%b %d, %Y at %I:%M %p",
                         ),
                     )
+                    continue
                 orderinfo[dt] = dd
             self.log.debug("Order info: %s", orderinfo)
 
@@ -187,7 +188,7 @@ class EbayScraper(BaseScraper):
                         or "JuIAAOSwXj5XG5VC" in thumb_url
                     ):
                         self.log.debug("No thumnail for item %s", item_id)
-                        self.write(thumb_file.with_suffix("missing"), 1)
+                        self.write(thumb_file.with_suffix(".missing"), 1)
                     else:
                         # Download image
                         if ".webp" not in thumb_url:
@@ -227,21 +228,80 @@ class EbayScraper(BaseScraper):
                     ].text
                     item["sku"] = None
 
-                def download_item_page(item_id, item_url):
-                    self.browser_visit_page_v2(item_url)
-                    missing = False
-                    if "Error Page" in self.b.title:
-                        # save missing
-                        pass
-                    else:
-                        # cleanup page
-                        # save pdf
-                        pass
-                    return file, missing
+                pdf_file = self.file_item_pdf(order_id, item_id)
+                if self.can_read(pdf_file):
+                    self.log.debug(
+                        "Found PDF for item %s: %s",
+                        item_id,
+                        pdf_file.name,
+                    )
+                    item["pdf"] = pdf_file
+                else:
+                    self.log.debug(
+                        "Need to make PDF for item %s",
+                        item_id,
+                    )
 
-                item_url = f"https://www.ebay.com/itm/{item_id}"
+                    def download_item_page(order_id, item_id, item_url):
+                        self.browser_visit_page_v2(item_url)
+                        missing = False
+                        if "Error Page" in self.b.title:
+                            item_pdf_file = self.file_item_pdf(
+                                order_id,
+                                item_id,
+                            ).with_suffix(
+                                ".missing",
+                            )
+                            self.write(
+                                item_pdf_file,
+                                "1",
+                            )
+                            self.log.debug(
+                                "ITem page is error page %s",
+                                item_id,
+                            )
+                        else:
+                            item_pdf_file = self.file_item_pdf(
+                                order_id,
+                                item_id,
+                            )
+                            self.log.debug(item_pdf_file)
 
-                result = download_item_page(item_id, item_url)
+                            def browser_cleanup_item_page(item_id):
+                                self.log.debug(
+                                    "Start of item %s cleanup",
+                                    item_id,
+                                )
+                                self.log.debug("Input!")
+                                input()
+
+                            browser_cleanup_item_page(item_id)
+                            self.log.debug("Printing page to PDF")
+                            self.remove(self.cache["PDF_TEMP_FILENAME"])
+
+                            self.b.execute_script("window.print();")
+                            self.wait_for_stable_file(
+                                self.cache["PDF_TEMP_FILENAME"],
+                            )
+                            self.move_file(
+                                self.cache["PDF_TEMP_FILENAME"],
+                                item_pdf_file,
+                            )
+                        return item_pdf_file, missing
+
+                    item_url = f"https://www.ebay.com/itm/{item_id}"
+
+                    item_page_file, missing = download_item_page(
+                        order_id,
+                        item_id,
+                        item_url,
+                    )
+                    if not missing:
+                        item["pdf"] = item_page_file
+                    self.log.debug(
+                        "Fixed PDF for item %s",
+                        item_id,
+                    )
                 #                    .item-card (N)
                 #                        .card-content-description
                 #                            .item-description
@@ -407,6 +467,14 @@ class EbayScraper(BaseScraper):
         ext: str = "jpg",
     ) -> Path:
         return self.dir_order_id(order_id) / f"item-thumb-{item_id}.{ext}"
+
+    def file_item_pdf(
+        self,
+        order_id: str,
+        item_id: str,
+        ext: str = "pdf",
+    ) -> Path:
+        return self.dir_order_id(order_id) / f"item-{item_id}.{ext}"
 
     def dir_order_id(self, order_id: str) -> Path:
         return self.cache["ORDERS"] / f"{order_id}/"
