@@ -1,5 +1,4 @@
 import datetime
-import pprint
 import re
 import sys
 from pathlib import Path
@@ -31,24 +30,25 @@ class EbayScraper(BaseScraper):
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
         for order_id, order_url in sorted(order_ids):
-            if order_id not in [
+            if order_id in [
                 "11-06736-46406",
-                # "03-06607-27879",
-                # "230443738010",
-                # "10-06606-54233",
+                "03-06607-27879",
+                "230443738010",
+                "10-06606-54233",
             ]:
                 continue
 
             page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
-        pp = pprint.PrettyPrinter(depth=6)
-        self.log.debug(pp.pformat(orders))
+        # pp = pprint.PrettyPrinter(depth=6)
+        # self.log.debug(pp.pformat(orders))
 
     def browser_scrape_order_id(self, order_id: str, order_url: str) -> dict:
-        json_file = self.file_order_id_json(order_id)
-        if self.can_read(json_file):
-            self.log.debug("Skipping order id %s as it is cached")
+        order_json_file_path = self.file_order_json_path(order_id)
+        if self.can_read(order_json_file_path):
+            self.log.info("Skipping order id %s as it is cached", order_id)
+        self.log.info("Order id %s is not cached", order_id)
         self.browser_visit_page_v2(order_url)
 
         csss = ".summary-region .delivery-address-content p"
@@ -107,6 +107,10 @@ class EbayScraper(BaseScraper):
                     f"or order date on {order_url}"
                 )
                 raise ValueError(msg)
+            order_json_file_path = self.file_order_json_path(order_id)
+            if self.can_read(order_json_file_path):
+                self.log.debug("Skipping order id %s as it is cached")
+                continue
             if order_id in orders:
                 msg = f"Order ID {order_id} parsed twice on {order_url}?"
                 raise ValueError(msg)
@@ -242,9 +246,12 @@ class EbayScraper(BaseScraper):
                         item_id,
                     )
 
-                    def download_item_page(order_id, item_id, item_url):
+                    def download_item_page(order_id, item_id):
+                        item_url = self.ITEM_PAGE.format(item_id=item_id)
+                        order_page_handle = self.b.current_window_handle
+                        self.b.switch_to.new_window("tab")
+
                         self.browser_visit_page_v2(item_url)
-                        missing = False
                         if "Error Page" in self.b.title:
                             item_pdf_file = self.file_item_pdf(
                                 order_id,
@@ -257,9 +264,12 @@ class EbayScraper(BaseScraper):
                                 "1",
                             )
                             self.log.debug(
-                                "ITem page is error page %s",
+                                "Item page is error page %s",
                                 item_id,
                             )
+                            import time
+
+                            time.sleep(5)
                         else:
                             item_pdf_file = self.file_item_pdf(
                                 order_id,
@@ -272,8 +282,43 @@ class EbayScraper(BaseScraper):
                                     "Start of item %s cleanup",
                                     item_id,
                                 )
+                                item_page_handle = self.b.current_window_handle
+
+                                item_title = self.b.find_element(
+                                    By.CSS_SELECTOR,
+                                    ".x-item-title",
+                                ).text
+                                item_desc_src = self.b.find_element(
+                                    By.ID,
+                                    "desc_ifr",
+                                ).get_attribute("src")
+                                csss = ".filmstrip button img"
+                                image_elements = self.b.find_elements(
+                                    By.CSS_SELECTOR,
+                                    csss,
+                                )
+                                image_urls = [
+                                    re.sub(
+                                        r"l\d*\.(webp|jpg|jpeg|png)",
+                                        "l1600.jpeg",
+                                        image.get_attribute("src"),
+                                    )
+                                    for image in image_elements
+                                ]
+                                self.log.info("Title: %s", item_title)
+                                self.log.info("Image urls: %s", image_urls)
+                                self.log.info("Iframe: %s", item_desc_src)
                                 self.log.debug("Input!")
+                                self.b.switch_to.new_window("tab")
+                                self.browser_visit_page_v2(item_desc_src)
+                                let div = document.createElement("div")
+                                let p = document.createElement("p")
+                                let span = document.createElement("span")
+                                div.append(p)
+                                div.prepend(span)
                                 input()
+                                self.b.close()
+                                self.b.switch_to.window(item_page_handle)
 
                             browser_cleanup_item_page(item_id)
                             self.log.debug("Printing page to PDF")
@@ -287,33 +332,18 @@ class EbayScraper(BaseScraper):
                                 self.cache["PDF_TEMP_FILENAME"],
                                 item_pdf_file,
                             )
-                        return item_pdf_file, missing
+                        self.b.close()
+                        self.b.switch_to.window(order_page_handle)
+                        return item_pdf_file
 
-                    item_url = f"https://www.ebay.com/itm/{item_id}"
-
-                    item_page_file, missing = download_item_page(
+                    item["pdf"] = download_item_page(
                         order_id,
                         item_id,
-                        item_url,
                     )
-                    if not missing:
-                        item["pdf"] = item_page_file
-                    self.log.debug(
-                        "Fixed PDF for item %s",
-                        item_id,
-                    )
-                #                    .item-card (N)
-                #                        .card-content-description
-                #                            .item-description
-                #                                 .item-price -> TOTAL!
-                #                            .item-aspect-values-list
-                #                                  .item-aspect-value (N) ->
-                #                                   if 2 itemnum + return,
-                #                                   1: item numder
-                #                                   2: SKU?
-                #                                   3: return window?
+
             orders[order_id]["items"].append(item)
-            # save order to json when done with items
+            self.log.debug("Saving order %s to disk", order_id)
+            self.write(order_json_file_path, orders[order_id], to_json=True)
 
         return orders
 
@@ -453,11 +483,12 @@ class EbayScraper(BaseScraper):
         self.ORDER_LIST_JSON_FILENAME = (
             self.cache["ORDER_LISTS"] / "order_list.json"
         )
+        self.ITEM_PAGE = "https://www.ebay.com/itm/{item_id}"
 
     def order_page_url(self, order_id: str) -> str:
         return f"https://www.ebay.com/vod/FetchOrderDetails?orderId={order_id}"
 
-    def file_order_id_json(self, order_id: str) -> Path:
+    def file_order_json_path(self, order_id: str) -> Path:
         return self.dir_order_id(order_id) / "order.json"
 
     def file_item_thumb(
