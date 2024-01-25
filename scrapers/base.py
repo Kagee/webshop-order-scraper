@@ -119,11 +119,13 @@ class BaseScraper:
                 currency=None,
                 amount_text=str(value),
             )
-        if not guess_price.amount:
-            self.log.warning(
-                AMBER("name: %s, value: %s, force_currency: %s"),
+        if not guess_price.amount and value not in ["Free shipping", "Free"]:
+            self.log.debug(
+                "guess_price.amount is false "
+                "name:%s value:%s curr_guess:%s force_currency:%s",
                 name,
                 value,
+                guess_price.currency,
                 force_currency,
             )
             guess_price.amount = 0
@@ -150,24 +152,20 @@ class BaseScraper:
             curr_dict = {"currency": "GBP"}
         elif guess_price.currency in ["NOK"]:
             curr_dict = {"currency": "NOK"}
-        elif value == "Free shipping":
+        elif value in ["Free shipping", "Free"]:
             curr_dict = {}
         else:
-            self.log.warning(
-                AMBER("name: %s, value: %s, force_currency: %s"),
-                name,
-                value,
-                force_currency,
-            )
-            self.log.warning(
-                AMBER("Unexpected value/currency: %s/%s/%s"),
+            self.log.debug(
+                "Unexpected value/currency: "
+                "name:%s value:%s curr_guess:%s force_currency:%s",
                 name,
                 value,
                 guess_price.currency,
+                force_currency
             )
             msg = (
                 "Unexpected value/currency:"
-                f" {name}/{value}/{guess_price.currency}"
+                f" {name=} {value=} {guess_price.currency=}"
             )
             raise NotImplementedError(
                 msg,

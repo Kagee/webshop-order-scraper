@@ -1,14 +1,14 @@
 import datetime
 import re
 import sys
+from datetime import datetime as dtdt
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
-from selenium.common.exceptions import NoSuchElementException
 
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
-from . import settings  # noqa: F401
 from .base import BaseScraper
 from .utils import AMBER
 
@@ -31,19 +31,10 @@ class EbayScraper(BaseScraper):
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
         for order_id, order_url in sorted(order_ids):
-            #if order_id in [
-            #    "11-06736-46406",
-            #    "03-06607-27879",
-            #    "230443738010",
-            #    "10-06606-54233",
-            #]:
-            #    continue
 
             page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
-        # pp = pprint.PrettyPrinter(depth=6)
-        # self.log.debug(pp.pformat(orders))
 
     def browser_scrape_order_id(self, order_id: str, order_url: str) -> dict:
         order_json_file_path = self.file_order_json_path(order_id)
@@ -54,22 +45,11 @@ class EbayScraper(BaseScraper):
         self.log.info("Order id %s is not cached", order_id)
         self.browser_visit_page_v2(order_url)
 
-        csss = ".summary-region .delivery-address-content p"
-        order_delivery_address = "\n".join(
-            [p.text for p in self.b.find_elements(By.CSS_SELECTOR, csss)],
-        )
-        self.log.debug("Delivery address: %s", order_delivery_address)
-        csss = ".summary-region .order-summary-total dd"
-        order_total = self.b.find_element(By.CSS_SELECTOR, csss).text
-        self.log.debug("Order total: %s", order_total)
-
-        csss = ".summary-region .payment-line-item dl"
-        order_payment_lines = []
-        for dl in self.b.find_elements(By.CSS_SELECTOR, csss):
-            dt = dl.find_element(By.CSS_SELECTOR, "dt").text
-            dd = dl.find_element(By.CSS_SELECTOR, "dd").text
-            order_payment_lines.append((dt, dd))
-        self.log.debug("Order payment lines: %s", order_payment_lines)
+        (
+            order_delivery_address,
+            order_total,
+            order_payment_lines,
+        ) = self.browser_get_order_summary_data()
 
         orders = {}
         orderbox: WebElement
@@ -77,32 +57,11 @@ class EbayScraper(BaseScraper):
             By.CSS_SELECTOR,
             ".order-box",
         ):
-            order_id = None
-            order_date = None
-            orderinfo = {}
-            order_info_dl: WebElement
-            for order_info_dl in orderbox.find_elements(
-                By.CSS_SELECTOR,
-                ".order-info dl",
-            ):
-                dt = order_info_dl.find_element(By.CSS_SELECTOR, "dt").text
-                dd = order_info_dl.find_element(By.CSS_SELECTOR, "dd").text
-                self.log.debug("%s: %s", dt, dd)
-                if dt == "Order number":
-                    self.log.debug("Order ID: %s", dd)
-                    order_id = dd
-                    continue
-                if dt == "Time placed":
-                    order_date = (
-                        datetime.datetime.strptime(  # noqa: DTZ007 (unknown timezone)
-                            dd,
-                            # Mar 14, 2021 at 3:17 PM
-                            "%b %d, %Y at %I:%M %p",
-                        ),
-                    )
-                    continue
-                orderinfo[dt] = dd
-            self.log.debug("Order info: %s", orderinfo)
+            (
+                order_id,
+                order_date,
+                orderinfo,
+            ) = self.browser_get_order_base_info(orderbox)
 
             if not order_id or not order_date:
                 msg = (
@@ -112,6 +71,7 @@ class EbayScraper(BaseScraper):
                 raise ValueError(msg)
             order_json_file_path = self.file_order_json_path(order_id)
             if self.can_read(order_json_file_path):
+                # We check again since order pages can contain multiple orders
                 self.log.debug("Skipping order id %s as it is cached", order_id)
                 continue
             if order_id in orders:
@@ -162,13 +122,59 @@ class EbayScraper(BaseScraper):
                 By.CSS_SELECTOR,
                 ".item-container .item-card",
             ):
-                item = self.browser_process_order_item(order_id, item_card_element)
+                item = self.browser_process_order_item(
+                    order_id, item_card_element,
+                    )
 
             orders[order_id]["items"].append(item)
             self.log.debug("Saving order %s to disk", order_id)
             self.write(order_json_file_path, orders[order_id], to_json=True)
 
         return orders
+
+    def browser_get_order_base_info(self, orderbox):
+        order_info_dl: WebElement
+        orderinfo = {}
+        for order_info_dl in orderbox.find_elements(
+                By.CSS_SELECTOR,
+                ".order-info dl",
+            ):
+            dt = order_info_dl.find_element(By.CSS_SELECTOR, "dt").text
+            dd = order_info_dl.find_element(By.CSS_SELECTOR, "dd").text
+            self.log.debug("%s: %s", dt, dd)
+            if dt == "Order number":
+                self.log.debug("Order ID: %s", dd)
+                order_id = dd
+                continue
+            if dt == "Time placed":
+                order_date = datetime.datetime.strptime(  # noqa: DTZ007 (unknown timezone)
+                            dd,
+                            # Mar 14, 2021 at 3:17 PM
+                            "%b %d, %Y at %I:%M %p",
+                        )
+                continue
+            orderinfo[dt] = dd
+        self.log.debug("Order info: %s", orderinfo)
+        return order_id, order_date, orderinfo
+
+    def browser_get_order_summary_data(self):
+        csss = ".summary-region .delivery-address-content p"
+        order_delivery_address = "\n".join(
+            [p.text for p in self.b.find_elements(By.CSS_SELECTOR, csss)],
+        )
+        self.log.debug("Delivery address: %s", order_delivery_address)
+        csss = ".summary-region .order-summary-total dd"
+        order_total = self.b.find_element(By.CSS_SELECTOR, csss).text
+        self.log.debug("Order total: %s", order_total)
+
+        csss = ".summary-region .payment-line-item dl"
+        order_payment_lines = []
+        for dl in self.b.find_elements(By.CSS_SELECTOR, csss):
+            dt = dl.find_element(By.CSS_SELECTOR, "dt").text
+            dd = dl.find_element(By.CSS_SELECTOR, "dd").text
+            order_payment_lines.append((dt, dd))
+        self.log.debug("Order payment lines: %s", order_payment_lines)
+        return order_delivery_address,order_total,order_payment_lines
 
     def browser_process_order_item(self, order_id, item_card_element):
         item = {
@@ -234,12 +240,24 @@ class EbayScraper(BaseScraper):
                     csss,
                 )
         num_iav = len(item_aspect_values)
-        if num_iav == 3:
-            item["sku"] = item_aspect_values[1].text
-            item["extra_data"]["return_window"] = " ".join(
-                        set(item_aspect_values[2].text.split("\n")),
+        # 3 lines: line 1 is item id, line 2 is sku, 3 is return window
+        # 2 lines: line 1 is item id, 2 is return window
+        # 1 Item number
+        # 2 Can be "Quantity" (and "quantity")
+
+        #  <span class="eui-textual-display">
+        #    <span class="eui-text-span" aria-hidden="true">
+        #      <span class="SECONDARY">Quantity 5</span>
+        #    </span>
+        #    <span class="clipped">quantity 5</span>
+        #  </span>
+
+        if num_iav == 3:  # noqa: PLR2004
+            item["sku"] = " ".join(
+                        set(item_aspect_values[1].text.split("\n")),
                     )
-        elif num_iav == 2:
+            item["extra_data"]["return_window"] = item_aspect_values[2].text
+        elif num_iav == 2:  # noqa: PLR2004
             item["extra_data"]["return_window"] = item_aspect_values[
                         1
                     ].text
@@ -327,7 +345,8 @@ class EbayScraper(BaseScraper):
                 re.sub(
                     r"l\d*\.(webp|jpg|jpeg|png)",
                     "l1600.jpeg",
-                    image.get_attribute("src") or image.get_attribute("data-src"),
+                    (image.get_attribute("src")
+                     or image.get_attribute("data-src")),
                 )
                 for image in image_elements
             ]
@@ -404,8 +423,8 @@ class EbayScraper(BaseScraper):
                 sys.exit(1)
             else:
                 for path in sorted(files):
-                    # We load based on a glob so we in theory can find files that
-                    # are older than the oldest in self.file_order_list_year
+                    # We load based on a glob so we in theory can find files
+                    # thatare older than the oldest in self.file_order_list_year
                     self.log.debug(
                         "Found order list for %s",
                         path.name.split(".")[0],
@@ -503,8 +522,58 @@ class EbayScraper(BaseScraper):
             "https://www.ebay.com/vod/FetchOrderDetails?orderId={order_id}",
             "https://www.ebay.com/itm/{item_id}",
         )
+        structure["metadata"]["comment"] = "Order totals may be wrong"
+        orders = []
+        for order_json_handle in self.cache["ORDERS"].glob("**/order.json"):
+            self.log.debug("Processing %s", order_json_handle.parent.name)
+            order_input = self.read(order_json_handle, from_json=True)
+            order = {
+                "id": order_input["id"],
+                "date": dtdt.strptime(  # noqa: DTZ007
+                    order_input["date"], "%Y-%m-%d %H:%M:%S",
+                    ).date().strftime("%Y-%m-%d"),
+                "total": self.get_value_currency(
+                        "total",
+                        order_input["total"],
+                    ),
+                "extra_data": order_input["extra_data"],
+            }
+            order["extra_data"].update(order_input["orderinfo"])
+            for payment_line in order_input["payment_lines"]:
+                if payment_line[0] == "VAT*":
+                    order["tax"] = self.get_value_currency(
+                        payment_line[0],
+                        payment_line[1],
+                    )
+                elif payment_line[0] == "Shipping":
+                    order["shipping"] = self.get_value_currency(
+                        payment_line[0],
+                        payment_line[1],
+                    )
+                elif " item" in payment_line[0]:
+                    m = re.match(r"(\d*) items?", payment_line[0])
+                    order["extra_data"]["num_items"] = int(m.group(1))
+                else:
+                    self.log.warning("Unknown payment: %s: %s",
+                                   payment_line[0],
+                                   payment_line[1],
+                                   )
+                    if "payment" not in order["extra_data"]:
+                        order["extra_data"]["payment"] = {}
+                    order["extra_data"]["payment"][payment_line[0]] = payment_line[1]
+            order["items"] = []
+            for item_input in order_input["items"]:
+                item = {
+                    "id": item_input["id"],
+                    "name": item_input["name"],
+                }
+                if "sku" in item_input:
+                    item["variation"] = item_input["sku"]
+                order["items"].append(item)
 
-        # structure["orders"] = orders
+            orders.append(order)
+        structure["orders"] = orders
+        self.pprint(structure)
         self.output_schema_json(structure)
 
     def __init__(self, options: dict):
