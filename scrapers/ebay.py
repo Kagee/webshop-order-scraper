@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
+from selenium.common.exceptions import NoSuchElementException
 
 from selenium.webdriver.common.by import By
 
@@ -30,13 +31,13 @@ class EbayScraper(BaseScraper):
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
         for order_id, order_url in sorted(order_ids):
-            if order_id in [
-                "11-06736-46406",
-                "03-06607-27879",
-                "230443738010",
-                "10-06606-54233",
-            ]:
-                continue
+            #if order_id in [
+            #    "11-06736-46406",
+            #    "03-06607-27879",
+            #    "230443738010",
+            #    "10-06606-54233",
+            #]:
+            #    continue
 
             page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
@@ -48,6 +49,8 @@ class EbayScraper(BaseScraper):
         order_json_file_path = self.file_order_json_path(order_id)
         if self.can_read(order_json_file_path):
             self.log.info("Skipping order id %s as it is cached", order_id)
+            return self.read(order_json_file_path, from_json=True)
+
         self.log.info("Order id %s is not cached", order_id)
         self.browser_visit_page_v2(order_url)
 
@@ -109,7 +112,7 @@ class EbayScraper(BaseScraper):
                 raise ValueError(msg)
             order_json_file_path = self.file_order_json_path(order_id)
             if self.can_read(order_json_file_path):
-                self.log.debug("Skipping order id %s as it is cached")
+                self.log.debug("Skipping order id %s as it is cached", order_id)
                 continue
             if order_id in orders:
                 msg = f"Order ID {order_id} parsed twice on {order_url}?"
@@ -159,193 +162,231 @@ class EbayScraper(BaseScraper):
                 By.CSS_SELECTOR,
                 ".item-container .item-card",
             ):
-                item = {
-                    "extra_data": {},
-                }
-                desc: WebElement = item_card_element.find_element(
-                    By.CSS_SELECTOR,
-                    ".card-content-description .item-description a",
-                )
-                item["name"] = desc.text
-                item_id = desc.get_attribute("href").split("/")
-                item["id"] = item_id = item_id[len(item_id) - 1]
-
-                thumb_file = self.file_item_thumb(order_id, item_id)
-                if self.can_read(thumb_file):
-                    self.log.debug(
-                        "Found thumbnail for item %s: %s",
-                        item_id,
-                        thumb_file.name,
-                    )
-                    item["thumbnail"] = thumb_file
-                else:
-                    image_element = item_card_element.find_element(
-                        By.CSS_SELECTOR,
-                        ".card-content-image-box img",
-                    )
-                    thumb_url = image_element.get_attribute("src")
-                    # Ebay "missing" images
-                    # https://i.ebayimg.com/images/g/unknown
-                    # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
-                    if (
-                        "unknown" in thumb_url
-                        or "JuIAAOSwXj5XG5VC" in thumb_url
-                    ):
-                        self.log.debug("No thumnail for item %s", item_id)
-                        self.write(thumb_file.with_suffix(".missing"), 1)
-                    else:
-                        # Download image
-                        if ".webp" not in thumb_url:
-                            msg = f"Thumnail for {item_id} is not webp"
-                            raise ValueError(msg)
-                        thumb_url = re.sub(
-                            r"l\d*\.webp",
-                            "l1600.webp",
-                            thumb_url,
-                        )
-                        self.log.debug("Thumbnail url: %s", thumb_url)
-                        self.download_url_to_file(
-                            thumb_url,
-                            thumb_file,
-                        )
-                        item["thumbnail"] = thumb_file
-                # Thumbnail done
-                csss = ".item-description .item-price"
-                item["total"] = item_card_element.find_element(
-                    By.CSS_SELECTOR,
-                    csss,
-                ).text
-                csss = ".item-aspect-value"
-                item_aspect_values = item_card_element.find_elements(
-                    By.CSS_SELECTOR,
-                    csss,
-                )
-                num_iav = len(item_aspect_values)
-                if num_iav == 3:
-                    item["sku"] = item_aspect_values[1].text
-                    item["extra_data"]["return_window"] = " ".join(
-                        set(item_aspect_values[2].text.split("\n")),
-                    )
-                elif num_iav == 2:
-                    item["extra_data"]["return_window"] = item_aspect_values[
-                        1
-                    ].text
-                    item["sku"] = None
-
-                pdf_file = self.file_item_pdf(order_id, item_id)
-                if self.can_read(pdf_file):
-                    self.log.debug(
-                        "Found PDF for item %s: %s",
-                        item_id,
-                        pdf_file.name,
-                    )
-                    item["pdf"] = pdf_file
-                else:
-                    self.log.debug(
-                        "Need to make PDF for item %s",
-                        item_id,
-                    )
-
-                    def download_item_page(order_id, item_id):
-                        item_url = self.ITEM_PAGE.format(item_id=item_id)
-                        order_page_handle = self.b.current_window_handle
-                        self.b.switch_to.new_window("tab")
-
-                        self.browser_visit_page_v2(item_url)
-                        if "Error Page" in self.b.title:
-                            item_pdf_file = self.file_item_pdf(
-                                order_id,
-                                item_id,
-                            ).with_suffix(
-                                ".missing",
-                            )
-                            self.write(
-                                item_pdf_file,
-                                "1",
-                            )
-                            self.log.debug(
-                                "Item page is error page %s",
-                                item_id,
-                            )
-                            import time
-
-                            time.sleep(5)
-                        else:
-                            item_pdf_file = self.file_item_pdf(
-                                order_id,
-                                item_id,
-                            )
-                            self.log.debug(item_pdf_file)
-
-                            def browser_cleanup_item_page(item_id):
-                                self.log.debug(
-                                    "Start of item %s cleanup",
-                                    item_id,
-                                )
-                                item_page_handle = self.b.current_window_handle
-
-                                item_title = self.b.find_element(
-                                    By.CSS_SELECTOR,
-                                    ".x-item-title",
-                                ).text
-                                item_desc_src = self.b.find_element(
-                                    By.ID,
-                                    "desc_ifr",
-                                ).get_attribute("src")
-                                csss = ".filmstrip button img"
-                                image_elements = self.b.find_elements(
-                                    By.CSS_SELECTOR,
-                                    csss,
-                                )
-                                image_urls = [
-                                    re.sub(
-                                        r"l\d*\.(webp|jpg|jpeg|png)",
-                                        "l1600.jpeg",
-                                        image.get_attribute("src"),
-                                    )
-                                    for image in image_elements
-                                ]
-                                self.log.info("Title: %s", item_title)
-                                self.log.info("Image urls: %s", image_urls)
-                                self.log.info("Iframe: %s", item_desc_src)
-                                self.log.debug("Input!")
-                                self.b.switch_to.new_window("tab")
-                                self.browser_visit_page_v2(item_desc_src)
-                                let div = document.createElement("div")
-                                let p = document.createElement("p")
-                                let span = document.createElement("span")
-                                div.append(p)
-                                div.prepend(span)
-                                input()
-                                self.b.close()
-                                self.b.switch_to.window(item_page_handle)
-
-                            browser_cleanup_item_page(item_id)
-                            self.log.debug("Printing page to PDF")
-                            self.remove(self.cache["PDF_TEMP_FILENAME"])
-
-                            self.b.execute_script("window.print();")
-                            self.wait_for_stable_file(
-                                self.cache["PDF_TEMP_FILENAME"],
-                            )
-                            self.move_file(
-                                self.cache["PDF_TEMP_FILENAME"],
-                                item_pdf_file,
-                            )
-                        self.b.close()
-                        self.b.switch_to.window(order_page_handle)
-                        return item_pdf_file
-
-                    item["pdf"] = download_item_page(
-                        order_id,
-                        item_id,
-                    )
+                item = self.browser_process_order_item(order_id, item_card_element)
 
             orders[order_id]["items"].append(item)
             self.log.debug("Saving order %s to disk", order_id)
             self.write(order_json_file_path, orders[order_id], to_json=True)
 
         return orders
+
+    def browser_process_order_item(self, order_id, item_card_element):
+        item = {
+                    "extra_data": {},
+                }
+        desc: WebElement = item_card_element.find_element(
+                    By.CSS_SELECTOR,
+                    ".card-content-description .item-description a",
+                )
+        item["name"] = desc.text
+        item_id = desc.get_attribute("href").split("/")
+        item["id"] = item_id = item_id[len(item_id) - 1]
+
+        thumb_file = self.file_item_thumb(order_id, item_id)
+        thumb_file.parent.mkdir(exist_ok=True)
+        if self.can_read(thumb_file):
+            self.log.debug(
+                        "Found thumbnail for item %s: %s",
+                        item_id,
+                        thumb_file.name,
+                    )
+            item["thumbnail"] = thumb_file
+        else:
+            image_element = item_card_element.find_element(
+                        By.CSS_SELECTOR,
+                        ".card-content-image-box img",
+                    )
+            thumb_url = image_element.get_attribute("src")
+                    # Ebay "missing" images
+                    # https://i.ebayimg.com/images/g/unknown
+                    # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
+            if (
+                        "unknown" in thumb_url
+                        or "JuIAAOSwXj5XG5VC" in thumb_url
+                    ):
+                self.log.debug("No thumnail for item %s", item_id)
+                self.write(thumb_file.with_suffix(".missing"), "1")
+            else:
+                        # Download image
+                if ".webp" not in thumb_url:
+                    msg = f"Thumnail for {item_id} is not webp"
+                    raise ValueError(msg)
+                thumb_url = re.sub(
+                            r"l\d*\.webp",
+                            "l1600.webp",
+                            thumb_url,
+                        )
+                self.log.debug("Thumbnail url: %s", thumb_url)
+                self.download_url_to_file(
+                            thumb_url,
+                            thumb_file,
+                        )
+                item["thumbnail"] = thumb_file
+                # Thumbnail done
+        csss = ".item-description .item-price"
+        item["total"] = item_card_element.find_element(
+                    By.CSS_SELECTOR,
+                    csss,
+                ).text
+        csss = ".item-aspect-value"
+        item_aspect_values = item_card_element.find_elements(
+                    By.CSS_SELECTOR,
+                    csss,
+                )
+        num_iav = len(item_aspect_values)
+        if num_iav == 3:
+            item["sku"] = item_aspect_values[1].text
+            item["extra_data"]["return_window"] = " ".join(
+                        set(item_aspect_values[2].text.split("\n")),
+                    )
+        elif num_iav == 2:
+            item["extra_data"]["return_window"] = item_aspect_values[
+                        1
+                    ].text
+            item["sku"] = None
+
+        pdf_file = self.file_item_pdf(order_id, item_id)
+        if self.can_read(pdf_file):
+            self.log.debug(
+                        "Found PDF for item %s: %s",
+                        item_id,
+                        pdf_file.name,
+                    )
+            item["pdf"] = pdf_file
+        else:
+            self.log.debug(
+                        "Need to make PDF for item %s",
+                        item_id,
+                    )
+            item["pdf"] = self.download_item_page(
+                        order_id,
+                        item_id,
+                    )
+        return item
+
+    def download_item_page(self, order_id, item_id):
+        item_url = self.ITEM_PAGE.format(item_id=item_id)
+        order_page_handle = self.b.current_window_handle
+        self.b.switch_to.new_window("tab")
+
+        self.browser_visit_page_v2(item_url)
+        if "Error Page" in self.b.title \
+            or ("The item you selected is unavailable"
+                ", but we found something similar.") in self.b.page_source:
+            item_pdf_file = self.file_item_pdf(
+                order_id,
+                item_id,
+            ).with_suffix(
+                ".missing",
+            )
+            self.write(
+                item_pdf_file,
+                "1",
+            )
+            self.log.debug(
+                "Item page is error page %s",
+                item_id,
+            )
+        else:
+            item_pdf_file = self.file_item_pdf(
+                order_id,
+                item_id,
+            )
+            self.log.debug(item_pdf_file)
+            self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
+        self.b.close() # item_url
+        self.b.switch_to.window(order_page_handle)
+        return item_pdf_file
+
+    def browser_cleanup_and_print_item_page(self, item_id, item_pdf_file):
+        self.log.debug(
+            "Start of item %s cleanup",
+            item_id,
+        )
+        item_page_handle = self.b.current_window_handle
+
+        try:
+            item_title_element = self.b.find_element(
+                By.CSS_SELECTOR,
+                ".x-item-title",
+            )
+        except NoSuchElementException:
+            item_title_element = None
+        if item_title_element:
+            item_title = item_title_element.text
+            item_desc_src = self.b.find_element(
+                By.ID,
+                "desc_ifr",
+            ).get_attribute("src")
+            csss = ".filmstrip button img"
+            image_elements = self.b.find_elements(
+                By.CSS_SELECTOR,
+                csss,
+            )
+            image_urls = [
+                re.sub(
+                    r"l\d*\.(webp|jpg|jpeg|png)",
+                    "l1600.jpeg",
+                    image.get_attribute("src") or image.get_attribute("data-src"),
+                )
+                for image in image_elements
+            ]
+            self.log.info("Title: %s", item_title)
+            self.log.info("Image urls: %s", image_urls)
+            self.log.info("Iframe: %s", item_desc_src)
+            self.log.debug("Input!")
+            self.b.switch_to.new_window("tab")
+            self.browser_visit_page_v2(item_desc_src)
+            self.b.execute_script(
+                """
+                    let body = document.body
+                    let h1 = document.createElement("h1")
+                    h1.textContent = arguments[0]
+                    h1.style.textAlign = "center"
+                    let h3 = document.createElement("h3")
+                    h3.textContent = arguments[1]
+                    h3.style.textAlign = "center"
+
+                    body.prepend(h3)
+                    body.prepend(h1)
+                    for (
+                            let i = 0;
+                            i < arguments[2].length;
+                            i++
+                        ) {
+                        img = document.createElement("img")
+                        img.src = arguments[2][i];
+                        img.style.maxWidth = "90%";
+                        body.appendChild(img)
+                    }
+                    document.querySelectorAll('*')\
+                    .forEach(function(e){
+                        e.style.fontFamily = "sans-serif";
+                        e.style.margin = "0";
+                        e.style.padding = "0";
+                    });
+                    """,
+                    item_title,
+                    item_title,
+                image_urls,
+            )
+
+        self.log.debug("Printing page to PDF")
+        self.remove(self.cache["PDF_TEMP_FILENAME"])
+
+        self.b.execute_script("window.print();")
+        self.wait_for_stable_file(
+            self.cache["PDF_TEMP_FILENAME"],
+        )
+        self.move_file(
+            self.cache["PDF_TEMP_FILENAME"],
+            item_pdf_file,
+        )
+
+        if self.b.current_window_handle != item_page_handle:
+            self.b.close()
+        self.b.switch_to.window(item_page_handle)
+
 
     def browser_load_order_list(self) -> list:
         order_ids = []
