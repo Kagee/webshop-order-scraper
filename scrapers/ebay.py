@@ -45,6 +45,7 @@ class EbayScraper(BaseScraper):
             return self.read(order_json_file_path, from_json=True)
 
         self.log.info("Order id %s is not cached", order_id)
+        self.log.info("Order URL %s", order_url)
         self.browser_visit_page_v2(order_url)
 
         (
@@ -211,6 +212,7 @@ class EbayScraper(BaseScraper):
             if (
                         "unknown" in thumb_url
                         or "JuIAAOSwXj5XG5VC" in thumb_url
+                        or self.options.skip_item_thumb
                     ):
                 self.log.debug("No thumnail for item %s", item_id)
                 self.write(thumb_file.with_suffix(".missing"), "1")
@@ -237,37 +239,34 @@ class EbayScraper(BaseScraper):
                     csss,
                 ).text
         csss = ".item-aspect-value"
-        item_aspect_values = item_card_element.find_elements(
+        item_aspect_elements = item_card_element.find_elements(
                     By.CSS_SELECTOR,
                     csss,
                 )
-        num_iav = len(item_aspect_values)
+        num_iav = len(item_aspect_elements)
 
-        item["extra_data"]["aspect_values"] = "\n".join([i.text.replace("\n", "CR") for i in item_aspect_values])
-        self.aspect[item_id] = [i.text for i in item_aspect_values]
-        # 3 lines: line 1 is item id, line 2 is sku, 3 is return window
-        # 2 lines: line 1 is item id, 2 is return window
-        # 1 Item number
-        # 2 Can be "Quantity" (and "quantity")
+        self.aspect[item_id] = []
+        for item_aspect_element in item_aspect_elements:
+            iae_text = item_aspect_element.text
+            if iae_text.startswith("Item number:"):
+                item["extra_data"]["itemnum"] = iae_text
+            elif iae_text.startswith("Return window"):
+                item["extra_data"]["returnwin"] = iae_text
+            else:
+                self.aspect[item_id].append(iae_text)
+        if not self.aspect[item_id]:
+            del self.aspect[item_id]
 
-        #  <span class="eui-textual-display">
-        #    <span class="eui-text-span" aria-hidden="true">
-        #      <span class="SECONDARY">Quantity 5</span>
-        #    </span>
-        #    <span class="clipped">quantity 5</span>
-        #  </span>
-
-        #if num_iav == 3:  # noqa: PLR2004
-        #    item["sku"] = " ".join(
-        #                set(item_aspect_values[1].text.split("\n")),
-        #            )
-        #    item["extra_data"]["return_window"] = item_aspect_values[2].text
-        #elif num_iav == 2:  # noqa: PLR2004
-        #    item["extra_data"]["return_window"] = item_aspect_values[
-        #                1
-        #            ].text
-        #    item["sku"] = None
-
+        """
+        19 Sections ⋅ Quantity 3\n19 Sections, quantity 3
+        Quantity 5\nquantity 5
+        Quantity 2\nquantity 2
+        TS-KU\nTS-KU
+        2000PCS 0603 Resistor+Capacitor\n2000PCS 0603 Resistor+Capacitor
+        3x Pro Micro 5V 16MHz\n3x Pro Micro 5V 16MHz
+        1 Pcs ⋅ 5KG Sensor +Green HX711\n1 Pcs, 5KG Sensor +Green HX711
+        GM328 Transistor Tester (English) +Case\nGM328 Transistor Tester (English) +Case
+        """
         pdf_file = self.file_item_pdf(order_id, item_id)
         if self.can_read(pdf_file):
             self.log.debug(
@@ -295,7 +294,8 @@ class EbayScraper(BaseScraper):
         self.browser_visit_page_v2(item_url)
         if "Error Page" in self.b.title \
             or ("The item you selected is unavailable"
-                ", but we found something similar.") in self.b.page_source:
+                ", but we found something similar.") in self.b.page_source \
+            or self.options.skip_item_pdf:
             item_pdf_file = self.file_item_pdf(
                 order_id,
                 item_id,

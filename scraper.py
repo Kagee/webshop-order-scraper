@@ -197,7 +197,8 @@ def parse_args():  # noqa: PLR0915
     parser_ebay = subparsers.add_parser("ebay")
     use_cached_orderlist(parser_ebay)
     to_std_json(parser_ebay)
-
+    skip_item_pdf(parser_ebay)
+    skip_item_thumb(parser_ebay)
     _ = subparsers.add_parser("imap")
 
     parser_pimoroni = subparsers.add_parser("pimoroni")
