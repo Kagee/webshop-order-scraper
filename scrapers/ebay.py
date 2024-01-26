@@ -30,11 +30,13 @@ class EbayScraper(BaseScraper):
         self.log.debug("Processing %s order ids...", len(order_ids))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
+        self.aspect = {}
         for order_id, order_url in sorted(order_ids):
-
+            
             page_orders = self.browser_scrape_order_id(order_id, order_url)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
+        self.pprint(self.aspect)
 
     def browser_scrape_order_id(self, order_id: str, order_url: str) -> dict:
         order_json_file_path = self.file_order_json_path(order_id)
@@ -240,6 +242,9 @@ class EbayScraper(BaseScraper):
                     csss,
                 )
         num_iav = len(item_aspect_values)
+
+        item["extra_data"]["aspect_values"] = "\n".join([i.text.replace("\n", "CR") for i in item_aspect_values])
+        self.aspect[item_id] = [i.text for i in item_aspect_values]
         # 3 lines: line 1 is item id, line 2 is sku, 3 is return window
         # 2 lines: line 1 is item id, 2 is return window
         # 1 Item number
@@ -252,16 +257,16 @@ class EbayScraper(BaseScraper):
         #    <span class="clipped">quantity 5</span>
         #  </span>
 
-        if num_iav == 3:  # noqa: PLR2004
-            item["sku"] = " ".join(
-                        set(item_aspect_values[1].text.split("\n")),
-                    )
-            item["extra_data"]["return_window"] = item_aspect_values[2].text
-        elif num_iav == 2:  # noqa: PLR2004
-            item["extra_data"]["return_window"] = item_aspect_values[
-                        1
-                    ].text
-            item["sku"] = None
+        #if num_iav == 3:  # noqa: PLR2004
+        #    item["sku"] = " ".join(
+        #                set(item_aspect_values[1].text.split("\n")),
+        #            )
+        #    item["extra_data"]["return_window"] = item_aspect_values[2].text
+        #elif num_iav == 2:  # noqa: PLR2004
+        #    item["extra_data"]["return_window"] = item_aspect_values[
+        #                1
+        #            ].text
+        #    item["sku"] = None
 
         pdf_file = self.file_item_pdf(order_id, item_id)
         if self.can_read(pdf_file):
