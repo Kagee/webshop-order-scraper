@@ -199,6 +199,8 @@ def parse_args():  # noqa: PLR0915
     to_std_json(parser_ebay)
     skip_item_pdf(parser_ebay)
     skip_item_thumb(parser_ebay)
+    force_web_scrape(parser_ebay)
+
     _ = subparsers.add_parser("imap")
 
     parser_pimoroni = subparsers.add_parser("pimoroni")

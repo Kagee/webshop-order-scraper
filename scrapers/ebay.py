@@ -1,18 +1,17 @@
+import contextlib
 import datetime
 import re
 import sys
 from datetime import datetime as dtdt
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 
 from .base import BaseScraper
 from .utils import AMBER
-
-if TYPE_CHECKING:
-    from selenium.webdriver.remote.webelement import WebElement
 
 
 class EbayScraper(BaseScraper):
@@ -25,23 +24,34 @@ class EbayScraper(BaseScraper):
         """
         Scrapes your eBay orders.
         """
-        order_ids = self.browser_load_order_list()
-        self.log.debug("Processing %s order ids...", len(order_ids))
-        self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
+        order_list_data = self.browser_scrape_or_load_order_list_data()
+        self.log.debug("Processing %s order ids...", len(order_list_data))
+        self.write(self.ORDER_LIST_JSON_FILENAME, order_list_data, to_json=True)
         orders = {}
-        sys.exit()
-        # TODO: Merge orders with newely scraped orders somehow
-        for order_id, order_input in sorted(order_ids):
-            page_orders = self.browser_scrape_order_id(order_id, order_input)
-            for page_order_id, order in page_orders.items():
-                orders[page_order_id] = order
-        self.pprint(self.aspect)
+        for order_id in order_list_data:
+            # One page may contain multiple orders
+            if order_id not in orders:
+                page_orders = self.browser_scrape_order_page(
+                    order_id,
+                    order_list_data,
+                )
+                for page_order_id, order in page_orders.items():
+                    orders[page_order_id] = order
 
-    def browser_scrape_order_id(self, order_id: str, order_url: str) -> dict:
+    def browser_scrape_order_page(
+        self,
+        order_id: str,
+        order_list_data: list,
+    ) -> dict:
         order_json_file_path = self.file_order_json_path(order_id)
-        if self.can_read(order_json_file_path):
+        if (
+            self.can_read(order_json_file_path)
+            and not self.options.force_web_scrape
+        ):
             self.log.info("Skipping order id %s as it is cached", order_id)
             return self.read(order_json_file_path, from_json=True)
+
+        order_url = order_list_data[order_id]["url"]
 
         self.log.info("Order id %s is not cached", order_id)
         self.log.info("Order URL %s", order_url)
@@ -65,6 +75,8 @@ class EbayScraper(BaseScraper):
                 orderinfo,
             ) = self.browser_get_order_base_info(orderbox)
 
+            order_t = order_list_data[order_id]["total"]
+
             if not order_id or not order_date:
                 msg = (
                     "Failed to find expected order id "
@@ -72,7 +84,10 @@ class EbayScraper(BaseScraper):
                 )
                 raise ValueError(msg)
             order_json_file_path = self.file_order_json_path(order_id)
-            if self.can_read(order_json_file_path):
+            if (
+                self.can_read(order_json_file_path)
+                and not self.options.force_web_scrape
+            ):
                 # We check again since order pages can contain multiple orders
                 self.log.debug("Skipping order id %s as it is cached", order_id)
                 continue
@@ -82,6 +97,7 @@ class EbayScraper(BaseScraper):
 
             orders[order_id] = {
                 "id": order_id,
+                "url": order_list_data[order_id]["url"],
                 "total": order_total,
                 "date": order_date,
                 "orderinfo": orderinfo,
@@ -89,6 +105,79 @@ class EbayScraper(BaseScraper):
                 "deliver_address": order_delivery_address,
                 "extra_data": {},
             }
+
+            csss = ".order-level-actions-item button"
+            tax_invoice_button = None
+            with contextlib.suppress(NoSuchElementException):
+                tax_invoice_button = orderbox.find_element(
+                    By.CSS_SELECTOR,
+                    csss,
+                )
+            if not tax_invoice_button:
+                self.log.warning("No tax invoice on order %s", order_id)
+            else:
+                if tax_invoice_button.text != "View tax invoice":
+                    msg = (
+                        "tax_invoice_button has wrong text: "
+                        f"{tax_invoice_button.text}"
+                    )
+                    raise ValueError(msg)
+
+                self.b.execute_script(
+                    "window.scrollTo(0,arguments[0])",
+                    tax_invoice_button,
+                )
+
+                tax_invoice_button.click()
+                # Tax invoice should be open
+
+                csss = ".print-oly .bar-sections dl"
+                label_map = {
+                    "Order subtotal": "subtotal",
+                    "Postage": "shipping",
+                    "VAT": "tax",
+                    "Order total": "total",
+                }
+
+                def clean_value(value: str) -> dict:
+                    if "(" in value:
+                        # NOK 19.26 (US $2.28)
+                        value = re.match(r"[^\(]*\(([^\)]*)\)", value).group(1)
+                    return self.get_value_currency("", value)
+
+                for dl in self.b.find_elements(
+                    By.CSS_SELECTOR,
+                    csss,
+                ):
+                    ActionChains(self.b).scroll_to_element(
+                        dl,
+                    ).perform()
+                    label, value = self.dl_to_dt_dd_text(dl)
+
+                    if label in label_map:
+                        orders[order_id][label_map[label]] = clean_value(value)
+                        self.log.debug(
+                            "%s: %s",
+                            label,
+                            orders[order_id][label_map[label]],
+                        )
+                    elif label == "Discount":
+                        label, value = self.dl_to_dt_dd_text(dl)
+                        orders[order_id]["extra_data"]["discount"] = value
+                    else:
+                        msg = f"Unknown tax invoice label: {label}: {value}"
+                        raise ValueError(msg)
+
+                # once finised, scroll to and click
+                modal_close_button = self.b.find_element(
+                    By.CSS_SELECTOR,
+                    "#modal-back-button",
+                )
+                ActionChains(self.b).scroll_to_element(
+                    modal_close_button,
+                ).perform()
+                modal_close_button.click()
+
             si = orderbox.find_element(By.CSS_SELECTOR, ".shipment-info")
             status = "Unknown"
             status_title = si.find_element(
@@ -118,20 +207,18 @@ class EbayScraper(BaseScraper):
                     ".shipment-card-content .progress-stepper__item",
                 )
             ]
-            orders[order_id]["items"] = []
+            orders[order_id]["items"] = order_list_data[order_id]["items"]
             item_card_element: WebElement
             for item_card_element in si.find_elements(
                 By.CSS_SELECTOR,
                 ".item-container .item-card",
             ):
-                item = self.browser_process_order_item(
+                item = self.browser_scrape_order_item(
                     order_id,
-                    orders[order_id]["items_input"],
                     item_card_element,
                 )
 
-                orders[order_id]["items"].append(item)
-            del orders[order_id]["items_input"]
+                orders[order_id]["items"][item["id"]].update(item)
             self.log.debug("Saving order %s to disk", order_id)
             self.write(order_json_file_path, orders[order_id], to_json=True)
 
@@ -144,8 +231,7 @@ class EbayScraper(BaseScraper):
             By.CSS_SELECTOR,
             ".order-info dl",
         ):
-            dt = order_info_dl.find_element(By.CSS_SELECTOR, "dt").text
-            dd = order_info_dl.find_element(By.CSS_SELECTOR, "dd").text
+            dt, dd = self.dl_to_dt_dd_text(order_info_dl)
             self.log.debug("%s: %s", dt, dd)
             if dt == "Order number":
                 self.log.debug("Order ID: %s", dd)
@@ -162,14 +248,17 @@ class EbayScraper(BaseScraper):
         self.log.debug("Order info: %s", orderinfo)
         return order_id, order_date, orderinfo
 
-    def browser_get_order_summary_data(self):
+    def browser_get_order_summary_data(self) -> (str, dict, list):
         csss = ".summary-region .delivery-address-content p"
         order_delivery_address = "\n".join(
             [p.text for p in self.b.find_elements(By.CSS_SELECTOR, csss)],
         )
         self.log.debug("Delivery address: %s", order_delivery_address)
         csss = ".summary-region .order-summary-total dd"
-        order_total = self.b.find_element(By.CSS_SELECTOR, csss).text
+        order_total = self.get_value_currency(
+            "total",
+            self.b.find_element(By.CSS_SELECTOR, csss).text,
+        )
         self.log.debug("Order total: %s", order_total)
 
         csss = ".summary-region .payment-line-item dl"
@@ -181,12 +270,11 @@ class EbayScraper(BaseScraper):
         self.log.debug("Order payment lines: %s", order_payment_lines)
         return order_delivery_address, order_total, order_payment_lines
 
-    def browser_process_order_item(
+    def browser_scrape_order_item(
         self,
-        order_id,
-        items_input,
-        item_card_element,
-    ):
+        order_id: str,
+        item_card_element: WebElement,
+    ) -> dict:
         item = {
             "extra_data": {},
         }
@@ -198,6 +286,18 @@ class EbayScraper(BaseScraper):
         item_id = desc.get_attribute("href").split("/")
         item["id"] = item_id = item_id[len(item_id) - 1]
 
+        csss = (
+            ".card-content-description .item-description "
+            ".item-price .eui-text-span"
+        )
+        item["subtotal"] = self.get_value_currency(
+            "subtotal",
+            item_card_element.find_element(
+                By.CSS_SELECTOR,
+                csss,
+            ).text,
+        )
+
         thumb_file = self.file_item_thumb(order_id, item_id)
         thumb_file.parent.mkdir(exist_ok=True)
         if self.can_read(thumb_file):
@@ -207,6 +307,11 @@ class EbayScraper(BaseScraper):
                 thumb_file.name,
             )
             item["thumbnail"] = thumb_file
+        elif self.options.skip_item_thumb:
+            self.log.debug(
+                "Skipping thumbnail for item %s",
+                item_id,
+            )
         else:
             image_element = item_card_element.find_element(
                 By.CSS_SELECTOR,
@@ -216,11 +321,7 @@ class EbayScraper(BaseScraper):
             # Ebay "missing" images
             # https://i.ebayimg.com/images/g/unknown
             # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
-            if (
-                "unknown" in thumb_url
-                or "JuIAAOSwXj5XG5VC" in thumb_url
-                or self.options.skip_item_thumb
-            ):
+            if "unknown" in thumb_url or "JuIAAOSwXj5XG5VC" in thumb_url:
                 self.log.debug("No thumnail for item %s", item_id)
                 self.write(thumb_file.with_suffix(".missing"), "1")
             else:
@@ -239,7 +340,7 @@ class EbayScraper(BaseScraper):
                     thumb_file,
                 )
                 item["thumbnail"] = thumb_file
-                # Thumbnail done
+        # Thumbnail done
         csss = ".item-description .item-price"
         item["total"] = item_card_element.find_element(
             By.CSS_SELECTOR,
@@ -266,43 +367,45 @@ class EbayScraper(BaseScraper):
         return item
 
     def download_item_page(self, order_id, item_id):
-        item_url = self.ITEM_PAGE.format(item_id=item_id)
-        order_page_handle = self.b.current_window_handle
-        self.b.switch_to.new_window("tab")
+        item_pdf_file = None
+        if not self.options.skip_item_pdf:
+            item_url = self.ITEM_PAGE.format(item_id=item_id)
+            self.log.debug("Item url for item %s is %s", item_id, item_url)
+            order_page_handle = self.b.current_window_handle
+            self.b.switch_to.new_window("tab")
 
-        self.browser_visit_page_v2(item_url)
-        if (
-            "Error Page" in self.b.title
-            or (
-                "The item you selected is unavailable"
-                ", but we found something similar."
-            )
-            in self.b.page_source
-            or self.options.skip_item_pdf
-        ):
-            item_pdf_file = self.file_item_pdf(
-                order_id,
-                item_id,
-            ).with_suffix(
-                ".missing",
-            )
-            self.write(
-                item_pdf_file,
-                "1",
-            )
-            self.log.debug(
-                "Item page is error page %s",
-                item_id,
-            )
-        else:
-            item_pdf_file = self.file_item_pdf(
-                order_id,
-                item_id,
-            )
-            self.log.debug(item_pdf_file)
-            self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
-        self.b.close()  # item_url
-        self.b.switch_to.window(order_page_handle)
+            self.browser_visit_page_v2(item_url)
+            if (
+                "Error Page" in self.b.title
+                or (
+                    "The item you selected is unavailable"
+                    ", but we found something similar."
+                )
+                in self.b.page_source
+            ):
+                item_pdf_file = self.file_item_pdf(
+                    order_id,
+                    item_id,
+                ).with_suffix(
+                    ".missing",
+                )
+                self.write(
+                    item_pdf_file,
+                    "1",
+                )
+                self.log.debug(
+                    "Item page is error page %s",
+                    item_id,
+                )
+            else:
+                item_pdf_file = self.file_item_pdf(
+                    order_id,
+                    item_id,
+                )
+                self.log.debug(item_pdf_file)
+                self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
+            self.b.close()  # item_url
+            self.b.switch_to.window(order_page_handle)
         return item_pdf_file
 
     def browser_cleanup_and_print_item_page(self, item_id, item_pdf_file):
@@ -344,7 +447,6 @@ class EbayScraper(BaseScraper):
             self.log.info("Title: %s", item_title)
             self.log.info("Image urls: %s", image_urls)
             self.log.info("Iframe: %s", item_desc_src)
-            self.log.debug("Input!")
             self.b.switch_to.new_window("tab")
             self.browser_visit_page_v2(item_desc_src)
             self.b.execute_script(
@@ -397,8 +499,8 @@ class EbayScraper(BaseScraper):
             self.b.close()
         self.b.switch_to.window(item_page_handle)
 
-    def browser_load_order_list(self) -> list:
-        order_data = []
+    def browser_scrape_or_load_order_list_data(self) -> dict:
+        order_list_data = {}
         if self.options.use_cached_orderlist:
             files = list(
                 self.cache["ORDER_LISTS"].glob(
@@ -419,10 +521,13 @@ class EbayScraper(BaseScraper):
                         "Found order list for %s",
                         path.name.split(".")[0],
                     )
-                    order_data += self.read(path, from_json=True)
+                    order_list_data.update(self.read(path, from_json=True))
 
-                return order_data
+                return order_list_data
         # Not using cached orderlist
+        return self.browser_scrape_order_list_data(order_list_data)
+
+    def browser_scrape_order_list_data(self, order_list_data: dict) -> dict:
         for keyword, year in self.filter_keyword_list():
             json_file = self.file_order_list_year(year)
             # %253A -> %3A -> :
@@ -465,7 +570,7 @@ class EbayScraper(BaseScraper):
                     )
                     raise ValueError(msg)
 
-                xpath = "//a[text()='View order details']"
+                xpath = ".//a[text()='View order details']"
                 order_details_a = order_card.find_element(By.XPATH, xpath)
                 order = {
                     "id": order_id,
@@ -521,8 +626,8 @@ class EbayScraper(BaseScraper):
 
                 orders[order_id] = order
             self.write(json_file, orders, to_json=True)
-            order_data += orders
-        return order_data
+            order_list_data.update(orders)
+        return order_list_data
 
     def filter_keyword_list(self):
         now = datetime.datetime.now().astimezone()
@@ -587,7 +692,9 @@ class EbayScraper(BaseScraper):
             "https://www.ebay.com/vod/FetchOrderDetails?orderId={order_id}",
             "https://www.ebay.com/itm/{item_id}",
         )
-        structure["metadata"]["comment"] = "Order totals may be wrong"
+        structure["metadata"][
+            "comment"
+        ] = "Order totals may be wrong on older orders"
         orders = []
         for order_json_handle in self.cache["ORDERS"].glob("**/order.json"):
             self.log.debug("Processing %s", order_json_handle.parent.name)
@@ -644,7 +751,6 @@ class EbayScraper(BaseScraper):
 
             orders.append(order)
         structure["orders"] = orders
-        self.pprint(structure)
         self.output_schema_json(structure)
 
     def __init__(self, options: dict):

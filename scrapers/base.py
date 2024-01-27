@@ -161,7 +161,7 @@ class BaseScraper:
                 name,
                 value,
                 guess_price.currency,
-                force_currency
+                force_currency,
             )
             msg = (
                 "Unexpected value/currency:"
@@ -811,6 +811,18 @@ class BaseScraper:
                 }
                 """,
             elemets_to_hide,
+        )
+
+    def dl_to_dt_dd_text(self, dl: WebElement) -> (str, str):
+        return (
+            dl.find_element(
+                By.CSS_SELECTOR,
+                "dt",
+            ).text,
+            dl.find_element(
+                By.CSS_SELECTOR,
+                "dd",
+            ).text,
         )
 
     def load_currency_to_nok_dict(
