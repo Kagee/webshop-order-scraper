@@ -18,6 +18,7 @@ class EbayScraper(BaseScraper):
     # Scrape comand and __init__
     name = "eBay"
     tla = "EBY"
+    simple_name = "ebay"
 
     # Command functions, used in scrape.py
     def command_scrape(self):
@@ -707,10 +708,7 @@ class EbayScraper(BaseScraper):
                 )
                 .date()
                 .strftime("%Y-%m-%d"),
-                "total": self.get_value_currency(
-                    "total",
-                    order_input["total"],
-                ),
+                "total": order_input["total"],
                 "extra_data": order_input["extra_data"],
             }
             order["extra_data"].update(order_input["orderinfo"])
@@ -740,12 +738,36 @@ class EbayScraper(BaseScraper):
                         payment_line[0]
                     ] = payment_line[1]
             order["items"] = []
-            for item_input in order_input["items"]:
+            for item_id in order_input["items"]:
+                item_input = order_input["items"][item_id]
                 item = {
-                    "id": item_input["id"],
+                    "id": item_id,
                     "name": item_input["name"],
+                    "total": item_input["subtotal"],  # yes, correct
+                    "quantity": int(item_input["quantity"]),
+                    "extra_data": item_input["extra_data"],
                 }
-                if "sku" in item_input:
+
+                if "thumbnail" in item_input:
+                    item["thumbnail"] = (
+                        Path(item_input["thumbnail"])
+                        .relative_to(self.cache["BASE"])
+                        .as_posix()
+                    )
+                if "pdf" in item_input:
+                    item["attachements"] = []
+                    item["attachements"].append(
+                        {
+                            "name": "Item PDF",
+                            "path": (
+                                Path(item_input["pdf"])
+                                .relative_to(self.cache["BASE"])
+                                .as_posix()
+                            ),
+                        },
+                    )
+
+                if "sku" in item_input and item_input["sku"]:
                     item["variation"] = item_input["sku"]
                 order["items"].append(item)
 
