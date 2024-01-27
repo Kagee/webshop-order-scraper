@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"[python]": {
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "charliermarsh.ruff",
+			"editor.codeActionsOnSave": {
+				"source.organizeImports.ruff": "explicit",
+				"source.fixAll.ruff": "explicit"
+			}
+		},
+		"[html][django-html]": {
+			"editor.defaultFormatter": "monosans.djlint",
+			"djlint.enableLinting": true
+		},
+	}
+}
