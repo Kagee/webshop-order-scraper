@@ -472,7 +472,7 @@ class EbayScraper(BaseScraper):
                     "date": order_date,
                     "total": order_total,
                     "url": order_details_a.get_attribute("href"),
-                    "items": {},
+                    "items": [],
                 }
 
                 for item_card in order_card.find_elements(
@@ -552,7 +552,7 @@ class EbayScraper(BaseScraper):
                             [a.text for a in aspects],
                         )
                         raise ValueError(msg)
-                    order["items"][item_id] = item
+                    order["items"].append(item)
 
                 orders[order_id] = order
             self.write(json_file, orders, to_json=True)
@@ -735,10 +735,9 @@ class EbayScraper(BaseScraper):
                         payment_line[0]
                     ] = payment_line[1]
             order["items"] = []
-            for item_id in order_input["items"]:
-                item_input = order_input["items"][item_id]
+            for item_input in order_input["items"]:
                 item = {
-                    "id": item_id,
+                    "id": item_input["id"],
                     "name": item_input["name"],
                     "total": item_input["total"],
                     "quantity": int(item_input["quantity"]),
