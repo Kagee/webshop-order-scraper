@@ -76,8 +76,6 @@ class EbayScraper(BaseScraper):
                 orderinfo,
             ) = self.browser_get_order_base_info(orderbox)
 
-            order_t = order_list_data[order_id]["total"]
-
             if not order_id or not order_date:
                 msg = (
                     "Failed to find expected order id "
@@ -209,17 +207,7 @@ class EbayScraper(BaseScraper):
                 )
             ]
             orders[order_id]["items"] = order_list_data[order_id]["items"]
-            item_card_element: WebElement
-            for item_card_element in si.find_elements(
-                By.CSS_SELECTOR,
-                ".item-container .item-card",
-            ):
-                item = self.browser_scrape_order_item(
-                    order_id,
-                    item_card_element,
-                )
 
-                orders[order_id]["items"][item["id"]].update(item)
             self.log.debug("Saving order %s to disk", order_id)
             self.write(order_json_file_path, orders[order_id], to_json=True)
 
@@ -271,142 +259,48 @@ class EbayScraper(BaseScraper):
         self.log.debug("Order payment lines: %s", order_payment_lines)
         return order_delivery_address, order_total, order_payment_lines
 
-    def browser_scrape_order_item(
-        self,
-        order_id: str,
-        item_card_element: WebElement,
-    ) -> dict:
-        item = {
-            "extra_data": {},
-        }
-        desc: WebElement = item_card_element.find_element(
-            By.CSS_SELECTOR,
-            ".card-content-description .item-description a",
-        )
-        item["name"] = desc.text
-        item_id = desc.get_attribute("href").split("/")
-        item["id"] = item_id = item_id[len(item_id) - 1]
+    def download_item_page(self, order_id, item_id):
+        item_pdf_file = None
+        if self.options.skip_item_pdf:
+            return item_pdf_file
+        item_url = self.ITEM_PAGE.format(item_id=item_id)
+        self.log.debug("Item url for item %s is %s", item_id, item_url)
+        order_page_handle = self.b.current_window_handle
+        self.b.switch_to.new_window("tab")
 
-        csss = (
-            ".card-content-description .item-description "
-            ".item-price .eui-text-span"
-        )
-        item["subtotal"] = self.get_value_currency(
-            "subtotal",
-            item_card_element.find_element(
-                By.CSS_SELECTOR,
-                csss,
-            ).text,
-        )
-
-        thumb_file = self.file_item_thumb(order_id, item_id)
-        thumb_file.parent.mkdir(exist_ok=True)
-        if self.can_read(thumb_file):
-            self.log.debug(
-                "Found thumbnail for item %s: %s",
-                item_id,
-                thumb_file.name,
+        self.browser_visit_page_v2(item_url)
+        if (
+            "Error Page" in self.b.title
+            or (
+                "The item you selected is unavailable"
+                ", but we found something similar."
             )
-            item["thumbnail"] = thumb_file
-        elif self.options.skip_item_thumb:
+            in self.b.page_source
+        ):
+            item_pdf_file = self.file_item_pdf(
+                order_id,
+                item_id,
+            ).with_suffix(
+                ".missing",
+            )
+            self.write(
+                item_pdf_file,
+                "1",
+            )
             self.log.debug(
-                "Skipping thumbnail for item %s",
+                "Item page is error page %s",
                 item_id,
             )
+            item_pdf_file = None
         else:
-            image_element = item_card_element.find_element(
-                By.CSS_SELECTOR,
-                ".card-content-image-box img",
-            )
-            thumb_url = image_element.get_attribute("src")
-            # Ebay "missing" images
-            # https://i.ebayimg.com/images/g/unknown
-            # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
-            if "unknown" in thumb_url or "JuIAAOSwXj5XG5VC" in thumb_url:
-                self.log.debug("No thumnail for item %s", item_id)
-                self.write(thumb_file.with_suffix(".missing"), "1")
-            else:
-                # Download image
-                if ".webp" not in thumb_url:
-                    msg = f"Thumnail for {item_id} is not webp"
-                    raise ValueError(msg)
-                thumb_url = re.sub(
-                    r"l\d*\.webp",
-                    "l1600.webp",
-                    thumb_url,
-                )
-                self.log.debug("Thumbnail url: %s", thumb_url)
-                self.download_url_to_file(
-                    thumb_url,
-                    thumb_file,
-                )
-                item["thumbnail"] = thumb_file
-        # Thumbnail done
-        csss = ".item-description .item-price"
-        item["total"] = item_card_element.find_element(
-            By.CSS_SELECTOR,
-            csss,
-        ).text
-
-        pdf_file = self.file_item_pdf(order_id, item_id)
-        if self.can_read(pdf_file):
-            self.log.debug(
-                "Found PDF for item %s: %s",
-                item_id,
-                pdf_file.name,
-            )
-            item["pdf"] = pdf_file
-        else:
-            self.log.debug(
-                "Need to make PDF for item %s",
-                item_id,
-            )
-            item["pdf"] = self.download_item_page(
+            item_pdf_file = self.file_item_pdf(
                 order_id,
                 item_id,
             )
-        return item
-
-    def download_item_page(self, order_id, item_id):
-        item_pdf_file = None
-        if not self.options.skip_item_pdf:
-            item_url = self.ITEM_PAGE.format(item_id=item_id)
-            self.log.debug("Item url for item %s is %s", item_id, item_url)
-            order_page_handle = self.b.current_window_handle
-            self.b.switch_to.new_window("tab")
-
-            self.browser_visit_page_v2(item_url)
-            if (
-                "Error Page" in self.b.title
-                or (
-                    "The item you selected is unavailable"
-                    ", but we found something similar."
-                )
-                in self.b.page_source
-            ):
-                item_pdf_file = self.file_item_pdf(
-                    order_id,
-                    item_id,
-                ).with_suffix(
-                    ".missing",
-                )
-                self.write(
-                    item_pdf_file,
-                    "1",
-                )
-                self.log.debug(
-                    "Item page is error page %s",
-                    item_id,
-                )
-            else:
-                item_pdf_file = self.file_item_pdf(
-                    order_id,
-                    item_id,
-                )
-                self.log.debug(item_pdf_file)
-                self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
-            self.b.close()  # item_url
-            self.b.switch_to.window(order_page_handle)
+            self.log.debug(item_pdf_file)
+            self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
+        self.b.close()  # item_url
+        self.b.switch_to.window(order_page_handle)
         return item_pdf_file
 
     def browser_cleanup_and_print_item_page(self, item_id, item_pdf_file):
@@ -593,6 +487,42 @@ class EbayScraper(BaseScraper):
                         "id": item_id,
                     }
 
+                    if thumbnail := self.browser_get_item_thumb(
+                        order_id,
+                        item_id,
+                        item_card,
+                    ):
+                        item["thumbnail"] = thumbnail
+
+                    if pdf := self.browser_get_item_pdf(
+                        order_id,
+                        item_id,
+                    ):
+                        item["pdf"] = pdf
+
+                    xpath = './/div[contains(@class, "item-info-title")]/div'
+                    item["name"] = item_card.find_element(
+                        By.XPATH,
+                        xpath,
+                    ).text
+
+                    xpath = (
+                        ".//div[contains(@class, "
+                        '"item-info-additionalPrice")]/div'
+                    )
+                    item["total"] = self.get_value_currency(
+                        "total",
+                        item_card.find_element(
+                            By.XPATH,
+                            xpath,
+                        ).text,
+                    )
+
+                    xpath = (
+                        ".//div[contains(@class, "
+                        '"item-info-aspectValuesList")]/div'
+                    )
+
                     def aspect_to_key(aspect):
                         parts = aspect.split(":", 1)
                         label = parts[0].strip()
@@ -604,7 +534,6 @@ class EbayScraper(BaseScraper):
                             return "quantity", v.group(0)
                         return "sku", f"{label}: {value}"
 
-                    xpath = './/div[contains(@class, "aspectValuesList")]/div'
                     aspects = item_card.find_elements(By.XPATH, xpath)
                     if len(aspects) == 0:
                         # quantity = 1, no sku
@@ -629,6 +558,74 @@ class EbayScraper(BaseScraper):
             self.write(json_file, orders, to_json=True)
             order_list_data.update(orders)
         return order_list_data
+
+    def browser_get_item_pdf(self, order_id: str, item_id: str) -> Path | None:
+        pdf_file = self.file_item_pdf(order_id, item_id)
+        if self.can_read(pdf_file):
+            self.log.debug(
+                "Found PDF for item %s: %s",
+                item_id,
+                pdf_file.name,
+            )
+            return pdf_file
+        self.log.debug(
+            "Need to make PDF for item %s",
+            item_id,
+        )
+        return self.download_item_page(
+            order_id,
+            item_id,
+        )
+
+    def browser_get_item_thumb(
+        self,
+        order_id: str,
+        item_id: str,
+        item_card_element: WebElement,
+    ) -> Path | None:
+        thumb_file = self.file_item_thumb(order_id, item_id)
+        thumb_file.parent.mkdir(exist_ok=True)
+        if self.can_read(thumb_file):
+            self.log.debug(
+                "Found thumbnail for item %s: %s",
+                item_id,
+                thumb_file.name,
+            )
+            return thumb_file
+        if self.options.skip_item_thumb:
+            self.log.debug(
+                "Skipping thumbnail for item %s",
+                item_id,
+            )
+            return None
+        image_element = item_card_element.find_element(
+            By.CSS_SELECTOR,
+            ".m-image img",
+        )
+        thumb_url = image_element.get_attribute("src")
+        # Ebay "missing" images
+        # https://i.ebayimg.com/images/g/unknown
+        # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
+        if "unknown" in thumb_url or "JuIAAOSwXj5XG5VC" in thumb_url:
+            self.log.debug("No thumnail for item %s", item_id)
+            self.write(thumb_file.with_suffix(".missing"), "1")
+            return None
+
+        # Download image
+        if ".webp" not in thumb_url:
+            self.log.warning("Thumnail for %s is not webp, skipping", item_id)
+            return None
+        thumb_url = re.sub(
+            r"l\d*\.webp",
+            "l1600.webp",
+            thumb_url,
+        )
+        self.log.debug("Thumbnail url: %s", thumb_url)
+        self.download_url_to_file(
+            thumb_url,
+            thumb_file,
+        )
+        return thumb_file
 
     def filter_keyword_list(self):
         now = datetime.datetime.now().astimezone()
@@ -743,10 +740,12 @@ class EbayScraper(BaseScraper):
                 item = {
                     "id": item_id,
                     "name": item_input["name"],
-                    "total": item_input["subtotal"],  # yes, correct
+                    "total": item_input["total"],
                     "quantity": int(item_input["quantity"]),
-                    "extra_data": item_input["extra_data"],
+                    "extra_data": {},
                 }
+                if "extra_data" in item_input:
+                    item["extra_data"] = item_input["extra_data"]
 
                 if "thumbnail" in item_input:
                     item["thumbnail"] = (
