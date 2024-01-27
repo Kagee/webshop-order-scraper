@@ -125,8 +125,10 @@ class EbayScraper(BaseScraper):
                 ".item-container .item-card",
             ):
                 item = self.browser_process_order_item(
-                    order_id, orders[order_id]["items_input"], item_card_element,
-                    )
+                    order_id,
+                    orders[order_id]["items_input"],
+                    item_card_element,
+                )
 
                 orders[order_id]["items"].append(item)
             del orders[order_id]["items_input"]
@@ -139,9 +141,9 @@ class EbayScraper(BaseScraper):
         order_info_dl: WebElement
         orderinfo = {}
         for order_info_dl in orderbox.find_elements(
-                By.CSS_SELECTOR,
-                ".order-info dl",
-            ):
+            By.CSS_SELECTOR,
+            ".order-info dl",
+        ):
             dt = order_info_dl.find_element(By.CSS_SELECTOR, "dt").text
             dd = order_info_dl.find_element(By.CSS_SELECTOR, "dd").text
             self.log.debug("%s: %s", dt, dd)
@@ -151,10 +153,10 @@ class EbayScraper(BaseScraper):
                 continue
             if dt == "Time placed":
                 order_date = datetime.datetime.strptime(  # noqa: DTZ007 (unknown timezone)
-                            dd,
-                            # Mar 14, 2021 at 3:17 PM
-                            "%b %d, %Y at %I:%M %p",
-                        )
+                    dd,
+                    # Mar 14, 2021 at 3:17 PM
+                    "%b %d, %Y at %I:%M %p",
+                )
                 continue
             orderinfo[dt] = dd
         self.log.debug("Order info: %s", orderinfo)
@@ -177,16 +179,21 @@ class EbayScraper(BaseScraper):
             dd = dl.find_element(By.CSS_SELECTOR, "dd").text
             order_payment_lines.append((dt, dd))
         self.log.debug("Order payment lines: %s", order_payment_lines)
-        return order_delivery_address,order_total,order_payment_lines
+        return order_delivery_address, order_total, order_payment_lines
 
-    def browser_process_order_item(self, order_id, items_input, item_card_element):
+    def browser_process_order_item(
+        self,
+        order_id,
+        items_input,
+        item_card_element,
+    ):
         item = {
-                    "extra_data": {},
-                }
+            "extra_data": {},
+        }
         desc: WebElement = item_card_element.find_element(
-                    By.CSS_SELECTOR,
-                    ".card-content-description .item-description a",
-                )
+            By.CSS_SELECTOR,
+            ".card-content-description .item-description a",
+        )
         item["name"] = desc.text
         item_id = desc.get_attribute("href").split("/")
         item["id"] = item_id = item_id[len(item_id) - 1]
@@ -195,49 +202,49 @@ class EbayScraper(BaseScraper):
         thumb_file.parent.mkdir(exist_ok=True)
         if self.can_read(thumb_file):
             self.log.debug(
-                        "Found thumbnail for item %s: %s",
-                        item_id,
-                        thumb_file.name,
-                    )
+                "Found thumbnail for item %s: %s",
+                item_id,
+                thumb_file.name,
+            )
             item["thumbnail"] = thumb_file
         else:
             image_element = item_card_element.find_element(
-                        By.CSS_SELECTOR,
-                        ".card-content-image-box img",
-                    )
+                By.CSS_SELECTOR,
+                ".card-content-image-box img",
+            )
             thumb_url = image_element.get_attribute("src")
-                    # Ebay "missing" images
-                    # https://i.ebayimg.com/images/g/unknown
-                    # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
+            # Ebay "missing" images
+            # https://i.ebayimg.com/images/g/unknown
+            # https://i.ebayimg.com/images/g/JuIAAOSwXj5XG5VC/s-l*.webp
             if (
-                        "unknown" in thumb_url
-                        or "JuIAAOSwXj5XG5VC" in thumb_url
-                        or self.options.skip_item_thumb
-                    ):
+                "unknown" in thumb_url
+                or "JuIAAOSwXj5XG5VC" in thumb_url
+                or self.options.skip_item_thumb
+            ):
                 self.log.debug("No thumnail for item %s", item_id)
                 self.write(thumb_file.with_suffix(".missing"), "1")
             else:
-                        # Download image
+                # Download image
                 if ".webp" not in thumb_url:
                     msg = f"Thumnail for {item_id} is not webp"
                     raise ValueError(msg)
                 thumb_url = re.sub(
-                            r"l\d*\.webp",
-                            "l1600.webp",
-                            thumb_url,
-                        )
+                    r"l\d*\.webp",
+                    "l1600.webp",
+                    thumb_url,
+                )
                 self.log.debug("Thumbnail url: %s", thumb_url)
                 self.download_url_to_file(
-                            thumb_url,
-                            thumb_file,
-                        )
+                    thumb_url,
+                    thumb_file,
+                )
                 item["thumbnail"] = thumb_file
                 # Thumbnail done
         csss = ".item-description .item-price"
         item["total"] = item_card_element.find_element(
-                    By.CSS_SELECTOR,
-                    csss,
-                ).text
+            By.CSS_SELECTOR,
+            csss,
+        ).text
 
         """
         csss = ".item-aspect-value"
@@ -270,10 +277,10 @@ class EbayScraper(BaseScraper):
                 # 19 Sections ⋅ Quantity 3\n19 Sections, quantity 3
                 # 1 Pcs ⋅ 5KG Sensor +Green HX711\n1 Pcs, 5KG Sensor +Green HX711
                 pass
-            elif ("quantity" in iae_text.lower() 
+            elif ("quantity" in iae_text.lower()
                   or "pcs" in iae_text.lower()):
                 qts = iae_text.split("\n")
-                if m := re.match(r"^(?:quantity (\d*)$|\d* psc)", qts[0], re.IGNORECASE):
+                if m := re.match(r"^(?:quantity (\\d*)$|\\d* psc)", qts[0], re.IGNORECASE):
                     pass
             else:
                 msg = "Aspect element text: {iae_text}"
@@ -286,20 +293,20 @@ class EbayScraper(BaseScraper):
         pdf_file = self.file_item_pdf(order_id, item_id)
         if self.can_read(pdf_file):
             self.log.debug(
-                        "Found PDF for item %s: %s",
-                        item_id,
-                        pdf_file.name,
-                    )
+                "Found PDF for item %s: %s",
+                item_id,
+                pdf_file.name,
+            )
             item["pdf"] = pdf_file
         else:
             self.log.debug(
-                        "Need to make PDF for item %s",
-                        item_id,
-                    )
+                "Need to make PDF for item %s",
+                item_id,
+            )
             item["pdf"] = self.download_item_page(
-                        order_id,
-                        item_id,
-                    )
+                order_id,
+                item_id,
+            )
         return item
 
     def download_item_page(self, order_id, item_id):
@@ -308,10 +315,15 @@ class EbayScraper(BaseScraper):
         self.b.switch_to.new_window("tab")
 
         self.browser_visit_page_v2(item_url)
-        if "Error Page" in self.b.title \
-            or ("The item you selected is unavailable"
-                ", but we found something similar.") in self.b.page_source \
-            or self.options.skip_item_pdf:
+        if (
+            "Error Page" in self.b.title
+            or (
+                "The item you selected is unavailable"
+                ", but we found something similar."
+            )
+            in self.b.page_source
+            or self.options.skip_item_pdf
+        ):
             item_pdf_file = self.file_item_pdf(
                 order_id,
                 item_id,
@@ -333,7 +345,7 @@ class EbayScraper(BaseScraper):
             )
             self.log.debug(item_pdf_file)
             self.browser_cleanup_and_print_item_page(item_id, item_pdf_file)
-        self.b.close() # item_url
+        self.b.close()  # item_url
         self.b.switch_to.window(order_page_handle)
         return item_pdf_file
 
@@ -366,8 +378,10 @@ class EbayScraper(BaseScraper):
                 re.sub(
                     r"l\d*\.(webp|jpg|jpeg|png)",
                     "l1600.jpeg",
-                    (image.get_attribute("src")
-                     or image.get_attribute("data-src")),
+                    (
+                        image.get_attribute("src")
+                        or image.get_attribute("data-src")
+                    ),
                 )
                 for image in image_elements
             ]
@@ -406,8 +420,8 @@ class EbayScraper(BaseScraper):
                         e.style.padding = "0";
                     });
                     """,
-                    item_title,
-                    item_title,
+                item_title,
+                item_title,
                 image_urls,
             )
 
@@ -426,7 +440,6 @@ class EbayScraper(BaseScraper):
         if self.b.current_window_handle != item_page_handle:
             self.b.close()
         self.b.switch_to.window(item_page_handle)
-
 
     def browser_load_order_list(self) -> list:
         order_data = []
@@ -470,7 +483,10 @@ class EbayScraper(BaseScraper):
                 order_id = order_date = order_total = None
                 csss = ".secondaryMessage .primary__item--wrapper"
                 for pitem in order_card.find_elements(By.CSS_SELECTOR, csss):
-                    spans = pitem.find_elements(By.CSS_SELECTOR, ".primary__item--item-text")
+                    spans = pitem.find_elements(
+                        By.CSS_SELECTOR,
+                        ".primary__item--item-text",
+                    )
                     label = spans[0].text
                     value = spans[1].text
                     if label.startswith("Order number"):
@@ -487,8 +503,10 @@ class EbayScraper(BaseScraper):
                         msg = f"Unexpected order label: {label} {value}"
                         raise ValueError(msg)
                 if not all([order_id, order_date, order_total]):
-                    msg = ("Missing order id/date/total: "
-                           f"{order_id}/{order_date}/{order_total}")
+                    msg = (
+                        "Missing order id/date/total: "
+                        f"{order_id}/{order_date}/{order_total}"
+                    )
                     raise ValueError(msg)
 
                 xpath = "//a[text()='View order details']"
@@ -501,7 +519,10 @@ class EbayScraper(BaseScraper):
                     "items": {},
                 }
 
-                for item_card in order_card.find_elements(By.CSS_SELECTOR, ".m-item-card"):
+                for item_card in order_card.find_elements(
+                    By.CSS_SELECTOR,
+                    ".m-item-card",
+                ):
                     item_id = None
                     for div in item_card.find_elements(By.TAG_NAME, "div"):
                         if item_id := div.get_attribute("input-listing-id"):
@@ -523,7 +544,7 @@ class EbayScraper(BaseScraper):
 
                     xpath = './/div[contains(@class, "aspectValuesList")]/div'
                     aspects = item_card.find_elements(By.XPATH, xpath)
-                    if  len(aspects) == 0:
+                    if len(aspects) == 0:
                         # quantity = 1, no sku
                         item["sku"] = None
                         item["quantity"] = 1
@@ -536,8 +557,9 @@ class EbayScraper(BaseScraper):
                         elif "quantity" not in item:
                             item["quantity"] = 1
                     else:
-                        msg = ("Unexpected aspects (>2): "
-                               + str([a.text for a in aspects]))
+                        msg = "Unexpected aspects (>2): " + str(
+                            [a.text for a in aspects],
+                        )
                         raise ValueError(msg)
                     order["items"][item_id] = item
 
@@ -617,12 +639,15 @@ class EbayScraper(BaseScraper):
             order = {
                 "id": order_input["id"],
                 "date": dtdt.strptime(  # noqa: DTZ007
-                    order_input["date"], "%Y-%m-%d %H:%M:%S",
-                    ).date().strftime("%Y-%m-%d"),
+                    order_input["date"],
+                    "%Y-%m-%d %H:%M:%S",
+                )
+                .date()
+                .strftime("%Y-%m-%d"),
                 "total": self.get_value_currency(
-                        "total",
-                        order_input["total"],
-                    ),
+                    "total",
+                    order_input["total"],
+                ),
                 "extra_data": order_input["extra_data"],
             }
             order["extra_data"].update(order_input["orderinfo"])
@@ -641,13 +666,16 @@ class EbayScraper(BaseScraper):
                     m = re.match(r"(\d*) items?", payment_line[0])
                     order["extra_data"]["num_items"] = int(m.group(1))
                 else:
-                    self.log.warning("Unknown payment: %s: %s",
-                                   payment_line[0],
-                                   payment_line[1],
-                                   )
+                    self.log.warning(
+                        "Unknown payment: %s: %s",
+                        payment_line[0],
+                        payment_line[1],
+                    )
                     if "payment" not in order["extra_data"]:
                         order["extra_data"]["payment"] = {}
-                    order["extra_data"]["payment"][payment_line[0]] = payment_line[1]
+                    order["extra_data"]["payment"][
+                        payment_line[0]
+                    ] = payment_line[1]
             order["items"] = []
             for item_input in order_input["items"]:
                 item = {
