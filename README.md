@@ -22,13 +22,14 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete. Not much testing done.
 * [Komplett.no](#komplettno)
   * Complete.
-* [IMAP](#imap)
-  * Complete. Currently only used to extract old eBay order numbers from email.
-
-## Broken
-
+* [eBay](#ebay)
+  * Complete. Only tested on 31 order à 35 items.
 * [Kjell.com](#kjellcom)
-  * BROKEN. window.CURRENT_PAGE.transactions no longer contains all transactions, and unable to find easy replacement. Might have to redesign scraping all the way.
+  * Complete
+
+## Reported broken
+
+* NTR
 
 ## Missing export
 
@@ -38,8 +39,7 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
 
 * [Distrelec](#distrelec)
   * Initial. Login.
-* [eBay](#ebay)
-  * Started. Login, get all order numbers, get base info for orders. 
+
 * [Pimoroni](#pimoroni)
   * Initial. Loging, list and cache order lists.
 
