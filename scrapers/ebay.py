@@ -246,50 +246,6 @@ class EbayScraper(BaseScraper):
             csss,
         ).text
 
-        """
-        csss = ".item-aspect-value"
-        item_aspect_elements = item_card_element.find_elements(
-                    By.CSS_SELECTOR,
-                    csss,
-                )
-        num_iav = len(item_aspect_elements)
-
-        self.aspect[item_id] = []
-        for item_aspect_element in item_aspect_elements:
-            iae_text = item_aspect_element.text
-            if iae_text.startswith("Item number:"):
-                item["extra_data"]["itemnum"] = iae_text
-            elif iae_text.startswith("Return window"):
-                item["extra_data"]["returnwin"] = iae_text
-            elif ("quantity" not in iae_text.lower()
-                  and "pcs" not in iae_text.lower()):
-                # Probably just SKU
-                #  TS-KU\nTS-KU
-                # 2000PCS 0603 Resistor+Capacitor\n2000PCS 0603 Resistor+Capacitor
-                # 3x Pro Micro 5V 16MHz\n3x Pro Micro 5V 16MHz
-                # GM328 Transistor Tester (English) +Case\nGM328 Transistor Tester (English) +Case
-                skus = iae_text.split("\n")
-                if len(skus) != 2 or len(set(skus)):  # noqa: PLR2004
-                    msg = "Unexpcted SKU/Variation: {iae_text}"
-                    raise ValueError(msg)
-                item["variation"] = set(skus)
-            elif "⋅" in iae_text:
-                # 19 Sections ⋅ Quantity 3\n19 Sections, quantity 3
-                # 1 Pcs ⋅ 5KG Sensor +Green HX711\n1 Pcs, 5KG Sensor +Green HX711
-                pass
-            elif ("quantity" in iae_text.lower()
-                  or "pcs" in iae_text.lower()):
-                qts = iae_text.split("\n")
-                if m := re.match(r"^(?:quantity (\\d*)$|\\d* psc)", qts[0], re.IGNORECASE):
-                    pass
-            else:
-                msg = "Aspect element text: {iae_text}"
-                raise ValueError(msg)
-        if not self.aspect[item_id]:
-            del self.aspect[item_id]
-
-        """
-
         pdf_file = self.file_item_pdf(order_id, item_id)
         if self.can_read(pdf_file):
             self.log.debug(

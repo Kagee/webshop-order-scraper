@@ -41,7 +41,8 @@ class IMAPScraper:
             settings.IMAP_PORT,
         )
         imap_client = IMAPClient(
-            host=settings.IMAP_SERVER, port=settings.IMAP_PORT,
+            host=settings.IMAP_SERVER,
+            port=settings.IMAP_PORT,
         )
         try:
             imap_client.login(imap_username, imap_password)
@@ -58,12 +59,12 @@ class IMAPScraper:
             for mailbox in imap_client.list_folders():
                 if any(
                     flag
-                        for flag in mailbox[0]
-                        if any(
-                            f
-                            for f in settings.IMAP_FLAGS
-                            if flag.decode("utf-8") == f
-                        )
+                    for flag in mailbox[0]
+                    if any(
+                        f
+                        for f in settings.IMAP_FLAGS
+                        if flag.decode("utf-8") == f
+                    )
                 ):
                     self.log.debug(
                         "Folder '%s' has one of flags '%s'",
@@ -140,11 +141,13 @@ class IMAPScraper:
             imap_client.select_folder(message[0])
 
             for uid, message_data in imap_client.fetch(
-                set(message[1]), "RFC822",
+                set(message[1]),
+                "RFC822",
             ).items():
                 email_message: email.message.EmailMessage = (
                     email.message_from_bytes(
-                        message_data[b"RFC822"], policy=default_policy,
+                        message_data[b"RFC822"],
+                        policy=default_policy,
                     )
                 )
                 matches = None
@@ -154,20 +157,13 @@ class IMAPScraper:
                             matches = process_not_multipart(part)
                 else:
                     matches = process_not_multipart(email_message)
-
+                date = email_message.get("Date", "No date")
                 if matches:
+                    # orders.add(date)
                     for match in matches:
-                        orders.add(match)
+                        orders.add((date, match[0], match[1]))
 
-                else:
-                    self.log.debug(
-                        '%s Nothing found in message with title "%s"',
-                        uid,
-                        email.header.decode_header(
-                            email_message.get("Subject"),
-                        )[0][0],
-                    )
-
+        # end of for message in messages:
         self.log.debug("%s", imap_client.logout().decode("utf-8"))
         # (transid, itemid)
         self.log.info("Found %s possible eBay order number tuples", len(orders))
@@ -175,6 +171,8 @@ class IMAPScraper:
         with contextlib.suppress(FileExistsError):
             os.makedirs(imap_folder)
         with open(
-            imap_folder / "imap-ebay.json", "w", encoding="utf-8",
+            imap_folder / "imap-ebay.json",
+            "w",
+            encoding="utf-8",
         ) as file:
             file.write(json.dumps(list(orders), indent=4))
