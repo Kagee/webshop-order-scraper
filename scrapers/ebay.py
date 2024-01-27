@@ -4,7 +4,6 @@ import sys
 from datetime import datetime as dtdt
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlparse
 
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
@@ -30,10 +29,10 @@ class EbayScraper(BaseScraper):
         self.log.debug("Processing %s order ids...", len(order_ids))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_ids, to_json=True)
         orders = {}
-        self.aspect = {}
-        for order_id, order_url in sorted(order_ids):
-            
-            page_orders = self.browser_scrape_order_id(order_id, order_url)
+        sys.exit()
+        # TODO: Merge orders with newely scraped orders somehow
+        for order_id, order_input in sorted(order_ids):
+            page_orders = self.browser_scrape_order_id(order_id, order_input)
             for page_order_id, order in page_orders.items():
                 orders[page_order_id] = order
         self.pprint(self.aspect)
@@ -126,10 +125,11 @@ class EbayScraper(BaseScraper):
                 ".item-container .item-card",
             ):
                 item = self.browser_process_order_item(
-                    order_id, item_card_element,
+                    order_id, orders[order_id]["items_input"], item_card_element,
                     )
 
-            orders[order_id]["items"].append(item)
+                orders[order_id]["items"].append(item)
+            del orders[order_id]["items_input"]
             self.log.debug("Saving order %s to disk", order_id)
             self.write(order_json_file_path, orders[order_id], to_json=True)
 
@@ -179,7 +179,7 @@ class EbayScraper(BaseScraper):
         self.log.debug("Order payment lines: %s", order_payment_lines)
         return order_delivery_address,order_total,order_payment_lines
 
-    def browser_process_order_item(self, order_id, item_card_element):
+    def browser_process_order_item(self, order_id, items_input, item_card_element):
         item = {
                     "extra_data": {},
                 }
@@ -238,6 +238,8 @@ class EbayScraper(BaseScraper):
                     By.CSS_SELECTOR,
                     csss,
                 ).text
+
+        """
         csss = ".item-aspect-value"
         item_aspect_elements = item_card_element.find_elements(
                     By.CSS_SELECTOR,
@@ -252,21 +254,35 @@ class EbayScraper(BaseScraper):
                 item["extra_data"]["itemnum"] = iae_text
             elif iae_text.startswith("Return window"):
                 item["extra_data"]["returnwin"] = iae_text
+            elif ("quantity" not in iae_text.lower()
+                  and "pcs" not in iae_text.lower()):
+                # Probably just SKU
+                #  TS-KU\nTS-KU
+                # 2000PCS 0603 Resistor+Capacitor\n2000PCS 0603 Resistor+Capacitor
+                # 3x Pro Micro 5V 16MHz\n3x Pro Micro 5V 16MHz
+                # GM328 Transistor Tester (English) +Case\nGM328 Transistor Tester (English) +Case
+                skus = iae_text.split("\n")
+                if len(skus) != 2 or len(set(skus)):  # noqa: PLR2004
+                    msg = "Unexpcted SKU/Variation: {iae_text}"
+                    raise ValueError(msg)
+                item["variation"] = set(skus)
+            elif "⋅" in iae_text:
+                # 19 Sections ⋅ Quantity 3\n19 Sections, quantity 3
+                # 1 Pcs ⋅ 5KG Sensor +Green HX711\n1 Pcs, 5KG Sensor +Green HX711
+                pass
+            elif ("quantity" in iae_text.lower() 
+                  or "pcs" in iae_text.lower()):
+                qts = iae_text.split("\n")
+                if m := re.match(r"^(?:quantity (\d*)$|\d* psc)", qts[0], re.IGNORECASE):
+                    pass
             else:
-                self.aspect[item_id].append(iae_text)
+                msg = "Aspect element text: {iae_text}"
+                raise ValueError(msg)
         if not self.aspect[item_id]:
             del self.aspect[item_id]
 
         """
-        19 Sections ⋅ Quantity 3\n19 Sections, quantity 3
-        Quantity 5\nquantity 5
-        Quantity 2\nquantity 2
-        TS-KU\nTS-KU
-        2000PCS 0603 Resistor+Capacitor\n2000PCS 0603 Resistor+Capacitor
-        3x Pro Micro 5V 16MHz\n3x Pro Micro 5V 16MHz
-        1 Pcs ⋅ 5KG Sensor +Green HX711\n1 Pcs, 5KG Sensor +Green HX711
-        GM328 Transistor Tester (English) +Case\nGM328 Transistor Tester (English) +Case
-        """
+
         pdf_file = self.file_item_pdf(order_id, item_id)
         if self.can_read(pdf_file):
             self.log.debug(
@@ -413,7 +429,7 @@ class EbayScraper(BaseScraper):
 
 
     def browser_load_order_list(self) -> list:
-        order_ids = []
+        order_data = []
         if self.options.use_cached_orderlist:
             files = list(
                 self.cache["ORDER_LISTS"].glob(
@@ -434,35 +450,101 @@ class EbayScraper(BaseScraper):
                         "Found order list for %s",
                         path.name.split(".")[0],
                     )
-                    order_ids += self.read(path, from_json=True)
+                    order_data += self.read(path, from_json=True)
 
-                return order_ids
-
+                return order_data
+        # Not using cached orderlist
         for keyword, year in self.filter_keyword_list():
             json_file = self.file_order_list_year(year)
             # %253A -> %3A -> :
             # https://www.ebay.com/mye/myebay/purchase?filter=year_filter%253ATWO_YEARS_AGO
             self.log.debug("We need to scrape order list for %s", year)
             url = f"https://www.ebay.com/mye/myebay/purchase?filter=year_filter:{keyword}"
-            self.log.debug("Scraping order ids from %s", url)
+            self.log.debug("Scraping order data from %s", url)
             self.browser_visit_page_v2(url)
-            # Find all order numbers
-            xpath = "//a[text()='View order details']"
-            span_elements = self.browser.find_elements(By.XPATH, xpath)
-            year_order_ids = [
-                (
-                    parse_qs(
-                        urlparse(span_element.get_attribute("href")).query,
-                    )
-                    .pop("orderId")[0]
-                    .split("!")[0],
-                    span_element.get_attribute("href"),
-                )
-                for span_element in span_elements
-            ]
-            self.write(json_file, year_order_ids, to_json=True)
-            order_ids += year_order_ids
-        return order_ids
+            # loop all order cards
+            orders = {}
+            csss = ".m-order-card"
+            for order_card in self.browser.find_elements(By.CSS_SELECTOR, csss):
+                # .m-order-card .secondaryMessage .primary__item--wrapper
+                order_id = order_date = order_total = None
+                csss = ".secondaryMessage .primary__item--wrapper"
+                for pitem in order_card.find_elements(By.CSS_SELECTOR, csss):
+                    spans = pitem.find_elements(By.CSS_SELECTOR, ".primary__item--item-text")
+                    label = spans[0].text
+                    value = spans[1].text
+                    if label.startswith("Order number"):
+                        order_id = value
+                    elif label.startswith("Order total"):
+                        order_total = self.get_value_currency("total", value)
+                    elif label.startswith("Order date"):
+                        order_date = datetime.datetime.strptime(  # noqa: DTZ007 (unknown timezone)
+                            value,
+                            # Feb 11, 2017
+                            "%b %d, %Y",
+                        )
+                    else:
+                        msg = f"Unexpected order label: {label} {value}"
+                        raise ValueError(msg)
+                if not all([order_id, order_date, order_total]):
+                    msg = ("Missing order id/date/total: "
+                           f"{order_id}/{order_date}/{order_total}")
+                    raise ValueError(msg)
+
+                xpath = "//a[text()='View order details']"
+                order_details_a = order_card.find_element(By.XPATH, xpath)
+                order = {
+                    "id": order_id,
+                    "date": order_date,
+                    "total": order_total,
+                    "url": order_details_a.get_attribute("href"),
+                    "items": {},
+                }
+
+                for item_card in order_card.find_elements(By.CSS_SELECTOR, ".m-item-card"):
+                    item_id = None
+                    for div in item_card.find_elements(By.TAG_NAME, "div"):
+                        if item_id := div.get_attribute("input-listing-id"):
+                            break
+                    item = {
+                        "id": item_id,
+                    }
+
+                    def aspect_to_key(aspect):
+                        parts = aspect.split(":", 1)
+                        label = parts[0].strip()
+                        value = parts[1].strip()
+                        if label.lower() in ["amount", "quantity"]:
+                            # Amount <-> 1 Pcs
+                            # Quantity <-> 3
+                            v = re.match(r"\d*", value)
+                            return "quantity", v.group(0)
+                        return "sku", f"{label}: {value}"
+
+                    xpath = './/div[contains(@class, "aspectValuesList")]/div'
+                    aspects = item_card.find_elements(By.XPATH, xpath)
+                    if  len(aspects) == 0:
+                        # quantity = 1, no sku
+                        item["sku"] = None
+                        item["quantity"] = 1
+                    if len(aspects) < 3:  # noqa: PLR2004
+                        for aspect in aspects:
+                            key, value = aspect_to_key(aspect.text)
+                            item[key] = value
+                        if "sku" not in item:
+                            item["sku"] = None
+                        elif "quantity" not in item:
+                            item["quantity"] = 1
+                    else:
+                        msg = ("Unexpected aspects (>2): "
+                               + str([a.text for a in aspects]))
+                        raise ValueError(msg)
+                    order["items"][item_id] = item
+
+                orders[order_id] = order
+            self.write(json_file, orders, to_json=True)
+            order_data += orders
+        return order_data
 
     def filter_keyword_list(self):
         now = datetime.datetime.now().astimezone()
