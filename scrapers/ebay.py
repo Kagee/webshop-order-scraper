@@ -25,6 +25,7 @@ class EbayScraper(BaseScraper):
         """
         Scrapes your eBay orders.
         """
+        self.aspects = {}
         order_list_data = self.browser_scrape_or_load_order_list_data()
         self.log.debug("Processing %s order ids...", len(order_list_data))
         self.write(self.ORDER_LIST_JSON_FILENAME, order_list_data, to_json=True)
@@ -38,6 +39,7 @@ class EbayScraper(BaseScraper):
                 )
                 for page_order_id, order in page_orders.items():
                     orders[page_order_id] = order
+        self.pprint(self.aspects)
 
     def browser_scrape_order_page(
         self,
@@ -539,6 +541,15 @@ class EbayScraper(BaseScraper):
                         # quantity = 1, no sku
                         item["sku"] = None
                         item["quantity"] = 1
+                    else:
+                        if order_id not in self.aspects:
+                            self.aspects[order_id] = {}
+                        if item_id not in self.aspects[order_id]:
+                            self.aspects[order_id][item_id] = []
+                        self.aspects[order_id][item_id] = [
+                            a.text for a in aspects
+                        ]
+                    """
                     if len(aspects) < 3:  # noqa: PLR2004
                         for aspect in aspects:
                             key, value = aspect_to_key(aspect.text)
@@ -552,6 +563,7 @@ class EbayScraper(BaseScraper):
                             [a.text for a in aspects],
                         )
                         raise ValueError(msg)
+                    """
                     order["items"].append(item)
 
                 orders[order_id] = order
