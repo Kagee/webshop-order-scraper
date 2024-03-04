@@ -9,6 +9,7 @@ from .kjell import KjellScraper
 from .komplett import KomplettScraper
 from .pimoroni import PimoroniScraper
 from .polyalkemi import PolyalkemiScraper
+from .tindie import TindieScraper
 from .utils import AMBER, BLUE, GREEN, RED
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "KjellScraper",
     "PolyalkemiScraper",
     "KomplettScraper",
+    "TindieScraper",
     "RED",
     "BLUE",
     "AMBER",

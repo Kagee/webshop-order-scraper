@@ -219,6 +219,12 @@ def parse_args():  # noqa: PLR0915
     skip_item_thumb(parser_polyalkemi)
     include_negative_orders(parser_polyalkemi)
 
+    parser_tindie = subparsers.add_parser("tindie")
+    use_cached_orderlist(parser_tindie)
+    to_std_json(parser_tindie)
+    skip_item_pdf(parser_tindie)
+    skip_item_thumb(parser_tindie)
+
     args = parser.parse_args()
 
     log.debug("Command line arguments: %s", args)
