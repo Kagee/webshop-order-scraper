@@ -541,8 +541,15 @@ class BaseScraper:
 
     def download_url_to_file(self, url: str, output: Path):
         output.parent.mkdir(exist_ok=True)
-        with urllib.request.urlopen(  # noqa: S310
+        req = urllib.request.Request(  # noqa: S310
             url,
+            data=None,
+            headers={
+                "User-Agent": "github.com/Kagee/webshop-order-scraper",
+            },
+        )
+        with urllib.request.urlopen(  # noqa: S310
+            req,
         ) as response, output.open(
             "wb",
         ) as output_handle:
@@ -700,6 +707,13 @@ class BaseScraper:
         if html:
             return html_element
         return content
+
+    @classmethod
+    def json_read(
+        cls,
+        path: Path | str,
+    ) -> dict:
+        return cls.read(path, from_json=True)
 
     @classmethod
     def read(

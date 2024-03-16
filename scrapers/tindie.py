@@ -1,9 +1,8 @@
 # pylint: disable=unused-import
 import contextlib
 import re
-import time
-import urllib.request
 from datetime import datetime as dt
+from datetime import datetime as dtdt
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, List  # noqa: UP035
 
@@ -13,7 +12,7 @@ from selenium.webdriver.common.by import By
 from .base import BaseScraper
 
 # pylint: disable=unused-import
-from .utils import AMBER, RED
+from .utils import AMBER
 
 if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
@@ -31,8 +30,27 @@ class TindieScraper(BaseScraper):
 
     def command_scrape(self):
         order_dict = self.browser_scrape_order_list()
+        for order in order_dict.values():
+            self.log.debug("Order id: %s", order["id"])
+            for item in order["items"]:
+                self.log.debug("Item id: %s", item["id"])
+                self.browser_get_item_thumb(item["id"])
+                self.verify_pdf(item["id"])
 
-    def browser_scrape_order_list(self):
+    def verify_pdf(self, item_id: str) -> None:
+        item_id_filesafe = item_id.replace("/", "_")
+        filename = f"{item_id_filesafe}.pdf"
+        image_path = Path(self.PDFS.format(filename=filename))
+        if not self.can_read(image_path):
+            url = self.ITEM_URL.format(item_id=item_id)
+            msg = (
+                f"Please save {url} to PDF using "
+                "instructions in bookmarklets/tindie.com.txt"
+            )
+            self.log.error(msg)
+            raise ValueError(msg)
+
+    def browser_scrape_order_list(self) -> dict:  # noqa: PLR0915
         if self.options.use_cached_orderlist and self.can_read(
             self.ORDER_LIST_JSON,
         ):
@@ -155,280 +173,27 @@ class TindieScraper(BaseScraper):
         self.write(self.ORDER_LIST_JSON, order_dict, to_json=True)
         return order_dict
 
-    def browser_save_item_page(self, item_id: str, order_dir: Path):
-        item_pdf_file = order_dir / f"item-{item_id}.pdf"
-
-        if self.can_read(item_pdf_file):
-            self.log.debug("Found PDf for item %s", item_id)
-            return
-        self.log.debug("Visiting item %s", item_id)
-        brws = self.browser_visit(
-            f"https://www.komplett.no/product/{item_id}?noredirect=true",
-        )
-        thumbs = self.find_elements(
-            By.CSS_SELECTOR,
-            "div.product-images__thumb-carousel img",
-        )
-        if len(thumbs) > 0:
-            thumb_src = thumbs[0].get_attribute("src")
-            for thumb in thumbs:
-                thumb_src = thumb.get_attribute("src")
-                if not re.search(r"_\d*\.", thumb_src):
-                    break
-        else:
-            thumb_src = self.find_element(
-                By.CSS_SELECTOR,
-                "div.product-images__main-carousel"
-                " div.medium-image-carousel img",
-            ).get_attribute("src")
-        self.browser_get_item_thumb(order_dir, item_id, thumb_src)
-        self.browser_cleanup_item_page()
-        self.clear_folder()
-        brws.execute_script("window.print();")
-        files = self.wait_for_files("*.pdf")
-        assert len(files) == 1, "Got more than one file when printing item PDF"
-        file = files[0]
-        self.move_file(file, item_pdf_file)
-        self.log.debug("Saved PDF print of item page for %s", item_id)
-
-    def browser_get_item_thumb(self, order_dir, item_id, src, order_page=False):
-        thumb_url = re.sub(
-            r"(.*)(/p/\d*/)(.*)",
-            "\\1/p/1000/\\3",
-            src,
-        )
-        if order_page:
-            image_path = Path(order_dir) / f"item-{item_id}-order-thumb.jpg"
-        else:
-            image_path = Path(order_dir) / f"item-{item_id}-thumb.jpg"
+    def browser_get_item_thumb(self, item_id: str):
+        item_id_filesafe = item_id.replace("/", "_")
+        filename = f"{item_id_filesafe}.jpg"
+        image_path = Path(self.THUMBNAILS.format(filename=filename))
+        image_path.parent.mkdir(parents=True, exist_ok=True)
 
         if not self.can_read(image_path):
-            self.log.debug("Downloading %s", thumb_url)
-
-            self.browser.execute_script(
-                """
-                            dwimg = document.createElement('img');
-                            dwimg.src = arguments[0];
-                            dwimg.id = "image-to-download"
-                            document.body.appendChild(dwimg);
-                        """,
-                thumb_url,
-            )
-            # Wait for image load
-            wait_count = 0
-            while True:
-                self.log.debug("Waiting for image to download")
-                time.sleep(2)
-                if (
-                    int(
-                        self.browser.execute_script(
-                            """
-                                return document.querySelector('#image-to-download').naturalWidth
-                            """,
-                        ),
-                    )
-                    > 0
-                ):
-                    # .complete does not work in Firefox sometimes?
-                    break
-                wait_count += 1
-                if wait_count > 60:
-                    self.log.error(
-                        RED(
-                            "We have been waiting for a file for 3 minutes,"
-                            " something is wrong...",
-                        ),
-                    )
-                    msg = f"{thumb_url}"
-                    raise NotImplementedError(msg)
-            image_dataurl: str = self.browser.execute_script(
-                """
-                            const canvas = document.createElement('canvas');
-                            dwimg = document.querySelector('#image-to-download');
-                            canvas.width = dwimg.naturalWidth;
-                            canvas.height = dwimg.naturalHeight;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(dwimg, 0, 0);
-                            img_data = canvas.toDataURL('image/jpeg');
-                            dwimg.remove()
-                            canvas.remove()
-                            return img_data
-                        """,
-            )
-
-            # data:image/jpeg;base64,
-            assert len(image_dataurl) > 23
-            self.log.debug(image_dataurl[0:50])
-            response = urllib.request.urlopen(image_dataurl)
-            self.write(image_path, response.file.read(), binary=True)
+            self.browser_visit(self.ITEM_URL.format(item_id=item_id))
+            img = self.find_element(By.CSS_SELECTOR, "img.product-image")
+            thumb_urls = img.get_attribute("data-zoom-srcset")
+            thumb_urls = thumb_urls.strip()
+            thumb_urls = re.sub(r" [ \n]*", " ", thumb_urls)
+            # thumb_urls.split();
+            thumb_urls = [
+                x.strip() for x in thumb_urls.split(",") if "http" in x
+            ]
+            thumb_url = thumb_urls[len(thumb_urls) - 1].split(" ")[0]
+            self.download_url_to_file(thumb_url, image_path)
             self.log.debug("Thumbnail for %s saved to %s", item_id, image_path)
         else:
             self.log.debug("Thumbnail for %s found", item_id)
-
-    def browser_cleanup_item_page(self):
-        brws = self.browser_get_instance()
-        brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")
-
-        time.sleep(2)
-        brws.execute_script(
-            r"""
-            // shuffle some stuff
-            mc = document.querySelector('main#MainContent');
-            bdy = document.querySelector('body');
-            bdy.prepend(mc);
-            while (bdy.lastChild != mc) { bdy.lastChild.remove(); }
-
-            // remove some obvious stuff
-            [
-            'div.menu-bar',
-            'div.breadcrumbs-wrapper',
-            'section.reviews',
-            'div.comparison-widget-wrapper',
-            'div.alert-wrapper',
-            'div#videoly-videobox-placeholder',
-            'videoly-tape'
-            ].forEach((e) => {f=document.querySelector(e); if(f){f.remove()}});
-
-            // remove some obvious stuff #2
-            [
-            'div.recommendations-extended'
-            ].forEach((e) => {
-                document.querySelectorAll(e).forEach((f) =>{
-                f.parentElement.remove();
-                })
-            });
-
-            // remove evernything but some stuyff we don't
-            document.querySelectorAll("div.productMainInfo-completeGrid > div").forEach(
-            (e) => {
-            keep = ['webtext1','productCarusel','hightlights'];
-            for (let i = 0; i < keep.length; i++) {
-                f=e.getAttribute("class").toLowerCase()
-                if ( f.search(keep[i].toLowerCase()) >= 0 ) {return;}}
-                e.remove();
-            }
-            );
-
-            document.querySelector("div.product-sections-left").style.width="100%" ;
-
-            // custom font can make print difficult
-            document.querySelectorAll('*').forEach(function(e){
-                                e.style.fontFamily = "sans-serif";
-                                e.style.lineHeight = "1";
-                            });
-
-
-            document.querySelectorAll("div.product-section-content").forEach(function(e){
-            e.style.display="block";
-            e.style.float="unset";
-            })
-
-            document.querySelectorAll("div.product-section-content div").forEach(function(e){
-            e.style.float="unset";
-            })
-
-
-            document.querySelectorAll("figure").forEach(function(e){e.style.pageBreakInside="avoid";})
-
-
-            document.body.style.display="unset";
-            document.querySelector("div.productMainInfo-completeGrid").style.display="unset";
-
-
-            images=new Set();
-            main_image = null;
-
-            carousel = document.querySelectorAll("div.product-images__thumb-carousel img");
-            if (carousel.length) {
-            document.querySelectorAll("div.product-images__thumb-carousel img").forEach(
-                function(e){
-                images.add(e.src.replace(/p\/\d*\//, 'p/1000/'));
-                }
-            );
-            main_image = images[0];
-            images.forEach((e)=>{if (e.search('_\d*\.') == -1) {main_image =e;}});
-            } else {
-            main_image = document.querySelector("div.product-images__main-carousel div.medium-image-carousel img").src.replace(/p\/\d*\//, 'p/1000/');
-            }
-
-            images.delete(main_image)
-
-            dpi = document.querySelector("div.product-images")
-            while (dpi.lastChild) { dpi.lastChild.remove(); }
-
-            img = document.createElement("img");
-            img.src=main_image;
-            img.style.maxWidth="100%"
-            dpi.appendChild(img);
-
-
-            document.body.lastChild.appendChild(document.createElement("br"));
-            document.body.lastChild.appendChild(document.createElement("br"));
-            document.body.lastChild.appendChild(document.createElement("br"));
-            images.forEach((e) => {
-            img = document.createElement("img");
-            img.src=e;
-            img.style.maxWidth="100%"
-            img.style.pageBreakInside="avoid";
-            document.body.lastChild.appendChild(img);
-
-            });
-
-            document.querySelectorAll("div.product-section-content img").forEach(function(e){
-            e.style.pageBreakInside="avoid";
-            e.parentElement.style.pageBreakInside="avoid";
-            })
-
-
-
-            document.querySelectorAll("iframe").forEach(function(e){
-            video = e.src
-            if (!video.startsWith("https://www.youtube")) { return;}
-            parent = e.parentElement;
-            np = parent;
-            e.remove();
-            video_parent = null;
-            for (let i = 0; i < 10; i++) {
-                c = np.parentElement.getAttribute("class");
-                if (c && (c.toLowerCase().search('video') >= 0)){
-                    if (!np.parentElement) {
-                            return
-                    }
-                    video_parent = np.parentElement;
-                }
-                np = np.parentElement;
-            }
-            if (video_parent) {
-                parent = video_parent.parentElement;
-            }
-            p = document.createElement("p");
-            p.className ="youtube-replacement"
-            p.innerText = video;
-            if (parent.querySelectorAll("iframe").length == 0) {
-                if (video_parent) {
-                    while (video_parent.lastChild) {
-                        video_parent.lastChild.remove();
-                    }
-                }
-            }
-            parent.parentElement.appendChild(p);
-            })
-        """,
-        )
-        time.sleep(2)
-        brws.execute_script(
-            """
-            [
-            'videoly-tape'
-            ].forEach((e) => {f=document.querySelector(e); if(f){f.remove()}});
-        """,
-        )
-        time.sleep(1)
-        brws.execute_script(
-            """
-            document.querySelectorAll("button.read-more-toggle").forEach(function(e){e.scrollIntoView();e.click();})
-        """,
-        )
 
     def browser_detect_handle_interrupt(self, _):
         brws = self.browser_get_instance()
@@ -445,7 +210,10 @@ class TindieScraper(BaseScraper):
         # pylint: disable=invalid-name
         self.ORDER_LIST_JSON = self.cache["BASE"] / "order_list.json"
         self.ORDER_FOLDER_TP = str(self.cache["BASE"] / "orders/{order_id}/")
+        self.THUMBNAILS = str(self.cache["BASE"] / "thumbnails/{filename}")
+        self.PDFS = str(self.cache["BASE"] / "pdfs/{filename}")
         self.ORDER_URL = "https://www.tindie.com/orders/purchases/{order_id}/"
+        self.ITEM_URL = "https://www.tindie.com/products/{item_id}/"
 
     def command_to_std_json(self):
         structure = self.get_structure(
@@ -454,4 +222,31 @@ class TindieScraper(BaseScraper):
             "https://www.tindie.com/orders/purchases/{order_id}/",
             "https://www.tindie.com/products/{item_id}",
         )
+        orders = []
+        for order_input in self.json_read(
+            self.ORDER_LIST_JSON,
+        ).values():
+            self.log.debug(order_input)
+            order = {
+                "id": order_input["id"],
+                "date": dtdt.strptime(
+                    order_input["date"],
+                    "%Y-%m-%d %H:%M:%S%z",
+                )
+                .date()
+                .strftime("%Y-%m-%d"),
+            }
+            order["items"] = []
+            for item_input in order_input["items"]:
+                item = {
+                    "id": item_input["id"],
+                    "name": item_input["name"],
+                    "extra_data": {},
+                }
+                order["items"].append(item)
+            orders.append(order)
+        structure["orders"] = orders
+        import pprint
+
+        self.log.debug(pprint.pformat(structure))
         self.output_schema_json(structure)
