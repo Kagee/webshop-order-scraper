@@ -561,7 +561,9 @@ class PolyalkemiScraper(BaseScraper):
                                 order_id=order["id"],
                                 item_id=item["id"],
                             ),
-                        ).relative_to(self.cache["BASE"]),
+                        )
+                        .relative_to(self.cache["BASE"])
+                        .as_posix(),
                     )
 
                 order["items"].append(item_dict)
@@ -575,7 +577,9 @@ class PolyalkemiScraper(BaseScraper):
                                 self.ORDER_INVOICE_TP.format(
                                     order_id=order["id"],
                                 ),
-                            ).relative_to(self.cache["BASE"]),
+                            )
+                            .relative_to(self.cache["BASE"])
+                            .as_posix(),
                         ),
                         "comment": "PDF print of item page",
                     },

@@ -725,6 +725,8 @@ class BaseScraper:
         from_csv=False,
         **kwargs,
     ) -> Any:
+        if isinstance(path, str):
+            path = Path(path)
         with path.open(encoding="utf-8-sig") as file:
             if from_csv:
                 return list(csv.DictReader(file, **kwargs))

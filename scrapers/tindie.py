@@ -39,9 +39,8 @@ class TindieScraper(BaseScraper):
 
     def verify_pdf(self, item_id: str) -> None:
         item_id_filesafe = item_id.replace("/", "_")
-        filename = f"{item_id_filesafe}.pdf"
-        image_path = Path(self.PDFS.format(filename=filename))
-        if not self.can_read(image_path):
+        pdf_path = Path(self.PDFS.format(filename="{item_id_filesafe}.pdf"))
+        if not self.can_read(pdf_path):
             url = self.ITEM_URL.format(item_id=item_id)
             msg = (
                 f"Please save {url} to PDF using "
@@ -237,12 +236,40 @@ class TindieScraper(BaseScraper):
                 .strftime("%Y-%m-%d"),
             }
             order["items"] = []
+            unique_items = []
             for item_input in order_input["items"]:
+                if item_input["id"] in unique_items:
+                    continue
+                unique_items.append(item_input["id"])
                 item = {
                     "id": item_input["id"],
                     "name": item_input["name"],
+                    "quantity": 0,
                     "extra_data": {},
                 }
+
+                item_id_filesafe = item_input["id"].replace("/", "_")
+                pdf_path = Path(
+                    self.PDFS.format(filename=f"{item_id_filesafe}.pdf"),
+                )
+                thumb_path = Path(
+                    self.THUMBNAILS.format(filename=f"{item_id_filesafe}.jpg"),
+                )
+                item["thumbnail"] = (
+                    Path(thumb_path).relative_to(self.cache["BASE"]).as_posix()
+                )
+                item["attachements"] = []
+                item["attachements"].append(
+                    {
+                        "name": "Item PDF",
+                        "path": (
+                            Path(pdf_path)
+                            .relative_to(self.cache["BASE"])
+                            .as_posix()
+                        ),
+                    },
+                )
+
                 order["items"].append(item)
             orders.append(order)
         structure["orders"] = orders
