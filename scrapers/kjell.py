@@ -6,21 +6,21 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final, TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import filetype
 import requests
+from PIL import Image
 from selenium.common.exceptions import (
     NoSuchElementException,
     NoSuchWindowException,
 )
 from selenium.webdriver.common.by import By
 
-from .base import BaseScraper
+from scrapers.utils import AMBER, RED
 
-# pylint: disable=unused-import
-from .utils import AMBER, RED
+from .base import BaseScraper
 
 if TYPE_CHECKING:
     from selenium.webdriver.remote.webelement import WebElement
@@ -163,7 +163,23 @@ class KjellScraper(BaseScraper):
                 binary=True,
             )
             kind = filetype.guess(self.cache["IMG_TEMP_FILENAME"])
+
             if kind:
+                if kind.mime.startswith("image/tif"):
+                    im = Image.open(self.cache["IMG_TEMP_FILENAME"])
+                    im.thumbnail(im.size)
+                    im.save(
+                        self.cache["IMG_TEMP_FILENAME"].with_suffix(".jpeg"),
+                        "JPEG",
+                        quality=80,
+                    )
+                    self.move_file(
+                        old_path=self.cache["IMG_TEMP_FILENAME"].with_suffix(
+                            ".jpeg",
+                        ),
+                        new_path=self.cache["IMG_TEMP_FILENAME"],
+                    )
+                kind = filetype.guess(self.cache["IMG_TEMP_FILENAME"])
                 if kind.mime.startswith("image/") and kind.extension == "jpg":
                     self.log.debug(
                         "Downloaded thumbnail %s was: %s",
