@@ -682,6 +682,9 @@ class KjellScraper(BaseScraper):
 
             for item in orig_order["lineItems"]:
                 item_id = item["code"]
+                if int(item_id) < 10:  # noqa: PLR2004
+                    # Bags etc.
+                    continue
                 if not item["displayName"]:
                     prodname = re.match(
                         rf".*/([^/]*)-p{item['code']}.*",
