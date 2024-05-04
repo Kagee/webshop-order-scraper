@@ -665,6 +665,8 @@ class BaseScraper:
             path.mkdir(parents=True)
 
     def remove(self, path: Path | str) -> bool:
+        if isinstance(path, str):
+            path = Path(path).resolve()
         try:
             path.unlink()
         except FileNotFoundError:
