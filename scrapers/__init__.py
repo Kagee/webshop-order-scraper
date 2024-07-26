@@ -2,6 +2,7 @@ from .adafruit import AdafruitScraper
 from .aliexpress import AliExpressScraper
 from .amazon import AmazonScraper
 from .base import BaseScraper, PagePart
+from .digikey import DigikeyScraper
 from .distrelec import DistrelecScraper
 from .ebay import EbayScraper
 from .imap import IMAPScraper
@@ -19,6 +20,7 @@ __all__ = [
     "BaseScraper",
     "PagePart",
     "DistrelecScraper",
+    "DigikeyScraper",
     "IMAPScraper",
     "PimoroniScraper",
     "EbayScraper",

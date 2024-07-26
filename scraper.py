@@ -203,6 +203,8 @@ def parse_args():  # noqa: PLR0915
 
     _ = subparsers.add_parser("imap")
 
+    parser_pimoroni = subparsers.add_parser("digikey")
+
     parser_pimoroni = subparsers.add_parser("pimoroni")
     use_cached_orderlist(parser_pimoroni)
 
