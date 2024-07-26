@@ -640,9 +640,13 @@ class AliExpressScraper(BaseScraper):
                     order_date,
                 )
             self.log.debug("Order ID %s har status %s", order_id, order_status)
-            (order_total,) = order.xpath(
-                './/span[@class="order-item-content-opt-price-total"]',
-            )
+            # ValueError on order older that 2020
+            try:
+                (order_total,) = order.xpath(
+                    './/span[@class="order-item-content-opt-price-total"]',
+                )
+            except ValueError:
+                continue
             info = re.match(r".+\$(?P<dollas>\d+\.\d+)", order_total.text)
             order_total = float(info.group("dollas")) if info else float("0.00")
 
