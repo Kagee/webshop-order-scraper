@@ -57,10 +57,8 @@ class AmazonScraper(BaseScraper):
             if order_id.startswith("D01-"):
                 self.log.debug("Skipping digital order")
                 continue
-
-            order = {
-                "id": order_id,
-                "date": (
+            try:
+                order_date = (
                     datetime.datetime.strptime(
                         orig_orders[order_id]["date_from_order_list"],
                         "%Y-%m-%d %H:%M:%S",
@@ -68,7 +66,21 @@ class AmazonScraper(BaseScraper):
                     .astimezone()
                     .date()
                     .isoformat()
-                ),
+                )
+            except ValueError:
+                order_date = (
+                    datetime.datetime.strptime(
+                        orig_orders[order_id]["date_from_order_list"],
+                        "%Y-%m-%d %H:%M:%S%z",
+                    )
+                    .astimezone()
+                    .date()
+                    .isoformat()
+                )
+
+            order = {
+                "id": order_id,
+                "date": order_date,
                 "items": [],
                 "attachements": [],
                 "extra_data": {},
