@@ -1,4 +1,6 @@
+# ruff: noqa: C901,ERA001,PLR0912,PLR0915
 import json
+from pathlib import Path
 from typing import Final
 
 from .base import BaseScraper
@@ -13,22 +15,11 @@ class DigikeyScraper(BaseScraper):
 
     # Random utility functions
     def setup_templates(self):
-        # pylint: disable=invalid-name
-        # URL Templates
-        # self.ORDER_LIST_URL: str = {
-        #    "no": "https://www.kjell.com/no/mine-sider/mine-kjop",
-        # }[self.COUNTRY]
-        # self.LOGIN_PAGE_RE: str = r"https://www.kjell.com.*login=required.*"
-
-        # https://www.digikey.no/OrderHistory/ReviewOrder/9910000345121987
-
-        # https://www.digikey.no/no/products/detail/m5stack-technology-co-ltd/K039/13148795
-        # https://www.digikey.no/no/products/detail/-/-/13148795
-        # pylint: disable=invalid-name
-        # self.ORDER_LIST_JSON_FILENAME = (
-        #    self.cache["ORDER_LISTS"] / f"kjell-{self.COUNTRY}-orders.json"
-        # )
-        self.ORDER_LIST_JSON = self.cache["ORDER_LISTS"] / "orders.json"
+        self.ORDERS_JSON = self.cache["ORDER_LISTS"] / "orders.json"
+        self.INVOICES_JSON: Path = self.cache["ORDER_LISTS"] / "invoices.json"
+        self.DETAILS_JSON: Path = (
+            self.cache["ORDER_LISTS"] / "invoiceDetails.json"
+        )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
         pass
@@ -38,26 +29,41 @@ class DigikeyScraper(BaseScraper):
         """
         Scrapes your Kjell orders.
         """
-        # https://www.digikey.no/OrderHistory/List -> data-autoid="btnDownloadCsv" -> click?
-        # if not self.ORDER_LIST_JSON.is_file():
-        #    self.log.error("Could not find %s", self.ORDER_LIST_JSON)
-        #    self.log.error(
-        #        "Visit https://www.digikey.no/OrderHistory/List to download orders.json",
-        #    )
+        input_files = [
+            self.ORDERS_JSON,
+            self.INVOICES_JSON,
+            self.DETAILS_JSON,
+        ]
+        for x in input_files:
+            if not x.is_file():
+                self.log.error(
+                    "Could not find required inout file %s",
+                    x,
+                )
+                msg = (
+                    "Visit https://www.digikey.no/OrderHistory/List to "
+                    "download the input files "
+                    + ", ".join(y.name for y in input_files)
+                    + " and place them in "
+                    + str(self.cache["ORDER_LISTS"]),
+                )
+                self.log.error(msg)
+                raise ValueError(msg)
 
-        # https://www.digikey.no/OrderHistory/api/orders/invoiceDetails?searchQuery=&shared=False&startDate=2021-01-01 00:00:00&endDate=2024-07-26 23:59:59&pageSize=20&pageStartIndex=1&shared=False
-        # 0 - 19 ->  pageStartIndex=20 -> 20 -> 24
         with (self.cache["ORDER_LISTS"] / "invoices.json").open() as f:
             invoices_json = json.load(f)
 
-        orders = {}
+        orders: dict[str] = {}
         for invoice in invoices_json:
             order_number = invoice["orderNumber"]
+            order_folder: Path = self.cache["ORDERS"] / str(order_number)
+            order_folder.mkdir(exist_ok=True)
 
             order = {
                 "order_number": order_number,
                 "items": [],
                 "extra_data": {},
+                "folder": order_folder,
             }
             del invoice["orderNumber"]
             if order_number in orders:
@@ -111,14 +117,26 @@ class DigikeyScraper(BaseScraper):
 
         for details in invoice_details_json:
             order_number = details["orderNumber"]
+
             if order_number not in orders:
                 msg = "Unknow orderNumber"
                 raise ValueError(msg)
+
             if len(details["invoiceDetails"]) > 1:
                 msg = "invoiceDetails was longer than 1"
                 raise ValueError(msg)
             self.pprint(details["invoiceDetails"])
             i = details["invoiceDetails"][0]
+
+            order_folder: Path = self.cache["ORDERS"] / str(order_number)
+            order_folder.mkdir(exist_ok=True)
+
+            order_folder: Path = orders[order_number]["folder"]
+            item_folder: Path = order_folder / str(
+                i["productId"],
+            )
+            item_folder.mkdir(exist_ok=True)
+
             item = {
                 "id": i["productId"],
                 "subtotal": i["unitPrice"] / 100000,
@@ -131,9 +149,34 @@ class DigikeyScraper(BaseScraper):
                         i["manufacturerName"],
                     ],
                 ),
-                "thumbnail": i["imageUrl"],
+                "thumbnail_url": i["imageUrl"].replace("//", "https://"),
                 "extra_data": {},
+                "folder": item_folder,
             }
+            self.download_url_to_file()
+            new_thmb = Path(item["folder"] / f"thumbnail")
+            thmb = self.external_download_image(item["thumbnail_url"])
+                "thumbnail-*",
+                ,
+                ,
+            )
+
+            kind = filetype.guess(image_path)
+            if kind.mime.startswith("image/") and kind.extension in [
+                "jpg",
+                "png",
+            ]:
+                return image_path
+
+            print(thmb)
+
+            thmb.rename(new_thmb)
+            import sys
+
+            print(thmb)
+            print(new_thmb)
+            print(new_thmb.is_file())
+            sys.exit(1)
             for d in [
                 "productId",
                 "unitPrice",
@@ -148,6 +191,7 @@ class DigikeyScraper(BaseScraper):
             orders[order_number]["items"].append(item)
 
         self.pprint(orders, 260)
+        self.log.debug(self.cache)
         """
         invoiceDetails.json:
         [
