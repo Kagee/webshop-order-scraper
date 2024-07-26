@@ -56,6 +56,7 @@ class DigikeyScraper(BaseScraper):
 
             order = {
                 "order_number": order_number,
+                "items": [],
                 "extra_data": {},
             }
             del invoice["orderNumber"]
@@ -84,46 +85,79 @@ class DigikeyScraper(BaseScraper):
                 raise ValueError(msg)
 
             order["subtotal"] = invoice["invoices"][0]["orderValue"] / 100
-            order["total"] = invoice["invoices"][0]["invoiceTotalPrice"]
-            del invoice["invoices"][0]["invoiceTotalPrice"]
+            order["currency"] = invoice["currencyIso"]
             del invoice["invoices"][0]["orderValue"]
 
-            self.pprint(order)
+            try:
+                order["total"] = invoice["invoices"][0]["invoiceTotalPrice"]
+                del invoice["invoices"][0]["invoiceTotalPrice"]
+            except KeyError:
+                order["extra_data"][
+                    "webshop-order-scraper-comment-invoiceTotalPrice"
+                ] = (
+                    "Order data had no invoiceTotalPrice,"
+                    " probably very old order."
+                )
+
+            # self.pprint(order)
             # order["extra_data"] = invoice
-        orders[order_number] = order
+            if order_number in orders:
+                msg = "Order number duplicated"
+                raise ValueError(msg)
+            orders[order_number] = order
 
         with (self.cache["ORDER_LISTS"] / "invoiceDetails.json").open() as f:
-            invdet = json.load(f)
+            invoice_details_json = json.load(f)
 
-        self.pprint(orders)
-        """
-                invoices.json:
-
-                "invoices": [
-                     "invoiceTotalPrice": 871.31, // actual number
-                     "orderValue": 69705.0,
-
-        [
-            {
-                "orderNumber": 9910000345121988,
-                invoicePricing: [
-                    salesTax
-                    orderValue
-                    freightValue
-                    // the rest to extra data
-                ]
+        for details in invoice_details_json:
+            order_number = details["orderNumber"]
+            if order_number not in orders:
+                msg = "Unknow orderNumber"
+                raise ValueError(msg)
+            if len(details["invoiceDetails"]) > 1:
+                msg = "invoiceDetails was longer than 1"
+                raise ValueError(msg)
+            self.pprint(details["invoiceDetails"])
+            i = details["invoiceDetails"][0]
+            item = {
+                "id": i["productId"],
+                "subtotal": i["unitPrice"] / 100000,
+                "total": i["extendedPrice"] / 100,
+                "quantity": i["quantityTotal"],
+                "name": ", ".join(
+                    [
+                        i["description"],
+                        i["manufacturerProductNumber"],
+                        i["manufacturerName"],
+                    ],
+                ),
+                "thumbnail": i["imageUrl"],
+                "extra_data": {},
             }
-        ]
+            for d in [
+                "productId",
+                "unitPrice",
+                "extendedPrice",
+                "quantityTotal",
+                "description",
+                "manufacturerProductNumber",
+                "manufacturerName",
+            ]:
+                del details["invoiceDetails"][0][d]
+            # item["extra_data"] = details
+            orders[order_number]["items"].append(item)
+
+        self.pprint(orders, 260)
+        """
         invoiceDetails.json:
         [
             { // repeatet multiple with same orderNumber
-                "orderNumber": 9910000345121988,
                 invoiceDetails [{
-                    digiKeyProductNumber
-                    unitPrice 14216000 / 100000 = nok
-                    extendedPrice 14216 / 100 = nok
-                    productId ->  https://www.digikey.no/no/products/detail/-/-/12174736
-                    quantityTotal
+
+                "description" name
+                 "manufacturerProductNumber": "SMD291",
+                "description": "FLUX NO-CLEAN 10CC SYR SMD",
+                "manufacturerName": "Chip Quik Inc.",
                 }]
             }
         ]

@@ -530,8 +530,8 @@ class BaseScraper:
         return self.read(self.part_to_filename(part, **kwargs), from_json=True)
 
     @classmethod
-    def pprint(cls, value: Any) -> None:
-        pprint.PrettyPrinter(indent=2).pprint(value)
+    def pprint(cls, value: Any, width: int = 160) -> None:
+        pprint.PrettyPrinter(indent=2, width=width).pprint(value)
 
     def clear_folder(self, folder: Path | None = None):
         if folder is None:
