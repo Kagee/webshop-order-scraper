@@ -407,6 +407,7 @@ class BaseScraper:
                     change_ua,
                 )
             options.set_preference("detach", value=True)
+
             self.log.info("Starting browser")
             self.browser = webdriver.Firefox(options=options, service=service)
 
@@ -554,6 +555,75 @@ class BaseScraper:
             "wb",
         ) as output_handle:
             shutil.copyfileobj(response, output_handle)
+
+    def find_or_download(
+        self,
+        url_s: list[str] | str,
+        prefix: str,
+        folder: Path,
+    ):
+        """
+        Checks for file with prefix in folder. If found, returns Path to file.
+        If not found, downloads file to fodler+path+suffix. If not PNG/JPG
+        suffix, raises NotImplementedError.
+        """
+        folder.mkdir(exist_ok=True)
+
+        self.log.debug(
+            "find_or_download: url: %s, prefix: %s, folder: %s",
+            url_s,
+            prefix,
+            folder,
+        )
+
+        if existing_files := list(Path(folder).glob(f"{prefix}*")):
+            if len(existing_files) > 1:
+                msg = f"Found multiple files matching {prefix}"
+                raise RuntimeError(msg)
+            self.log.debug(
+                "Found existing matching file, returning %s",
+                existing_files[0],
+            )
+            return existing_files[0]
+
+        self.log.debug("Need to download file...")
+        headers = {
+            "User-Agent": ("python/webshop-order-scraper (hildenae@gmail.com)"),
+        }
+
+        if isinstance(url_s, str):
+            response = requests.get(url=url_s, headers=headers, timeout=10)
+            if not response.ok:
+                return None
+        else:
+            for url in url_s:
+                response = requests.get(url=url, headers=headers, timeout=10)
+                if response.ok:
+                    break
+            else:
+                return None
+        url_parsed = urlparse(url)
+        image_name = Path(url_parsed.path).name
+        image_path = self.cache["TEMP"] / image_name
+        self.write(
+            image_path,
+            response.content,
+            binary=True,
+        )
+        kind = filetype.guess(image_path)
+        if not kind.mime.startswith("image/") or kind.extension not in [
+            "jpg",
+            "png",
+        ]:
+            self.log.error(
+                "Thumbnail was not JPEG/PNG: %s, %s",
+                kind.mime,
+                kind.extension,
+            )
+            raise NotImplementedError
+        new_file_path = folder / f"{prefix}{image_path.name}"
+        self.log.debug("Moving downloaded file to %s", new_file_path)
+        return image_path.rename(new_file_path)
 
     def external_download_image(
         self,

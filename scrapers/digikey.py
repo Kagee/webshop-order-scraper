@@ -106,7 +106,7 @@ class DigikeyScraper(BaseScraper):
                 )
 
             # self.pprint(order)
-            # order["extra_data"] = invoice
+            order["extra_data"] = invoice
             if order_number in orders:
                 msg = "Order number duplicated"
                 raise ValueError(msg)
@@ -138,7 +138,7 @@ class DigikeyScraper(BaseScraper):
             item_folder.mkdir(exist_ok=True)
 
             item = {
-                "id": i["productId"],
+                "id": str(i["productId"]),
                 "subtotal": i["unitPrice"] / 100000,
                 "total": i["extendedPrice"] / 100,
                 "quantity": i["quantityTotal"],
@@ -149,34 +149,73 @@ class DigikeyScraper(BaseScraper):
                         i["manufacturerName"],
                     ],
                 ),
-                "thumbnail_url": i["imageUrl"].replace("//", "https://"),
+                "item_page": f"https://www.digikey.no/no/products/detail/-/-/{i['productId']}",
                 "extra_data": {},
-                "folder": item_folder,
             }
-            self.download_url_to_file()
-            new_thmb = Path(item["folder"] / f"thumbnail")
-            thmb = self.external_download_image(item["thumbnail_url"])
-                "thumbnail-*",
-                ,
-                ,
+
+            def get_files(f):
+                return set(f.glob("*")) - set(
+                    f.glob("thumbnail-*"),
+                )
+
+            for file in self.cache["TEMP"].glob("*"):
+                self.log.debug("Deleting %s from TEMP dir.", file.name)
+                file.unlink(missing_ok=True)
+            files = get_files(item_folder)
+            skip_gather = False
+            if files:
+                for f in files:
+                    self.log.debug(f.name)
+                skip_gather = (
+                    True  # we assume files existing means all files downloaded
+                )
+                # skip_gather = (
+                #    input(
+                #        f"Found the files above for {item['name']}"
+                #        ", skip item data gathering? [Y/n]",
+                #    ).upper()
+                #    != "Y"
+                # )
+            if not skip_gather:
+                self.log.debug(
+                    (
+                        "Visit %s, save PDF and attachements to %s, "
+                        "and press enter to continue."
+                    ),
+                    item["item_page"],
+                    self.cache["TEMP"],
+                )
+                while (
+                    input(
+                        "Press enter to list found files,"
+                        " press y then enter to accept\n",
+                    ).lower()
+                    != "y"
+                ):
+                    for file in self.cache["TEMP"].glob("*"):
+                        if file.name == "temporary.pdf":
+                            self.log.debug("Item PDF: %s", file.name)
+                        else:
+                            self.log.debug("Attachement: %s", file.name)
+
+                for file in self.cache["TEMP"].glob("*"):
+                    if file.name == "temporary.pdf":
+                        file.rename(item_folder / "attachement-item-scrape.pdf")
+                    else:
+                        file.rename(item_folder / f"attachement-{file.name}")
+
+            item["attachments "] = get_files(item_folder)
+
+            tbu = i["thumbnailUrl"].replace("//", "https://")
+            imu = i["imageUrl"].replace("//", "https://")
+
+            # Fallback to thumbnail image
+            item["thumbnail_file"] = self.find_or_download(
+                [imu, tbu],
+                "thumbnail-",
+                item_folder,
             )
 
-            kind = filetype.guess(image_path)
-            if kind.mime.startswith("image/") and kind.extension in [
-                "jpg",
-                "png",
-            ]:
-                return image_path
-
-            print(thmb)
-
-            thmb.rename(new_thmb)
-            import sys
-
-            print(thmb)
-            print(new_thmb)
-            print(new_thmb.is_file())
-            sys.exit(1)
             for d in [
                 "productId",
                 "unitPrice",
@@ -187,46 +226,12 @@ class DigikeyScraper(BaseScraper):
                 "manufacturerName",
             ]:
                 del details["invoiceDetails"][0][d]
-            # item["extra_data"] = details
+            item["extra_data"] = details
             orders[order_number]["items"].append(item)
 
-        self.pprint(orders, 260)
-        self.log.debug(self.cache)
-        """
-        invoiceDetails.json:
-        [
-            { // repeatet multiple with same orderNumber
-                invoiceDetails [{
-
-                "description" name
-                 "manufacturerProductNumber": "SMD291",
-                "description": "FLUX NO-CLEAN 10CC SYR SMD",
-                "manufacturerName": "Chip Quik Inc.",
-                }]
-            }
-        ]
-
-        orders.json:
-        [
-            {
-            "orderNumber": 9910000345121988,
-            "currencyIso": "NOK",
-            "status": "Shipped",
-            "dateEntered": "2024-02-15T21:01:59.068Z",
-            "invoices": [ // can be more than one
-            {
-                  "orderValue": 43594, // /100 in currencyIso // subtotal (uten levering, uten vat)
-                     "webId": 345121987,
-                "complete": true,
-                "salesOrderId": 85436710,
-            "boxes": [ // can be more than one
-            {
-            "carrier": "DHL",
-            "dateTransaction": "2024-02-15T22:48:59.858Z",
-            "dateShipped": "2024-02-15T23:03:48.032Z",
-            "carrierPackageId": "5973990024",
-        """
-        # self.browser_safe_quit()
+        # self.pprint(orders, 260)
+        # self.log.debug(self.cache)
+        return orders
 
     def command_to_std_json(self):
         """
@@ -236,10 +241,12 @@ class DigikeyScraper(BaseScraper):
         structure = self.get_structure(
             self.name,
             None,
-            "https://www.kjell.com/no/mine-sider/mine-kjop#{order_id}",
-            "https://www.kjell.com/-p{item_id}",
+            "https://www.digikey.no/OrderHistory/ReviewOrder/{order_id}",
+            "https://www.digikey.no/no/products/detail/-/-/{item_id}",
         )
-        # self.output_schema_json(structure)
+        orders = self.command_scrape()
+
+        self.output_schema_json(structure)
 
     # Class init
     def __init__(self, options: dict):
