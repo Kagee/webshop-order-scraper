@@ -206,6 +206,9 @@ def parse_args():  # noqa: PLR0915
     parser_digikey = subparsers.add_parser("digikey")
     to_std_json(parser_digikey)
 
+    parser_jula = subparsers.add_parser("jula")
+    to_std_json(parser_jula)
+
     parser_pimoroni = subparsers.add_parser("pimoroni")
     use_cached_orderlist(parser_pimoroni)
 

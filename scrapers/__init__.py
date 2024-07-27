@@ -6,6 +6,7 @@ from .digikey import DigikeyScraper
 from .distrelec import DistrelecScraper
 from .ebay import EbayScraper
 from .imap import IMAPScraper
+from .jula import JulaScraper
 from .kjell import KjellScraper
 from .komplett import KomplettScraper
 from .pimoroni import PimoroniScraper
@@ -19,6 +20,7 @@ __all__ = [
     "AmazonScraper",
     "BaseScraper",
     "PagePart",
+    "JulaScraper",
     "DistrelecScraper",
     "DigikeyScraper",
     "IMAPScraper",
