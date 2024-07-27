@@ -1,3 +1,4 @@
+# ruff: noqa: C901, PLR0912, PLR0915
 import base64
 import os
 import re
