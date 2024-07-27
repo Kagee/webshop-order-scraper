@@ -1,5 +1,6 @@
 # ruff: noqa: C901,ERA001,PLR0912,PLR0915
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -55,7 +56,7 @@ class DigikeyScraper(BaseScraper):
 
         orders: dict[str] = {}
         for invoice in invoices_json:
-            order_number = invoice["orderNumber"]
+            order_number = str(invoice["orderNumber"])
             order_folder: Path = self.cache["ORDERS"] / str(order_number)
             order_folder.mkdir(exist_ok=True)
 
@@ -64,6 +65,7 @@ class DigikeyScraper(BaseScraper):
                 "items": [],
                 "extra_data": {},
                 "folder": order_folder,
+                "date": invoice["dateEntered"],
             }
             del invoice["orderNumber"]
             if order_number in orders:
@@ -106,7 +108,7 @@ class DigikeyScraper(BaseScraper):
                 )
 
             # self.pprint(order)
-            order["extra_data"] = invoice
+            # order["extra_data"] = invoice
             if order_number in orders:
                 msg = "Order number duplicated"
                 raise ValueError(msg)
@@ -116,7 +118,7 @@ class DigikeyScraper(BaseScraper):
             invoice_details_json = json.load(f)
 
         for details in invoice_details_json:
-            order_number = details["orderNumber"]
+            order_number = str(details["orderNumber"])
 
             if order_number not in orders:
                 msg = "Unknow orderNumber"
@@ -204,7 +206,7 @@ class DigikeyScraper(BaseScraper):
                     else:
                         file.rename(item_folder / f"attachement-{file.name}")
 
-            item["attachments "] = get_files(item_folder)
+            item["attachments"] = get_files(item_folder)
 
             tbu = i["thumbnailUrl"].replace("//", "https://")
             imu = i["imageUrl"].replace("//", "https://")
@@ -226,7 +228,7 @@ class DigikeyScraper(BaseScraper):
                 "manufacturerName",
             ]:
                 del details["invoiceDetails"][0][d]
-            item["extra_data"] = details
+            # item["extra_data"] = details
             orders[order_number]["items"].append(item)
 
         # self.pprint(orders, 260)
@@ -244,8 +246,116 @@ class DigikeyScraper(BaseScraper):
             "https://www.digikey.no/OrderHistory/ReviewOrder/{order_id}",
             "https://www.digikey.no/no/products/detail/-/-/{item_id}",
         )
-        orders = self.command_scrape()
+        scrape_data = self.command_scrape()
+        self.pprint(scrape_data, 260)
+        structure["orders"] = []
+        for order_id, scraped_data in scrape_data.items():
+            order = {
+                "id": str(order_id),
+                "items": [],
+                "extra_data": scraped_data["extra_data"],
+                "date": datetime.fromisoformat(
+                    scraped_data["date"].replace("Z", "+00:00"),
+                )
+                .date()
+                .isoformat(),
+                # no order attachements scraped
+            }
+            del scraped_data["date"]
+            for unit in [
+                "total",
+                "tax",
+                "subtotal",
+                "shipping",
+            ]:
+                if unit in scraped_data:
+                    order[unit] = self.get_value_currency(
+                        unit,
+                        scraped_data[unit],
+                        scraped_data["currency"],
+                    )
+                    del scraped_data[unit]
 
+            if not len(
+                scraped_data["items"],
+            ):
+                self.log.error("Order id %s has no items, skipping", order_id)
+                continue
+
+            for scraped_item in scraped_data["items"]:
+                item = {
+                    "name": scraped_item["name"],
+                    "id": scraped_item["id"],
+                    "quantity": scraped_item["quantity"],
+                    "extra_data": scraped_item["extra_data"],
+                }
+
+                if (
+                    "thumbnail_file" in scraped_item
+                    and scraped_item["thumbnail_file"]
+                ):
+                    item["thumbnail"] = (
+                        Path(
+                            scraped_item["thumbnail_file"],
+                        )
+                        .relative_to(self.cache["BASE"])
+                        .as_posix()
+                    )
+                    del scraped_item["thumbnail_file"]
+
+                for unit in [
+                    "total",
+                    "tax",
+                    "subtotal",
+                    "shipping",
+                ]:
+                    if unit in scraped_item:
+                        order[unit] = self.get_value_currency(
+                            unit,
+                            scraped_item[unit],
+                            scraped_data["currency"],
+                        )
+                        del scraped_item[unit]
+                item["attachements"] = []
+                if "attachments" in scraped_item:
+                    for attachment in scraped_item["attachments"]:
+                        item["attachements"].append(
+                            {
+                                "name": attachment.name,
+                                "path": (
+                                    Path(
+                                        attachment,
+                                    )
+                                    .relative_to(self.cache["BASE"])
+                                    .as_posix()
+                                ),
+                            },
+                        )
+                    del scraped_item["attachments"]
+                for d in [
+                    "name",
+                    "id",
+                    "quantity",
+                    "item_page",
+                    "extra_data",
+                ]:
+                    del scraped_item[d]
+                assert (
+                    scraped_item == {}
+                ), f"scraped_item is empty: {scraped_item}"
+                order["items"].append(item)
+
+            for d in [
+                "currency",
+                "order_number",
+                "extra_data",
+                "folder",
+                "items",
+            ]:
+                del scraped_data[d]
+            assert scraped_data == {}, f"scraped_data is empty: {scraped_data}"
+            # self.pprint(order)
+            structure["orders"].append(order)
         self.output_schema_json(structure)
 
     # Class init
