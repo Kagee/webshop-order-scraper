@@ -26,10 +26,8 @@ The JSON file will follow the JSON schema defined in [output/schema.json](output
   * Complete. Only tested on 31 order à 35 items.
 * [Kjell.com](#kjellcom)
   * Complete
-
-## Reported broken
-
-* NTR
+* [Digikey](#digikey)
+  * Complete. Only tested on `.no`, needs modifications to support others. Does not require login. Requires manual work before and during item page parsing (Digikey are not Selenium friendly).
 
 ## Missing export
 
@@ -203,6 +201,22 @@ python scrape.py komplett --to-std-json
 ### IMAP
 
 ### Pimoroni
+
+### Digikey
+
+````python
+python scraper.py digikey
+
+python scrape.py digikey --to-std-json
+````
+
+### Jula
+
+````python
+python scraper.py jula
+
+python scrape.py jula --to-std-json
+````
 
 ## Installation (git)
 
