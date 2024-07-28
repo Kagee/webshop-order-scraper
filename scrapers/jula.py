@@ -1,12 +1,11 @@
 # ruff: noqa: C901,ERA001,PLR0912,PLR0915
-import re
+import contextlib
+import json
 import time
-from datetime import datetime
+from pathlib import Path
 from typing import Final
 
-from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 
 from .base import BaseScraper
 
@@ -28,7 +27,6 @@ class JulaScraper(BaseScraper):
         # )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
-        # self.log.debug(expected_url)
         time.sleep(5)
         if (
             expected_url == "https://www.jula.no/account/mine-innkjop/"
@@ -42,217 +40,184 @@ class JulaScraper(BaseScraper):
         """
         Scrapes your Kjell orders.
         """
+        order_list = []
+        order_ids = set()
+
+        order_list_path = self.cache["ORDER_LISTS"] / "order_list.json"
+        if order_list_path.is_file():
+            with order_list_path.open() as order_list_file:
+                order_list = json.load(order_list_file)
+                order_ids = {x["id"] for x in order_list}
+                for order_id in order_ids:
+                    self.log.debug("Loaded list order id %s", order_id)
+
+        if not self.options.use_cached_orderlist:
+            self.log.debug("Downloading order list")
+            # We visit this to make sure we are logged inn
+            if not self.browser:
+                self.browser_visit(
+                    "https://www.jula.no/account/mine-innkjop/",
+                )
+            order_list_json = self.browser_get_json(
+                "view-source:https://apigw.jula.no/digital-platform/v1/Customer/order",
+            )
+            if order_list_json["hasNextPage"]:
+                msg = (
+                    "Orderlist has hasNextPage=True. "
+                    "Don't know how to handle this."
+                )
+                raise NotImplementedError(msg)
+            for order_info in order_list_json["transactions"]:
+                if order_info["id"] not in order_ids:
+                    self.log.debug("Found new order id: %s", order_info["id"])
+                    order_list.append(order_info)
+        else:
+            self.log.debug("Using cached order list: %s", order_list_path)
+
+        order_ids = {
+            x["id"] for x in order_list
+        }  # recalculate in case we downloaded any
+
+        with order_list_path.open("w") as order_list_file:
+            json.dump(order_list, order_list_file, indent=4)
+
         orders = {}
-        brws = self.browser_visit("https://www.jula.no/account/mine-innkjop/")
-        "https://www.jula.no/account/mine-innkjop/1796354449/"
-        # wait10 = WebDriverWait(brws, 10)  # wait for sometyhing to appear
-        order_links: list[WebElement] = brws.find_elements(
-            By.XPATH,
-            "//a[contains(@href,'account/mine-innkjop')]",
-        )
 
-        for order_link in order_links:
-            href = order_link.get_dom_attribute("href")
-            # self.log.debug(href)
-            if m := re.match(r"^.*mine-innkjop\/([0-9]+)\/?$", href):
-                orders[m[1]] = {
-                    "url": "https://www.jula.no/account/mine-innkjop/" + m[1],
-                    "id": m[1],
-                    "extra_data": {},
-                }
+        for order_file_path in list(self.cache["ORDERS"].glob("*.json")):
+            with order_file_path.open() as order_file:
+                order_data = json.load(order_file)
+                oid = order_data["transactionHead"]["orderId"]
+                self.log.debug("Loaded order data for id %s", oid)
+                with contextlib.suppress(KeyError):
+                    order_ids.remove(oid)
+                orders[oid] = order_data
+
+        for order_id in order_ids:
+            # there are order number we have not scraped to disk
+            order_data = self.browser_get_json(
+                "view-source:https://apigw.jula.no/"
+                "digital-platform/v1/Customer/order/" + order_id,
+            )
+            oid = order_data["transactionHead"]["orderId"]
+            self.pprint(order_data)
+            self.log.debug("Downloaded order data for id %s", oid)
+            with (self.cache["ORDERS"] / (oid + ".json")).open(
+                "w",
+            ) as order_json_file:
+                json.dump(order_data, order_json_file, indent=4)
+            orders[oid] = order_data
+
         for order in orders.values():
-            self.browser_visit(order["url"])
-            time.sleep(3)
-            main = brws.find_element(
-                By.XPATH,
-                "//main//h1/parent::div",
-            )
-            for x in ["Ordrenummer", "Kjøpsdato"]:
-                e = main.find_element(
-                    By.XPATH,
-                    (
-                        ".//p[contains(@class, 'text-base')]"
-                        f"[contains(text(), '{x}')]"
-                    ),
-                )
-                if x == "Ordrenummer":
-                    order["extra_data"]["non_web_order_number"] = e.text.split(
-                        ":",
-                    )[1].strip()
-                elif x == "Kjøpsdato":
-                    order["date"] = (
-                        datetime.strptime(
-                            e.text.split(":")[1].strip(),
-                            "%d.%m.%Y",
+            # Cache thumbnails
+            oid = order["transactionHead"]["orderId"]
+            order_folder: Path = self.cache["ORDERS"] / oid
+            order_folder.mkdir(exist_ok=True)
+            for line in order["lines"]:
+                iid = line["variantId"]
+                for format_ in line["mainImage"]["formats"]:
+                    if "2048px trimmed transparent" in format_["type"]:
+                        line["thumbnail_path"] = (
+                            Path(
+                                self.find_or_download(
+                                    format_["url"]["location"],
+                                    f"thumbnail-{iid}-",
+                                    order_folder,
+                                ),
+                            )
+                            .relative_to(self.cache["BASE"])
+                            .as_posix()
                         )
-                        .astimezone()
-                        .date()
-                        .isoformat()
-                    )
-
-            articles_div = main.find_elements(
-                By.XPATH,
-                (".//h2/parent::div//article/div"),
-            )
-            order["items"] = []
-            for art in articles_div:
-                item = self.extract_item_data_from_order_page(art)
-                self.pprint(item)
-                order["items"].append(item)
-
-            shipping = main.find_element(
-                By.XPATH,
-                (
-                    ".//p[starts-with(normalize-space(text()), 'Frakt')]"
-                    "/parent::div/descendant::span"
-                ),
-            )
-            order["shipping"] = shipping.text.strip().replace(".-", ",00")
-            try:
-                discount = main.find_element(
-                    By.XPATH,
-                    (
-                        ".//p[starts-with(normalize-space(text()), 'Rabatt')]"
-                        "/parent::div/descendant::span"
-                    ),
-                )
-                order["extra_data"]["discount"] = discount.text.strip().replace(
-                    ".-",
-                    ",00",
-                )
-            except NoSuchElementException:
-                pass
-            total_div = main.find_element(
-                By.XPATH,
-                (
-                    ".//p[starts-with(normalize-space(text()), 'Totalt')]"
-                    "/parent::div/descendant::div"
-                ),
-            )
-            ps = total_div.find_elements(
-                By.TAG_NAME,
-                "p",
-            )
-            for p in ps:
-                t = p.text.strip().replace("\u202f", "")
-
-                if "moms" in p.text:
-                    num = re.match(".*moms ([0-9 ,.-]*)$", p.text)[1]
-                    num = num.strip().replace(",", ".").replace(".-", ".00")
-                    order["tax"] = str(num)
-                    # This should work if extract is successfull
-                    _test_float_convert = float(order["tax"])
+                        break
                 else:
-                    if ".-" in t:
-                        t = t.replace(".-", ".00")
-                    else:
-                        # divide by 100 using strings
-                        a = list(t)
-                        t = "".join(a[:-2]) + "." + "".join(a[-2:])
-                    order["total"] = t
-                    # This should work if extract is successfull
-                    _test_float_convert = float(order["total"])
+                    self.pprint(order)
+                    msg = (
+                        "Image with format `2048px trimmed"
+                        " transparent` not found for "
+                        f"item id {line['variantId']}"
+                    )
+                    raise NotImplementedError(msg)
+                if "url" in line:
+                    item_pdf = order_folder / f"item-{iid}.pdf"
+                    if item_pdf.is_file():
+                        line["pdf_path"] = item_pdf.relative_to(
+                            self.cache["BASE"],
+                        ).as_posix()
+                        continue
+                    # nope, we need to make the PDF
+                    self.log.debug("We need to scrape %s", line["url"])
+                    self.scrape_item_page(line["url"], item_pdf)
 
-            for item in order["items"]:
-                self.extract_item_page(item)
+    def scrape_item_page(self, url: str, pdf_file: Path) -> None:
+        self.browser_visit(url)
 
-            del order["url"]
-            # self.pprint(order)
-            # input("waiting ... no more code implemented")
-            # raise RuntimeError
-        # self.pprint(orders)
-        raise RuntimeError
-        return orders
+        if read_more_btn := self.find_element(
+            By.XPATH,
+            "//button[starts-with(normalize-space(text()), 'Les mer')]",
+        ):
+            read_more_btn.click()
+            self.log.debug("`Les mer` clicked")
 
-    def extract_item_page(self, _item: dict) -> dict:
-        """
-        img_buttons: list[WebElement] = self.find_elements(
-            By.CSS_SELECTOR,
-            "button.gallery-thumbnail.indicator-image",
+        if tech_spec := self.find_element(
+            By.XPATH,
+            (
+                "//span[starts-with(normalize-space(text()), "
+                "'Teknisk spesifikasjon')]/parent::h2/parent::div"
+            ),
+        ):
+            tech_spec.click()
+            self.log.debug("`Teknisk spesifikasjon` clicked")
+
+        self.browser.execute_script(
+            """
+                function rx(xpath) {
+                    f = document.evaluate(
+                        xpath,
+                        document.body,
+                        null,
+                        XPathResult.FIRST_ORDERED_NODE_TYPE
+                        ).singleNodeValue;
+                    if (f) {
+                        console.log("Removing ", f);
+                        f.remove();
+                        return true;
+                    } else {
+                        /* console.log("Failed to remove " + xpath); */
+                        return false;
+                    }
+                };
+                document.body.prepend(document.querySelector('h1'));
+                [
+                    "//videoly-slider//parent::div",
+                    "//main/preceding-sibling::div",
+                    "//div[contains(@class, '[grid-area:sidebar]')]",
+                    "//span[starts-with(normalize-space(text()), 'Anmeldelser')]/parent::h2/parent::div",
+                    "//span[starts-with(normalize-space(text()), 'Passer til')]/parent::h2/parent::div",
+                    "//div[@id='similar-products']",
+                    "//header",
+                    "//nav",
+                    "//footer",
+                ].forEach((e) => {
+                    let loop = true;
+                    while (loop) {
+                        loop = rx(e);
+                    }
+                });
+                document.querySelectorAll("*").forEach(
+                    (el) => {
+                        el.style.fontFamily = "unset";
+                        }
+                    );
+
+            """,
         )
-        if img_buttons:
-            for img_button in img_buttons:
-                img_button.click()
-                time.sleep(0.5)
-            img_buttons[0].click()
-        """
-        """
-        click:
-        //button[starts-with(normalize-space(text()), 'Les mer')]
-        //span[starts-with(normalize-space(text()), 'Teknisk spesifikasjon')]/parent::h2/parent::div
-        """
-        """
-        document.querySelectorAll("*").forEach(
-        (el) => {
-            el.style.fontFamily = "unset";
-            }
-        );
-        document.body.prepend(document.querySelector('h1'))
-        """
+        self.log.debug("We did not save %s to %s", url, pdf_file)
+        input("Press enter to continue")
+
         """
             delete:
-            //main/preceding-sibling::div -> many
-            //videoly-slider//parent::div -> many
-            //div[contains(@class, '[grid-area:sidebar]')]
-            header
-            nav
             a href="#product-reviews" -> parent div -> parent div
-            //span[starts-with(normalize-space(text()), 'Anmeldelser')]/parent::h2/parent::div
-            //span[starts-with(normalize-space(text()), 'Passer til')]/parent::h2/parent::div
-            div id="similar-products"
-            footer
+
         """
-
-    def extract_item_data_from_order_page(
-        self,
-        art: WebElement,
-    ) -> dict:
-        item = {}
-        item["img_url"] = re.sub(
-            "/w:[0-9]{1,5}/",
-            "/",
-            art.find_element(By.TAG_NAME, "img")
-            .get_dom_attribute(
-                "src",
-            )
-            .replace("/preset:jpgoptimized/", "/"),
-        )
-
-        item["price"] = (
-            art.find_element(By.XPATH, "./p")
-            .text.strip()
-            .replace(".-", ".00")
-            .replace("\u202f", "")
-            .replace(" ", "")
-            .replace(",", ".")
-        )
-        # This should work if extract is successfull
-        _test_float_convert = float(item["price"])
-        # item may not have URL if not avaliable in webshop (i.e. sodas)
-        name = art.find_element(
-            By.XPATH,
-            ".//div/p[starts-with(@id, 'summary-product-title')]",
-        )
-        item["name"] = name.text.strip()
-        try:
-            name.find_element(
-                By.XPATH,
-                ".//a",
-            )
-            item["avaliable_on_web"] = True
-        except NoSuchElementException:
-            self.log.warning("%s it not avaliable on web", item["name"])
-            item["avaliable_on_web"] = False
-
-        p_span = art.find_elements(By.XPATH, ".//p/span")
-        for span in p_span:
-            t = span.text.strip()
-            num = re.match(r".*\s([0-9]*)$", t)[1]
-            if t.startswith("Antall"):
-                item["quantity"] = num
-            elif t.startswith("Artikkelnummer"):
-                item["id"] = num
-        return item
 
     def command_to_std_json(self):
         """
@@ -266,7 +231,6 @@ class JulaScraper(BaseScraper):
             "https://www.jula.no/catalog/-{item_id}/",
         )
         # scrape_data = self.command_scrape()
-        # self.pprint(scrape_data, 260)
         self.valid_json(structure)
         # self.output_schema_json(structure)
 

@@ -57,7 +57,7 @@ class PagePart(Enum):
 
 
 class BaseScraper:
-    browser: webdriver.Firefox
+    browser: webdriver.Firefox = None
     browser_status: str = "no-created"
     orders: list
     username: str
@@ -424,6 +424,11 @@ class BaseScraper:
         # Stuff we should do before returning the first browser session
         return
 
+    def browser_get_json(self, url: str) -> dict:
+        self.browser_visit(url)
+        content = self.browser.find_element(By.XPATH, "//pre").text
+        return json.loads(content)
+
     def browser_safe_quit(self):
         """
         Safely closed the browser instance. (without exceptions)
@@ -564,7 +569,7 @@ class BaseScraper:
     ):
         """
         Checks for file with prefix in folder. If found, returns Path to file.
-        If not found, downloads file to fodler+path+suffix. If not PNG/JPG
+        If not found, downloads file to folder/prefix{name}. If not PNG/JPG
         suffix, raises NotImplementedError.
         """
         folder.mkdir(exist_ok=True)
@@ -592,7 +597,8 @@ class BaseScraper:
         }
 
         if isinstance(url_s, str):
-            response = requests.get(url=url_s, headers=headers, timeout=10)
+            url = url_s
+            response = requests.get(url=url, headers=headers, timeout=10)
             if not response.ok:
                 return None
         else:
@@ -621,7 +627,11 @@ class BaseScraper:
                 kind.extension,
             )
             raise NotImplementedError
+
         new_file_path = folder / f"{prefix}{image_path.name}"
+        should_have_suffix = "." + kind.extension
+        if new_file_path.suffix != should_have_suffix:
+            new_file_path = new_file_path.with_suffix(should_have_suffix)
         self.log.debug("Moving downloaded file to %s", new_file_path)
         return image_path.rename(new_file_path)
 
