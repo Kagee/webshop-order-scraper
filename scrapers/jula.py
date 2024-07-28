@@ -207,6 +207,11 @@ class JulaScraper(BaseScraper):
                         el.style.fontFamily = "unset";
                         }
                     );
+                /*
+                for each of //h4[text()="Dokumenter"] -> parent -> ul -> li -> a
+                -> if PDF -> click? else ERROR
+                */
+                throw new Error('Document download not implemented');
 
             """,
         )
