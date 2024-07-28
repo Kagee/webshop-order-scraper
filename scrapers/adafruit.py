@@ -26,7 +26,7 @@ class AdafruitScraper(BaseScraper):
         self.setup_templates()
 
     def usage(self):
-        print(
+        print(  # noqa: T201
             f"""
     USAGE:
     ==================================================
@@ -37,7 +37,7 @@ class AdafruitScraper(BaseScraper):
         {self.cache['BASE']}
     Click "Export Orders CSV" and save "order_history.csv" to
         {self.cache['BASE']}
-        """
+        """,
         )
 
     def parse_order_csv(self):
