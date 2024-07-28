@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from typing import Final
 
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 
@@ -27,7 +28,7 @@ class JulaScraper(BaseScraper):
         # )
 
     def browser_detect_handle_interrupt(self, expected_url) -> None:
-        self.log.debug(expected_url)
+        # self.log.debug(expected_url)
         time.sleep(5)
         if (
             expected_url == "https://www.jula.no/account/mine-innkjop/"
@@ -56,8 +57,10 @@ class JulaScraper(BaseScraper):
             if m := re.match(r"^.*mine-innkjop\/([0-9]+)\/?$", href):
                 orders[m[1]] = {
                     "url": "https://www.jula.no/account/mine-innkjop/" + m[1],
+                    "id": m[1],
+                    "extra_data": {},
                 }
-        for order_numer, order in orders.items():
+        for order in orders.values():
             self.browser_visit(order["url"])
             time.sleep(3)
             main = brws.find_element(
@@ -68,12 +71,14 @@ class JulaScraper(BaseScraper):
                 e = main.find_element(
                     By.XPATH,
                     (
-                        "//p[contains(@class, 'text-base')]"
+                        ".//p[contains(@class, 'text-base')]"
                         f"[contains(text(), '{x}')]"
                     ),
                 )
                 if x == "Ordrenummer":
-                    order["order_name"] = e.text.split(":")[1].strip()
+                    order["extra_data"]["non_web_order_number"] = e.text.split(
+                        ":",
+                    )[1].strip()
                 elif x == "Kjøpsdato":
                     order["date"] = (
                         datetime.strptime(
@@ -85,62 +90,169 @@ class JulaScraper(BaseScraper):
                         .isoformat()
                     )
 
-                # //main//h2/parent::div -> Din bestilling
-                #   -> //article -> many articles
-                #      -> div
-                #           -> img
-                #           -> div
-                #               -> p -> a -> text = Name, href= https://www.jula.no/catalog/.../werther%E2%80%99s-original-cream-candies-027450/
-                #               -> p -> span(s) -> Artikkelnummer. / Antall:
-                #           -> p '1&nbsp;099.-' / '49,90'
+            articles_div = main.find_elements(
+                By.XPATH,
+                (".//h2/parent::div//article/div"),
+            )
+            order["items"] = []
+            for art in articles_div:
+                item = self.extract_item_data_from_order_page(art)
+                self.pprint(item)
+                order["items"].append(item)
 
-                # //p[starts-with(normalize-space(text()), 'Frakt')]/parent::div/descendant::span -> 0.-
-                # //p[starts-with(normalize-space(text()), 'Rabatt')]/parent::div/descendant::span -> −19,38
-                # //p[starts-with(normalize-space(text()), 'Totalt')]/parent::div/descendant::div
-                #    -> p where text contains moms: "hvorav moms 158,44"
-                #    -> else: 795<sup class="top-0 text-[50%] leading-none">70</sup>
-                #    -> 2 210<span class="pr-[0.08em] -tracking-[0.125em] -ml-[0.02em]">.-</span>
-                #    -> if contains ",-" -> null ore, ellers text -> tall, del på 100
-                self.log.debug(e.text)
-            # for item in items:
-            """
-            click:
-            //button[starts-with(normalize-space(text()), 'Les mer')]
-            //span[starts-with(normalize-space(text()), 'Teknisk spesifikasjon')]/parent::h2/parent::div
-            """
-            """
-            document.querySelectorAll("*").forEach(
-            (el) => {
-                el.style.fontFamily = "unset";
-                }
-            );
-            document.body.prepend(document.querySelector('h1'))
-            """
-            """
-                delete:
-                //main/preceding-sibling::div -> many
-                //videoly-slider//parent::div -> many
-                //div[contains(@class, '[grid-area:sidebar]')]
-                header
-                nav
-                a href="#product-reviews" -> parent div -> parent div
-                //span[starts-with(normalize-space(text()), 'Anmeldelser')]/parent::h2/parent::div
-                //span[starts-with(normalize-space(text()), 'Passer til')]/parent::h2/parent::div
-                div id="similar-products"
-                footer
-            """
+            shipping = main.find_element(
+                By.XPATH,
+                (
+                    ".//p[starts-with(normalize-space(text()), 'Frakt')]"
+                    "/parent::div/descendant::span"
+                ),
+            )
+            order["shipping"] = shipping.text.strip().replace(".-", ",00")
+            try:
+                discount = main.find_element(
+                    By.XPATH,
+                    (
+                        ".//p[starts-with(normalize-space(text()), 'Rabatt')]"
+                        "/parent::div/descendant::span"
+                    ),
+                )
+                order["extra_data"]["discount"] = discount.text.strip().replace(
+                    ".-",
+                    ",00",
+                )
+            except NoSuchElementException:
+                pass
+            total_div = main.find_element(
+                By.XPATH,
+                (
+                    ".//p[starts-with(normalize-space(text()), 'Totalt')]"
+                    "/parent::div/descendant::div"
+                ),
+            )
+            ps = total_div.find_elements(
+                By.TAG_NAME,
+                "p",
+            )
+            for p in ps:
+                t = p.text.strip().replace("\u202f", "")
 
-            #
-            #
-            # //p[contains(@class, 'text-base')][contains(text(), 'Ordrenummer')]
-            self.pprint(order)
-            input("waiting ... no more code implemented")
-            raise RuntimeError
+                if "moms" in p.text:
+                    num = re.match(".*moms ([0-9 ,.-]*)$", p.text)[1]
+                    num = num.strip().replace(",", ".").replace(".-", ".00")
+                    order["tax"] = str(num)
+                    # This should work if extract is successfull
+                    _test_float_convert = float(order["tax"])
+                else:
+                    if ".-" in t:
+                        t = t.replace(".-", ".00")
+                    else:
+                        # divide by 100 using strings
+                        a = list(t)
+                        t = "".join(a[:-2]) + "." + "".join(a[-2:])
+                    order["total"] = t
+                    # This should work if extract is successfull
+                    _test_float_convert = float(order["total"])
 
-        self.pprint(orders)
+            for item in order["items"]:
+                self.extract_item_page(item)
 
+            del order["url"]
+            # self.pprint(order)
+            # input("waiting ... no more code implemented")
+            # raise RuntimeError
+        # self.pprint(orders)
         raise RuntimeError
         return orders
+
+    def extract_item_page(self, _item: dict) -> dict:
+        """
+        img_buttons: list[WebElement] = self.find_elements(
+            By.CSS_SELECTOR,
+            "button.gallery-thumbnail.indicator-image",
+        )
+        if img_buttons:
+            for img_button in img_buttons:
+                img_button.click()
+                time.sleep(0.5)
+            img_buttons[0].click()
+        """
+        """
+        click:
+        //button[starts-with(normalize-space(text()), 'Les mer')]
+        //span[starts-with(normalize-space(text()), 'Teknisk spesifikasjon')]/parent::h2/parent::div
+        """
+        """
+        document.querySelectorAll("*").forEach(
+        (el) => {
+            el.style.fontFamily = "unset";
+            }
+        );
+        document.body.prepend(document.querySelector('h1'))
+        """
+        """
+            delete:
+            //main/preceding-sibling::div -> many
+            //videoly-slider//parent::div -> many
+            //div[contains(@class, '[grid-area:sidebar]')]
+            header
+            nav
+            a href="#product-reviews" -> parent div -> parent div
+            //span[starts-with(normalize-space(text()), 'Anmeldelser')]/parent::h2/parent::div
+            //span[starts-with(normalize-space(text()), 'Passer til')]/parent::h2/parent::div
+            div id="similar-products"
+            footer
+        """
+
+    def extract_item_data_from_order_page(
+        self,
+        art: WebElement,
+    ) -> dict:
+        item = {}
+        item["img_url"] = re.sub(
+            "/w:[0-9]{1,5}/",
+            "/",
+            art.find_element(By.TAG_NAME, "img")
+            .get_dom_attribute(
+                "src",
+            )
+            .replace("/preset:jpgoptimized/", "/"),
+        )
+
+        item["price"] = (
+            art.find_element(By.XPATH, "./p")
+            .text.strip()
+            .replace(".-", ".00")
+            .replace("\u202f", "")
+            .replace(" ", "")
+            .replace(",", ".")
+        )
+        # This should work if extract is successfull
+        _test_float_convert = float(item["price"])
+        # item may not have URL if not avaliable in webshop (i.e. sodas)
+        name = art.find_element(
+            By.XPATH,
+            ".//div/p[starts-with(@id, 'summary-product-title')]",
+        )
+        item["name"] = name.text.strip()
+        try:
+            name.find_element(
+                By.XPATH,
+                ".//a",
+            )
+            item["avaliable_on_web"] = True
+        except NoSuchElementException:
+            self.log.warning("%s it not avaliable on web", item["name"])
+            item["avaliable_on_web"] = False
+
+        p_span = art.find_elements(By.XPATH, ".//p/span")
+        for span in p_span:
+            t = span.text.strip()
+            num = re.match(r".*\s([0-9]*)$", t)[1]
+            if t.startswith("Antall"):
+                item["quantity"] = num
+            elif t.startswith("Artikkelnummer"):
+                item["id"] = num
+        return item
 
     def command_to_std_json(self):
         """
