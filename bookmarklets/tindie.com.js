@@ -1,10 +1,10 @@
-1. Open item page
+/*1. Open item page
 2. Let page load
 3. Click on first gallery image, and let it load
 4. Open bookmarklet
 5. Copy filename from prompt
 2. Save PDF in the scraper-cache/tindie/pdfs/ folder
-
+*/
 javascript:(function(){
 	document.querySelector("div.control-wrapper button").click(); 
 	document.querySelector('footer').remove();
