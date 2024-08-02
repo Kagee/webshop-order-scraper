@@ -120,15 +120,15 @@ class BaseScraper:
                 amount_text=str(value),
             )
         if not guess_price.amount and value not in ["Free shipping", "Free"]:
-            self.log.debug(
-                "guess_price.amount is false "
-                "name:%s value:%s curr_guess:%s force_currency:%s",
-                name,
-                value,
-                guess_price.currency,
-                force_currency,
-            )
-            guess_price.amount = 0
+            # self.log.debug(
+            #    "guess_price.amount is false "
+            #    "name:%s value:%s curr_guess:%s force_currency:%s",
+            #    name,
+            #    value,
+            #    guess_price.currency,
+            #    force_currency,
+            # )
+            guess_price.amount = 0.0
         amount = guess_price.amount
         if isinstance(amount, Decimal):
             amount = amount.quantize(
