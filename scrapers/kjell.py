@@ -669,7 +669,8 @@ class KjellScraper(BaseScraper):
                     r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)",
                     file.name,
                 ).group(1)
-                files[file_item_id] = {}
+                if file_item_id not in files:
+                    files[file_item_id] = {}
                 item_file_type = "pdf"
                 if file.name.startswith("item-thumb-"):
                     item_file_type = "thumb"
