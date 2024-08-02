@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Final, TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import filetype
@@ -413,7 +413,7 @@ class KjellScraper(BaseScraper):
 
     def save_support_documents(self, item_id, order_cache_dir):
         brws = self.browser_get_instance()
-        attachements = []
+        attachments = []
         try:
             support_a = brws.find_elements(
                 By.XPATH,
@@ -433,13 +433,13 @@ class KjellScraper(BaseScraper):
                         filename.encode("utf-8"),
                     ).decode("utf-8")
 
-                    attachement_file = (
+                    attachment_file = (
                         order_cache_dir
                         / Path(
-                            f"item-attachement-{item_id}-{filename_safe}.pdf",
+                            f"item-attachment-{item_id}-{filename_safe}.pdf",
                         )
                     ).resolve()
-                    if self.can_read(attachement_file):
+                    if self.can_read(attachment_file):
                         self.log.debug(
                             "Skipping %s, already downloaded",
                             orig_filename,
@@ -475,11 +475,11 @@ class KjellScraper(BaseScraper):
                         filename,
                     )
 
-                    attachements.append((a_element.text, str(attachement_file)))
-                    self.move_file(pdf[0], attachement_file)
+                    attachments.append((a_element.text, str(attachment_file)))
+                    self.move_file(pdf[0], attachment_file)
         except NoSuchElementException:
             pass
-        return attachements
+        return attachments
 
     def browser_load_order_list(self):
         if self.options.use_cached_orderlist:
@@ -612,7 +612,7 @@ class KjellScraper(BaseScraper):
     def command_to_std_json(self):  # noqa: PLR0912, PLR0915, C901
         """
         Convert all data we have to a JSON that validates with schema,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
 
         structure = self.get_structure(
@@ -666,7 +666,7 @@ class KjellScraper(BaseScraper):
                 if file.name.endswith(".missing"):
                     continue
                 file_item_id = re.match(
-                    r"^item-(?:thumb-|attachement-|)(\d*)(?:-|\.)",
+                    r"^item-(?:thumb-|attachment-|)(\d*)(?:-|\.)",
                     file.name,
                 ).group(1)
                 if file_item_id not in files:
@@ -674,8 +674,8 @@ class KjellScraper(BaseScraper):
                 item_file_type = "pdf"
                 if file.name.startswith("item-thumb-"):
                     item_file_type = "thumb"
-                elif file.name.startswith("item-attachement-"):
-                    item_file_type = "attachements"
+                elif file.name.startswith("item-attachment-"):
+                    item_file_type = "attachments"
 
                 if item_file_type not in files[file_item_id]:
                     files[file_item_id][item_file_type] = []
@@ -725,9 +725,9 @@ class KjellScraper(BaseScraper):
                             .as_posix()
                         )
                     if "pdf" in files[item_id]:
-                        if "attachements" not in item_dict:
-                            item_dict["attachements"] = []
-                        item_dict["attachements"].append(
+                        if "attachments" not in item_dict:
+                            item_dict["attachments"] = []
+                        item_dict["attachments"].append(
                             {
                                 "name": "Item PDF",
                                 "path": (
@@ -737,16 +737,16 @@ class KjellScraper(BaseScraper):
                                 ),
                             },
                         )
-                    if "attachements" in files[item_id]:
-                        if "attachements" not in item_dict:
-                            item_dict["attachements"] = []
-                        attachement: str
-                        for attachement in files[item_id]["attachements"]:
-                            item_dict["attachements"].append(
+                    if "attachments" in files[item_id]:
+                        if "attachments" not in item_dict:
+                            item_dict["attachments"] = []
+                        attachment: str
+                        for attachment in files[item_id]["attachments"]:
+                            item_dict["attachments"].append(
                                 {
                                     "name": (
                                         base64.urlsafe_b64decode(
-                                            attachement.name.split("-")[3]
+                                            attachment.name.split("-")[3]
                                             .split(".")[0]
                                             .encode("utf-8"),
                                         )
@@ -754,7 +754,7 @@ class KjellScraper(BaseScraper):
                                         .split("--")[0]
                                     ),
                                     "path": (
-                                        Path(attachement)
+                                        Path(attachment)
                                         .relative_to(self.cache["BASE"])
                                         .as_posix()
                                     ),

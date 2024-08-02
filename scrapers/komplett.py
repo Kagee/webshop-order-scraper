@@ -87,17 +87,17 @@ class KomplettScraper(BaseScraper):
                             name_file_safe = base64.urlsafe_b64encode(
                                 value.encode("utf-8"),
                             ).decode("utf-8")
-                            attachement_file = (
+                            attachment_file = (
                                 Path(order_dir)
-                                / f"attachement-{name_file_safe}.pdf"
+                                / f"attachment-{name_file_safe}.pdf"
                             )
                             if label not in order_dict[order_info_type]:
                                 order_dict[order_info_type][label] = []
                             order_dict[order_info_type][label].append(value)
-                            if self.can_read(attachement_file):
+                            if self.can_read(attachment_file):
                                 self.log.debug(
                                     "We already have the file for '%s' saved",
-                                    attachement_file.name,
+                                    attachment_file.name,
                                 )
                             else:
                                 self.log.debug("Downloading: %s", value)
@@ -129,10 +129,10 @@ class KomplettScraper(BaseScraper):
                                 assert (
                                     file.suffix == ".pdf"
                                 ), f"Found {file.suffix} when expecting PDF"
-                                self.move_file(file, attachement_file)
+                                self.move_file(file, attachment_file)
                                 self.log.debug(
                                     "Saved '%s' for order id %s",
-                                    attachement_file.name,
+                                    attachment_file.name,
                                     order_id,
                                 )
                         else:
@@ -655,6 +655,7 @@ class KomplettScraper(BaseScraper):
                         orig_order["Ordredetaljer"]["Bestilt"],
                         "%d/%m/%Y %H:%M",
                     )
+                    .astimezone()
                     .date()
                     .isoformat()
                 ),
@@ -671,19 +672,19 @@ class KomplettScraper(BaseScraper):
                     "NOK",
                 ),
             }
-            for attachement in order_dir.glob("attachement-*.pdf"):
-                if "attachements" not in order_dict:
-                    order_dict["attachements"] = []
+            for attachment in order_dir.glob("attachment-*.pdf"):
+                if "attachments" not in order_dict:
+                    order_dict["attachments"] = []
                 name = base64.urlsafe_b64decode(
-                    attachement.stem.split("-")[1],
+                    attachment.stem.split("-")[1],
                 ).decode("utf-8")
-                attachement_dict = {
+                attachment_dict = {
                     "name": name,
-                    "path": attachement.relative_to(
+                    "path": attachment.relative_to(
                         self.cache["BASE"],
                     ).as_posix(),
                 }
-                order_dict["attachements"].append(attachement_dict)
+                order_dict["attachments"].append(attachment_dict)
 
             del orig_order["Ordredetaljer"]["Bestilt"]
             del orig_order["pricing"]["Totalt"]
@@ -720,7 +721,7 @@ class KomplettScraper(BaseScraper):
                     assert self.can_read(
                         order_dir / f"item-{item_id}.pdf",
                     ), f"Can't read item PDF for {item_id}"
-                    item_dict["attachements"] = [
+                    item_dict["attachments"] = [
                         {
                             "name": "Item PDF",
                             "path": (

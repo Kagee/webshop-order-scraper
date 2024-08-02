@@ -694,7 +694,7 @@ class EbayScraper(BaseScraper):
     def command_to_std_json(self):
         """
         Convert all data we have to a JSON that validates with schema,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
         structure = self.get_structure(
             self.name,
@@ -765,8 +765,8 @@ class EbayScraper(BaseScraper):
                         .as_posix()
                     )
                 if "pdf" in item_input:
-                    item["attachements"] = []
-                    item["attachements"].append(
+                    item["attachments"] = []
+                    item["attachments"].append(
                         {
                             "name": "Item PDF",
                             "path": (

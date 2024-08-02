@@ -4,7 +4,7 @@
 3. Run  bookmarklet
 4. Ctrl+P
 5. Open temporary PDF in other browser to check quality
-6. Download/open other attachementes.
+6. Download/open other attachments.
 */
 javascript:(function(){
 function rx(xpath) {

@@ -181,7 +181,7 @@ class DigikeyScraper(BaseScraper):
             if not skip_gather:
                 self.log.debug(
                     (
-                        "Visit %s, save PDF and attachements to %s, "
+                        "Visit %s, save PDF and attachments to %s, "
                         "and press enter to continue."
                     ),
                     item["item_page"],
@@ -198,13 +198,13 @@ class DigikeyScraper(BaseScraper):
                         if file.name == "temporary.pdf":
                             self.log.debug("Item PDF: %s", file.name)
                         else:
-                            self.log.debug("Attachement: %s", file.name)
+                            self.log.debug("Attachment: %s", file.name)
 
                 for file in self.cache["TEMP"].glob("*"):
                     if file.name == "temporary.pdf":
-                        file.rename(item_folder / "attachement-item-scrape.pdf")
+                        file.rename(item_folder / "attachment-item-scrape.pdf")
                     else:
-                        file.rename(item_folder / f"attachement-{file.name}")
+                        file.rename(item_folder / f"attachment-{file.name}")
 
             item["attachments"] = get_files(item_folder)
 
@@ -238,7 +238,7 @@ class DigikeyScraper(BaseScraper):
     def command_to_std_json(self):
         """
         Convert all data we have to a JSON that validates with schema,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
         structure = self.get_structure(
             self.name,
@@ -259,7 +259,7 @@ class DigikeyScraper(BaseScraper):
                 )
                 .date()
                 .isoformat(),
-                # no order attachements scraped
+                # no order attachments scraped
             }
             del scraped_data["date"]
             for unit in [
@@ -316,10 +316,10 @@ class DigikeyScraper(BaseScraper):
                             scraped_data["currency"],
                         )
                         del scraped_item[unit]
-                item["attachements"] = []
+                item["attachments"] = []
                 if "attachments" in scraped_item:
                     for attachment in scraped_item["attachments"]:
-                        item["attachements"].append(
+                        item["attachments"].append(
                             {
                                 "name": attachment.name,
                                 "path": (

@@ -89,7 +89,7 @@ class AdafruitScraper(BaseScraper):
     def command_to_std_json(self):
         """
         Convert all data we have to a JSON that validates with schema,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
 
         structure = self.get_structure(
@@ -149,7 +149,7 @@ class AdafruitScraper(BaseScraper):
                             item_data["subtotal"],
                             "USD",
                         ),
-                        "attachements": [
+                        "attachments": [
                             {
                                 "name": "Item PDF",
                                 "path": item_data["pdf"],

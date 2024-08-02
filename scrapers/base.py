@@ -197,16 +197,16 @@ class BaseScraper:
             self.log.debug("Generating zip file list... ")
             files_from_to = []
             for order in structure["orders"]:
-                if "attachements" in order:
-                    for attach in order["attachements"]:
+                if "attachments" in order:
+                    for attach in order["attachments"]:
                         orig_file = self.cache["BASE"] / attach["path"]
                         files_from_to.append((orig_file, attach["path"]))
                 for item in order["items"]:
                     if "thumbnail" in item:
                         orig_file = self.cache["BASE"] / item["thumbnail"]
                         files_from_to.append((orig_file, item["thumbnail"]))
-                    if "attachements" in item:
-                        for attach in item["attachements"]:
+                    if "attachments" in item:
+                        for attach in item["attachments"]:
                             orig_file = self.cache["BASE"] / attach["path"]
                             files_from_to.append((orig_file, attach["path"]))
 

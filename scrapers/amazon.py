@@ -82,7 +82,7 @@ class AmazonScraper(BaseScraper):
                 "id": order_id,
                 "date": order_date,
                 "items": [],
-                "attachements": [],
+                "attachments": [],
                 "extra_data": {},
             }
             if "items" in orig_orders[order_id]:
@@ -96,17 +96,17 @@ class AmazonScraper(BaseScraper):
             del orig_orders[order_id]["date_from_order_list"]
             del current_order["date_from_order_list"]
 
-            for attachement in current_order["attachements"]:
-                if "path" in attachement:
-                    # Some links are sometimes added as attachements
-                    attachement_dict = {
-                        "name": attachement["text"],
-                        "path": attachement["file"],
-                        "comment": attachement["href"],
+            for attachment in current_order["attachments"]:
+                if "path" in attachment:
+                    # Some links are sometimes added as attachments
+                    attachment_dict = {
+                        "name": attachment["text"],
+                        "path": attachment["file"],
+                        "comment": attachment["href"],
                     }
-                    order["attachements"].append(attachement_dict)
+                    order["attachments"].append(attachment_dict)
 
-            del current_order["attachements"]
+            del current_order["attachments"]
 
             orderhtml = self.cache["ORDERS"] / Path(f"{order_id}/order.html")
 
@@ -120,7 +120,7 @@ class AmazonScraper(BaseScraper):
                     ),
                     "comment": "HTML Scrape of order page",
                 }
-                order["attachements"].append(orderhtmldict)
+                order["attachments"].append(orderhtmldict)
 
             for item in current_order["items"].items():
                 item_id = item[0]
@@ -137,7 +137,7 @@ class AmazonScraper(BaseScraper):
                     "quantity": item_orig_dict["quantity"],
                     "total": item_orig_dict["total"],
                     "extra_data": {},
-                    "attachements": [],
+                    "attachments": [],
                 }
 
                 if "thumbnail_from_item" in item_orig_dict:
@@ -150,7 +150,7 @@ class AmazonScraper(BaseScraper):
                     ]
 
                 if "pdf" in item_orig_dict:
-                    item_dict["attachements"].append(
+                    item_dict["attachments"].append(
                         {
                             "name": "PDF print",
                             "path": item_orig_dict["pdf"],
@@ -483,7 +483,7 @@ class AmazonScraper(BaseScraper):
         )
         time.sleep(1)
 
-    def __save_order_attachements(self, order_cache_dir, attachement_dict):
+    def __save_order_attachments(self, order_cache_dir, attachment_dict):
         brws = self.browser
         wait2 = WebDriverWait(brws, 2)
         order_handle = brws.current_window_handle
@@ -529,18 +529,18 @@ class AmazonScraper(BaseScraper):
                 pass
         if not elements_to_loop:
             self.log.debug(
-                "We found no order summary, invoices or other attachementes to"
+                "We found no order summary, invoices or other attachments to"
                 " save. This is possibly a bug.",
             )
             msg = (
-                "We found no order summary, invoices or other attachementes to"
+                "We found no order summary, invoices or other attachments to"
                 " save. This is possibly a bug."
             )
             raise RuntimeError(
                 msg,
             )
 
-        self.log.debug("Looping and possibly downloading attachements")
+        self.log.debug("Looping and possibly downloading attachments")
 
         for invoice_item in elements_to_loop:
             text = (
@@ -550,23 +550,23 @@ class AmazonScraper(BaseScraper):
                 .strip()
             )
 
-            self.log.debug("Found attachement with name '%s'", text)
+            self.log.debug("Found attachment with name '%s'", text)
             href = invoice_item.get_attribute("href")
-            attachement = {"text": text, "href": href}
+            attachment = {"text": text, "href": href}
 
             text_filename_safe = base64.urlsafe_b64encode(
                 text.encode("utf-8"),
             ).decode("utf-8")
 
-            attachement_file: Path = (
-                order_cache_dir / Path(f"attachement-{text_filename_safe}.pdf")
+            attachment_file: Path = (
+                order_cache_dir / Path(f"attachment-{text_filename_safe}.pdf")
             ).resolve()
 
-            if self.can_read(attachement_file):
-                attachement["file"] = str(
-                    attachement_file.relative_to(self.cache["BASE"]).as_posix(),
+            if self.can_read(attachment_file):
+                attachment["file"] = str(
+                    attachment_file.relative_to(self.cache["BASE"]).as_posix(),
                 )
-                attachement_dict.append(attachement)
+                attachment_dict.append(attachment)
                 self.log.debug("We already have the file for '%s' saved", text)
                 continue
 
@@ -588,14 +588,14 @@ class AmazonScraper(BaseScraper):
                 self.log.debug("Found order summary.")
                 self.browser.execute_script("window.print();")
                 self.wait_for_stable_file(self.cache["PDF_TEMP_FILENAME"])
-                attachement["file"] = str(
-                    Path(attachement_file)
+                attachment["file"] = str(
+                    Path(attachment_file)
                     .relative_to(self.cache["BASE"])
                     .as_posix(),
                 )  # keep this
                 self.move_file(
                     self.cache["PDF_TEMP_FILENAME"],
-                    attachement_file,
+                    attachment_file,
                 )
                 brws.close()
             elif download_pdf:
@@ -635,12 +635,12 @@ class AmazonScraper(BaseScraper):
                         raise NotImplementedError
                 # We have a PDF, move it to  a proper name
                 self.wait_for_stable_file(pdf[0])
-                attachement["file"] = str(
-                    Path(attachement_file)
+                attachment["file"] = str(
+                    Path(attachment_file)
                     .relative_to(self.cache["BASE"])
                     .as_posix(),
                 )  # keep this
-                self.move_file(pdf[0], attachement_file)
+                self.move_file(pdf[0], attachment_file)
                 brws.close()
             elif contact_link or invoice_unavailable:
                 self.log.debug(
@@ -649,11 +649,11 @@ class AmazonScraper(BaseScraper):
                 )
             else:
                 self.log.warning(
-                    AMBER("Unknown attachement, not saving: %s, %s"),
+                    AMBER("Unknown attachment, not saving: %s, %s"),
                     text,
                     href,
                 )
-            attachement_dict.append(attachement)
+            attachment_dict.append(attachment)
             brws.switch_to.window(order_handle)
         return invoice_a_xpath, order_summary_a_xpath, invoice_wrapper_div_xpath
 
@@ -970,15 +970,15 @@ class AmazonScraper(BaseScraper):
         brws = self.browser_visit_page(curr_url, goto_url_after_login=True)
         wait2 = WebDriverWait(brws, 2)
 
-        order["attachements"] = []
+        order["attachments"] = []
         order_handle = brws.current_window_handle
         (
             invoice_a_xpath,
             order_summary_a_xpath,
             invoice_wrapper_div_xpath,
-        ) = self.__save_order_attachements(
+        ) = self.__save_order_attachments(
             order_cache_dir,
-            order["attachements"],
+            order["attachments"],
         )
 
         brws.execute_script("window.scrollTo(0,document.body.scrollHeight)")

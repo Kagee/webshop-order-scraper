@@ -258,8 +258,8 @@ class TindieScraper(BaseScraper):
                 item["thumbnail"] = (
                     Path(thumb_path).relative_to(self.cache["BASE"]).as_posix()
                 )
-                item["attachements"] = []
-                item["attachements"].append(
+                item["attachments"] = []
+                item["attachments"].append(
                     {
                         "name": "Item PDF",
                         "path": (

@@ -454,7 +454,7 @@ class PolyalkemiScraper(BaseScraper):
     def command_to_std_json(self):  # noqa: C901
         """
         Convert all data we have to a JSON that validates with schema,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
 
         structure = self.get_structure(
@@ -539,7 +539,7 @@ class PolyalkemiScraper(BaseScraper):
                 }
                 if not self.skip_item_pdf:
                     self.log.debug("Setting item PDF")
-                    item_dict["attachements"] = [
+                    item_dict["attachments"] = [
                         {
                             "name": "Item PDF",
                             "path": str(
@@ -569,7 +569,7 @@ class PolyalkemiScraper(BaseScraper):
                 order["items"].append(item_dict)
 
             if not self.skip_order_pdf:
-                order["attachements"] = [
+                order["attachments"] = [
                     {
                         "name": "Order Invoice PDF",
                         "path": str(

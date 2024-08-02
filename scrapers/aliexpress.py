@@ -40,7 +40,7 @@ class AliExpressScraper(BaseScraper):
     def command_to_std_json(self):
         """
         Convert all data we have to a JSON that validates with ../schema.json,
-         and a .zip with all attachements
+         and a .zip with all attachments
         """
         structure = self.get_structure(
             self.name,
@@ -69,7 +69,7 @@ class AliExpressScraper(BaseScraper):
                     datetime.fromisoformat(oob["date"]).date().isoformat()
                 ),
                 "items": [],
-                "attachements": [
+                "attachments": [
                     {
                         "name": "Order tracking HTML",
                         "path": oob["tracking_cache_file"],
@@ -184,10 +184,10 @@ class AliExpressScraper(BaseScraper):
                         "price",
                         price,
                     ),
-                    "attachements": [],
+                    "attachments": [],
                 }
                 if "snapshot" in item_obj and item_obj["snapshot"]["pdf"]:
-                    item_obj_out["attachements"].append(
+                    item_obj_out["attachments"].append(
                         {
                             "name": "Item PDF",
                             "path": item_obj["snapshot"]["pdf"],
@@ -195,7 +195,7 @@ class AliExpressScraper(BaseScraper):
                         },
                     )
                 if "snapshot" in item_obj and item_obj["snapshot"]["html"]:
-                    item_obj_out["attachements"].append(
+                    item_obj_out["attachments"].append(
                         {
                             "name": "Item HTML",
                             "path": item_obj["snapshot"]["html"],
