@@ -144,9 +144,12 @@ class JulaScraper(BaseScraper):
                         line["pdf_path"] = item_pdf.relative_to(
                             self.cache["BASE"],
                         ).as_posix()
-                        line["attachments"] = list(
-                            order_folder.glob(f"item-attachment-{iid}-*"),
-                        )
+                        line["attachments"] = [
+                            a.relative_to(self.cache["BASE"]).as_posix()
+                            for a in order_folder.glob(
+                                f"item-attachment-{iid}-*",
+                            )
+                        ]
                         continue
                     # nope, we need to make the PDF
                     self.log.debug("We need to scrape %s", line["url"])
@@ -230,14 +233,14 @@ class JulaScraper(BaseScraper):
             self.log.debug("Deleting %s from TEMP dir.", file.name)
             file.unlink(missing_ok=True)
 
-        existing_attachements = list(
+        existing_attachments = list(
             order_folder.glob(f"item-attachment-{iid}-*"),
         )
         for doc in self.find_elements(
             By.XPATH,
             ("//h4[text()='Dokumenter']/parent::div//a"),
         ):
-            if existing_attachements:
+            if existing_attachments:
                 self.log.warning(
                     (
                         "Found exisiting attachments for "
@@ -378,15 +381,124 @@ class JulaScraper(BaseScraper):
         scraped_data = self.command_scrape()
         for soi, scraped_order in scraped_data.items():
             # del order["mainImage"]
-            self.pprint(scraped_order)
+
             order = {
                 "id": soi,
                 "date": scraped_order["transactionHead"]["dateOfPurchase"],
                 "items": [],
+                "shipping": self.get_value_currency(
+                    "shipping",
+                    scraped_order["shippingCost"]["value"],
+                    "NOK",
+                ),
+                "tax": self.get_value_currency(
+                    "total",
+                    scraped_order["vatAmount"]["value"],
+                    "NOK",
+                ),
+                "total": self.get_value_currency(
+                    "total",
+                    scraped_order["totalSum"]["value"],
+                    "NOK",
+                ),
+                "extra_data": {},
+                "attachments": [],
             }
+
+            if not scraped_order["discounts"]:
+                del scraped_order["discounts"]
+
+            del scraped_order["totalSum"]
+            del scraped_order["vatAmount"]
+            del scraped_order["shippingCost"]
+            del scraped_order["transactionHead"]["orderId"]
+            del scraped_order["transactionHead"]["statusProgress"]
+            del scraped_order["transactionHead"]["dateOfPurchase"]
+
+            iids = []
+
+            for line in scraped_order["lines"]:
+                iid = line["variantId"]
+                if iid in iids:
+                    self.log.warning(
+                        "Item %s found twice, combining quantities.",
+                        iid,
+                    )
+                    for parsed_item in order["items"]:
+                        if parsed_item["id"] == iid:
+                            old_q = parsed_item["quantity"]
+                            parsed_item["quantity"] = line["quantity"] + old_q
+                            parsed_item["total"] = self.get_value_currency(
+                                "total",
+                                float(parsed_item["subtotal"]["value"])
+                                * parsed_item["quantity"],
+                                "NOK",
+                            )
+                            self.log.warning(
+                                "Quantity for item %s changed from %s to %s",
+                                iid,
+                                old_q,
+                                parsed_item["quantity"],
+                            )
+                            break
+                    continue
+                iids.append(iid)
+                del line["mainImage"]
+                if "url" in line:
+                    del line["url"]
+                item = {
+                    "id": iid,
+                    "name": line["title"],
+                    "quantity": line["quantity"],
+                    "thumbnail": line["thumbnail_path"],
+                    "subtotal": self.get_value_currency(
+                        "subtotal",
+                        line["price"]["value"],
+                        "NOK",
+                    ),
+                    "extra_data": {},
+                    "attachments": [],
+                }
+                if "pdf_path" in line:
+                    item["attachments"].append(
+                        {
+                            "name": "Item PDF",
+                            "path": line["pdf_path"],
+                        },
+                    )
+                    del line["pdf_path"]
+                if "attachments" in line:
+                    for attachment in line["attachments"]:
+                        name = base64.urlsafe_b64decode(
+                            Path(attachment).name.split("-")[3],
+                        ).decode("utf-8")
+                        item["attachments"].append(
+                            {
+                                "name": name,
+                                "path": attachment,
+                            },
+                        )
+                    self.pprint(item["attachments"])
+                    del line["attachments"]
+                item["total"] = self.get_value_currency(
+                    "total",
+                    float(item["subtotal"]["value"]) * item["quantity"],
+                    "NOK",
+                )
+                del line["price"]
+                del line["variantId"]
+                del line["title"]
+                del line["quantity"]
+                del line["thumbnail_path"]
+                order["items"].append(item)
+            del scraped_order["lines"]
+            order["extra_data"] = scraped_order
+
+            # self.pprint(scraped_order)
+            # self.pprint(order)
             structure["orders"].append(order)
-        self.valid_json(structure)
-        # self.output_schema_json(structure)
+        # self.valid_json(structure)
+        self.output_schema_json(structure)
 
     # Class init
     def __init__(self, options: dict):
