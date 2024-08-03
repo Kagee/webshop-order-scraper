@@ -109,7 +109,6 @@ class JulaScraper(BaseScraper):
                 json.dump(order_data, order_json_file, indent=4)
             orders[oid] = order_data
 
-        skip = True
         for order in orders.values():
             # Cache thumbnails
             oid = order["transactionHead"]["orderId"]
@@ -157,6 +156,7 @@ class JulaScraper(BaseScraper):
                         order_folder,
                         iid,
                     )
+        return orders
 
     def scrape_item_page(
         self,
@@ -374,7 +374,17 @@ class JulaScraper(BaseScraper):
             "https://www.jula.no/account/mine-innkjop/{order_id}/",
             "https://www.jula.no/catalog/-{item_id}/",
         )
-        # scrape_data = self.command_scrape()
+        structure["orders"] = []
+        scraped_data = self.command_scrape()
+        for soi, scraped_order in scraped_data.items():
+            # del order["mainImage"]
+            self.pprint(scraped_order)
+            order = {
+                "id": soi,
+                "date": scraped_order["transactionHead"]["dateOfPurchase"],
+                "items": [],
+            }
+            structure["orders"].append(order)
         self.valid_json(structure)
         # self.output_schema_json(structure)
 

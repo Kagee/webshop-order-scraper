@@ -574,21 +574,21 @@ class BaseScraper:
         """
         folder.mkdir(exist_ok=True)
 
-        self.log.debug(
-            "find_or_download: url: %s, prefix: %s, folder: %s",
-            url_s,
-            prefix,
-            folder,
-        )
+        # self.log.debug(
+        #    "find_or_download: url: %s, prefix: %s, folder: %s",
+        #    url_s,
+        #    prefix,
+        #    folder,
+        # )
 
         if existing_files := list(Path(folder).glob(f"{prefix}*")):
             if len(existing_files) > 1:
                 msg = f"Found multiple files matching {prefix}"
                 raise RuntimeError(msg)
-            self.log.debug(
-                "Found existing matching file, returning %s",
-                existing_files[0],
-            )
+            # self.log.debug(
+            #    "Found existing matching file, returning %s",
+            #    existing_files[0],
+            # )
             return existing_files[0]
 
         self.log.debug("Need to download file...")
