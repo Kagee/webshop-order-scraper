@@ -3,6 +3,7 @@ import base64
 import contextlib
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -384,7 +385,11 @@ class JulaScraper(BaseScraper):
 
             order = {
                 "id": soi,
-                "date": scraped_order["transactionHead"]["dateOfPurchase"],
+                "date": datetime.fromisoformat(
+                    scraped_order["transactionHead"]["dateOfPurchase"],
+                )
+                .date()
+                .isoformat(),
                 "items": [],
                 "shipping": self.get_value_currency(
                     "shipping",
