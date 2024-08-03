@@ -1,10 +1,12 @@
 # ruff: noqa: C901,ERA001,PLR0912,PLR0915
+import base64
 import contextlib
 import json
 import time
 from pathlib import Path
 from typing import Final
 
+import filetype
 from selenium.webdriver.common.by import By
 
 from .base import BaseScraper
@@ -107,6 +109,7 @@ class JulaScraper(BaseScraper):
                 json.dump(order_data, order_json_file, indent=4)
             orders[oid] = order_data
 
+        skip = True
         for order in orders.values():
             # Cache thumbnails
             oid = order["transactionHead"]["orderId"]
@@ -142,12 +145,26 @@ class JulaScraper(BaseScraper):
                         line["pdf_path"] = item_pdf.relative_to(
                             self.cache["BASE"],
                         ).as_posix()
+                        line["attachments"] = list(
+                            order_folder.glob(f"item-attachment-{iid}-*"),
+                        )
                         continue
                     # nope, we need to make the PDF
                     self.log.debug("We need to scrape %s", line["url"])
-                    self.scrape_item_page(line["url"], item_pdf)
+                    self.scrape_item_page(
+                        line["url"],
+                        item_pdf,
+                        order_folder,
+                        iid,
+                    )
 
-    def scrape_item_page(self, url: str, pdf_file: Path) -> None:
+    def scrape_item_page(
+        self,
+        url: str,
+        pdf_file: Path,
+        order_folder: Path,
+        iid: str,
+    ) -> None:
         self.browser_visit(url)
 
         if read_more_btn := self.find_element(
@@ -166,6 +183,116 @@ class JulaScraper(BaseScraper):
         ):
             tech_spec.click()
             self.log.debug("`Teknisk spesifikasjon` clicked")
+        if important_info := self.find_element(
+            By.XPATH,
+            (
+                "//span[starts-with(normalize-space(text()), "
+                "'Viktig informasjon')]/parent::h2/parent::div"
+            ),
+        ):
+            important_info.click()
+            self.log.debug("`Viktig informasjon` clicked")
+
+        if (
+            len(
+                images := self.find_elements(
+                    By.XPATH,
+                    (
+                        "//div[contains(@class, 'keen-slider')]//"
+                        "button[contains(@aria-label, 'Vis stort bilde')]//img"
+                    ),
+                ),
+            )
+            > 1
+        ):
+            self.browser.execute_script(
+                """
+            for (let i = 0; i < arguments[0].length; i++) {
+
+                    var p = document.createElement('p');
+                    p.style.breakInside="avoid";
+                    var img = document.createElement('img');
+                    img.style.display="block";
+                    img.style.breakInside="avoid";
+                    img.style.width="960px";
+                    img.src = arguments[0][i];
+                    console.log(img.src)
+                    p.append(img);
+                    document.querySelector("body").append(p);
+                }
+            """,
+                [image.get_dom_attribute("src") for image in images],
+            )
+            time.sleep(3)  # wait for images to load
+
+        # clear tmp folder
+        for file in self.cache["TEMP"].glob("*"):
+            self.log.debug("Deleting %s from TEMP dir.", file.name)
+            file.unlink(missing_ok=True)
+
+        existing_attachements = list(
+            order_folder.glob(f"item-attachment-{iid}-*"),
+        )
+        for doc in self.find_elements(
+            By.XPATH,
+            ("//h4[text()='Dokumenter']/parent::div//a"),
+        ):
+            if existing_attachements:
+                self.log.warning(
+                    (
+                        "Found exisiting attachments for "
+                        "item %s, skipping download"
+                    ),
+                    iid,
+                )
+                break
+            self.log.debug("Dokument: %s", doc.text)
+            if "PDF" in doc.text:
+                self.log.warning("We should download and save: %s", doc.text)
+                doc.click()
+                counter = 10
+                files = []
+                while True:
+                    files = list(self.cache["TEMP"].glob("*"))
+                    if files:
+                        break
+                    time.sleep(4)
+                    counter -= 1
+                    if counter == 0:
+                        msg = "Waited 40 seconds for file to appead"
+                        raise RuntimeError(
+                            msg,
+                        )
+                if len(files) > 1:
+                    msg = "More than one file found"
+                    raise RuntimeError(
+                        msg,
+                    )
+                file = files[0]
+                self.wait_for_stable_file(file)
+                kind = filetype.guess(file)
+                if kind.mime != "application/pdf" or kind.extension != "pdf":
+                    msg = f"Not PDF: {kind.mime} {kind.extension}"
+                    raise RuntimeError(
+                        msg,
+                    )
+                title_safe = base64.urlsafe_b64encode(
+                    doc.text.encode("utf-8"),
+                ).decode("utf-8")
+                pdfless_name = file.name
+                if file.suffix == ".pdf":
+                    pdfless_name = file.stem
+                attachment_file = (
+                    order_folder
+                    / Path(
+                        f"item-attachment-{iid}-{title_safe}-{pdfless_name}.pdf".replace(
+                            " ",
+                            "",
+                        ),
+                    )
+                ).resolve()
+                self.log.debug("Moving attachment to %s", attachment_file)
+                file.rename(attachment_file)
 
         self.browser.execute_script(
             """
@@ -192,6 +319,8 @@ class JulaScraper(BaseScraper):
                     "//div[contains(@class, '[grid-area:sidebar]')]",
                     "//span[starts-with(normalize-space(text()), 'Anmeldelser')]/parent::h2/parent::div",
                     "//span[starts-with(normalize-space(text()), 'Passer til')]/parent::h2/parent::div",
+                    "//span[starts-with(normalize-space(text()), 'Om varemerket')]/parent::h2/parent::div",
+                    "//span[starts-with(normalize-space(text()), 'Tilbehør')]/parent::h2/parent::div",
                     "//div[@id='similar-products']",
                     "//header",
                     "//nav",
@@ -207,22 +336,32 @@ class JulaScraper(BaseScraper):
                         el.style.fontFamily = "unset";
                         }
                     );
-                /*
-                for each of //h4[text()="Dokumenter"] -> parent -> ul -> li -> a
-                -> if PDF -> click? else ERROR
-                */
-                throw new Error('Document download not implemented');
-
+                window.print();
             """,
         )
-        self.log.debug("We did not save %s to %s", url, pdf_file)
-        input("Press enter to continue")
+        # Wait for pdf print
+        counter = 10
+        while True:
+            files = list(self.cache["TEMP"].glob("*"))
+            if files:
+                break
+            time.sleep(4)
+            counter -= 1
+            if counter == 0:
+                msg = "Waited 40 seconds for file to appead"
+                raise RuntimeError(
+                    msg,
+                )
+        if len(files) > 1:
+            msg = "More than one file found"
+            raise RuntimeError(
+                msg,
+            )
+        file = files[0]
+        self.wait_for_stable_file(file)
 
-        """
-            delete:
-            a href="#product-reviews" -> parent div -> parent div
-
-        """
+        self.log.debug("Item PDF to %s", pdf_file)
+        file.rename(pdf_file)
 
     def command_to_std_json(self):
         """
