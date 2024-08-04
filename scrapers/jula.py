@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final
 
 import filetype
+from PIL import Image
 from selenium.webdriver.common.by import By
 
 from .base import BaseScraper
@@ -35,13 +36,15 @@ class JulaScraper(BaseScraper):
             expected_url == "https://www.jula.no/account/mine-innkjop/"
             and "returnPath" in self.browser.current_url
         ):
-            self.log.error("Please log in manually and then press endet")
+            self.log.error(
+                "Please log in to Jula.no manually and then press enter",
+            )
             input()
 
     # Command functions, used in scrape.py
     def command_scrape(self):
         """
-        Scrapes your Kjell orders.
+        Scrapes your Jula orders.
         """
         order_list = []
         order_ids = set()
@@ -67,7 +70,7 @@ class JulaScraper(BaseScraper):
             if order_list_json["hasNextPage"]:
                 msg = (
                     "Orderlist has hasNextPage=True. "
-                    "Don't know how to handle this."
+                    "This is not implemented."
                 )
                 raise NotImplementedError(msg)
             for order_info in order_list_json["transactions"]:
@@ -119,17 +122,21 @@ class JulaScraper(BaseScraper):
                 iid = line["variantId"]
                 for format_ in line["mainImage"]["formats"]:
                     if "2048px trimmed transparent" in format_["type"]:
-                        line["thumbnail_path"] = (
-                            Path(
-                                self.find_or_download(
-                                    format_["url"]["location"],
-                                    f"thumbnail-{iid}-",
-                                    order_folder,
-                                ),
-                            )
-                            .relative_to(self.cache["BASE"])
-                            .as_posix()
+                        img_path = Path(
+                            self.find_or_download(
+                                format_["url"]["location"],
+                                f"thumbnail-{iid}-",
+                                order_folder,
+                            ),
                         )
+
+                        im = Image.open(img_path).convert("RGBA")
+                        new_image = Image.new("RGBA", im.size, "WHITE")
+                        new_image.paste(im, mask=im)
+                        new_image.convert("RGB").save(img_path)
+                        line["thumbnail_path"] = img_path.relative_to(
+                            self.cache["BASE"],
+                        ).as_posix()
                         break
                 else:
                     self.pprint(order)
